@@ -88,7 +88,7 @@ class Store:
     def running(self):
         """Jobs holding a concurrency slot, in the order they got it."""
         jobs = [j for j in self.all() if self.holds_slot(j)]
-        return sorted(jobs, key=lambda j: (j.get("running_since") or "", j["id"]))
+        return sorted(jobs, key=lambda j: (j.get("running_order") or 0, j["id"]))
 
     # -- dashboard data
 

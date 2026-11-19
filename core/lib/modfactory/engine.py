@@ -6,6 +6,7 @@ edge. Everything else here is what those two need.
 """
 
 import shutil
+import time
 from pathlib import Path
 
 from . import checks, cost, graph
@@ -96,8 +97,10 @@ class Factory(Humans, Scripted, Queue):
             return target, skipped
         step = self.cfg.steps[target]
         kind, role = step["type"], self.cfg.role(target)
-        if self.store.holds_slot(job) and not (held and job.get("running_since")):
-            job["running_since"] = now()
+        if not self.store.holds_slot(job):
+            job["running_since"] = job["running_order"] = None
+        elif not (held and job.get("running_since")):
+            job["running_since"], job["running_order"] = now(), time.time_ns()
         if kind == "human":
             self._ask(job, target, step)
         elif kind == "agent" and role == "intake":

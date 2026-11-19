@@ -22,7 +22,9 @@ schema = 1
 
 [project]
 description = "A test project"
-
+"""
+# The checks fail when the branch has a file named FAIL.
+BASE_CHECKS = """
 [checks]
 commands = ["test ! -f FAIL"]
 """
@@ -40,7 +42,6 @@ class World:
         self.repo = tmp / "repo"
         self.origin = tmp / "origin.git"
         self.state_file = tmp / "gh.json"
-        self.extra = ""
         self._factory = None
 
     # ---- GitHub ------------------------------------------------------------
@@ -87,8 +88,8 @@ class World:
 
     def configure(self, extra):
         """Replace what this test adds to the base factory.toml."""
-        self.extra = extra
-        (self.repo / "factory.toml").write_text(BASE_CONFIG + "\n" + extra)
+        checks = "" if "[checks]" in extra else BASE_CHECKS
+        (self.repo / "factory.toml").write_text(BASE_CONFIG + checks + "\n" + extra)
 
     def factory(self):
         if self._factory:

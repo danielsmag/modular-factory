@@ -100,7 +100,8 @@ def test_intake_reply_is_saved_as_the_file(world):
     lines = world.next(job)
     assert lines[0] == "start-agent factory-intake"
     assert lines[-2:] == [f"then: .factory/bin/factory done {job} --reply", "stdin: the agent's whole reply"]
-    reply = "Here is my decision:\n```markdown\nDECISION: ACCEPT\nRISK: high\nSURFACES: ui\nRESCOPED: no\n\n## Scope\nIt.\n```\n"
+    decision = "DECISION: ACCEPT\nRISK: high\nSURFACES: ui\nRESCOPED: no\n\n## Scope\nIt.\n"
+    reply = f"Here is my decision:\n```markdown\n{decision}```\n"
     assert world.done(job, reply=reply) == [f"{job} #1: intake ACCEPT -> spec"]
     assert (world.dir(job) / "intake.md").read_text().startswith("DECISION: ACCEPT\nRISK: high\n")
     assert world.job(job)["intake"] == {"decision": "ACCEPT", "risk": "high", "surfaces": ["ui"], "rescoped": False}

@@ -97,8 +97,8 @@ def main(argv):
         save(state)
         sys.exit(f"stub gh: told to fail on `{state['fail']}`")
 
-    if group == "auth":
-        pass
+    if group in ("auth", "--version"):
+        out = "gh version 0.0.0 (stub)" if group == "--version" else ""
     elif group == "api":
         if action == "user":
             out = json.dumps({"login": state["user"]})

@@ -28,7 +28,7 @@ class Queue:
         job = {
             "id": job_id, "number": n, "issue": number, "title": issue["title"],
             "issue_url": issue["url"], "author": issue["author"]["login"],
-            "step": None, "entered_at": None, "running_since": None,
+            "step": None, "entered_at": None, "running_since": None, "running_order": None,
             "round": 0, "attempt": 0, "gate_failed": False, "taken": {}, "handoff": [],
             "branch": f"factory/{job_id}",
             "worktree": str(self.cfg.repo / self.cfg["paths"]["worktrees"] / job_id),
