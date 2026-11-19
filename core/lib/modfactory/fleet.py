@@ -252,14 +252,18 @@ class Fleet:
             if isinstance(info, dict) and isinstance(info.get("description"), str):
                 description = info["description"]
             jobs: object = body.get("jobs")
-            items.append({
+            item: dict[str, object] = {
                 "id": label,
                 "name": project.path.name,
                 "path": str(project.path),
                 "description": description,
                 "error": error,
                 "jobs": jobs if isinstance(jobs, list) else [],
-            })
+            }
+            graph: dict[str, object] | None = read_graph(project)
+            if graph is not None:
+                item["graph"] = graph
+            items.append(item)
         return {"projects": items}
 
 
@@ -273,6 +277,35 @@ def file_rows(root: Path) -> list[dict[str, object]]:
                 "first_line": first_line(path) if path.suffix == ".md" else None,
             })
     return rows
+
+
+def read_graph(project: Project) -> dict[str, object] | None:
+    """Pipeline for the fleet board. None when graph.json is missing or not a graph."""
+    path: Path = project.jobs_dir / "graph.json"
+    if not path.is_file():
+        return None
+    try:
+        text: str = path.read_text()
+    except OSError:
+        return None
+    try:
+        loaded: object = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(loaded, dict):
+        return None
+    steps: object = loaded.get("steps")
+    ends: object = loaded.get("end_states")
+    if not isinstance(steps, list) or not isinstance(ends, list):
+        return None
+    for step in steps:
+        if not isinstance(step, dict):
+            return None
+        name: object = step.get("name")
+        edges: object = step.get("edges")
+        if not isinstance(name, str) or not name or not isinstance(edges, list):
+            return None
+    return loaded
 
 
 def read_jobs(project: Project) -> dict[str, object]:

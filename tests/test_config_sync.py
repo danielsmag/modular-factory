@@ -26,6 +26,8 @@ def test_tables_merge_key_by_key_and_other_values_replace(world):
     assert cfg["checks"] == {"commands": ["make test"], "timeout_minutes": 30}
     assert cfg["fleet"] == {"concurrency": 3}
     assert cfg.sources[("fleet", "concurrency")] == "default"
+    assert cfg.base == "master"
+    assert cfg.sources[("project", "base_branch")] == "default"
 
 
 def test_a_project_cannot_set_the_fleet_cap(world):

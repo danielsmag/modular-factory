@@ -348,3 +348,64 @@ def test_a_bad_concurrency_is_refused(tmp_path, monkeypatch, capsys):
     Fleet.init(fleet_dir)
     assert main(["fleet", "queue", "--concurrency", "0"]) == 1
     assert "at least 1" in capsys.readouterr().err
+
+
+def test_snapshot_attaches_only_a_real_graph(tmp_path: Path) -> None:
+    good: Path = checkout(tmp_path, "good")
+    broken: Path = checkout(tmp_path, "broken")
+    partial: Path = checkout(tmp_path, "partial")
+    missing: Path = checkout(tmp_path, "missing")
+    graph: dict[str, object] = {
+        "start": "intake",
+        "end_states": ["done", "failed", "rejected"],
+        "steps": [{"name": "intake", "type": "agent", "edges": []}],
+    }
+    good_jobs: Path = good / ".factory" / "jobs"
+    good_jobs.mkdir(parents=True)
+    (good_jobs / "graph.json").write_text(json.dumps(graph))
+    broken_jobs: Path = broken / ".factory" / "jobs"
+    broken_jobs.mkdir(parents=True)
+    (broken_jobs / "graph.json").write_text("{")
+    partial_jobs: Path = partial / ".factory" / "jobs"
+    partial_jobs.mkdir(parents=True)
+    (partial_jobs / "graph.json").write_text('{"steps": [{"name": "intake"}], "end_states": []}')
+    group: Fleet = Fleet(
+        tmp_path / "fleet.toml", [Project(good), Project(broken), Project(partial), Project(missing)],
+    )
+    body: dict[str, object] = group.snapshot()
+    raw: object = body["projects"]
+    assert isinstance(raw, list)
+    found: dict[str, dict[str, object]] = {}
+    for item in raw:
+        assert isinstance(item, dict)
+        found[str(item["id"])] = item
+    good_graph: object = found["good"]["graph"]
+    assert isinstance(good_graph, dict)
+    assert good_graph["start"] == "intake"
+    assert "graph" not in found["broken"]
+    assert "graph" not in found["partial"]
+    assert "graph" not in found["missing"]
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="needs node to run the page's script")
+def test_a_queue_row_for_an_existing_job_is_not_a_second_card(tmp_path: Path) -> None:
+    page: str = (ROOT / "core/fleet.html").read_text()
+    script: str = page.split("<script>", 1)[1].rsplit("</script>", 1)[0].split("/* boot */", 1)[0]
+    script += """
+const rows = [
+  { action: "new", issue: "9", job: "-", note: "New thing" },
+  { action: "hold", issue: "9", job: "-", note: "same issue" },
+  { action: "hold", issue: "10", job: "-", note: "held" },
+  { action: "new", issue: "1", job: "-", note: "already a job" },
+  { action: "resume", issue: "3", job: "001-c", note: "resume" },
+  { action: "hold", issue: "4", job: "001-d", note: "capped resume" },
+];
+const jobs = [{ id: "001-a", issue: 1 }, { id: "001-d", issue: 4 }];
+const cards = queueCards(rows, jobs).map((row) => row.issue);
+if (JSON.stringify(cards) !== JSON.stringify(["9", "10"])) throw new Error(JSON.stringify(cards));
+"""
+    (tmp_path / "queue.js").write_text(script)
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        ["node", str(tmp_path / "queue.js")], capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr

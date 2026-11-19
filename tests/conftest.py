@@ -22,6 +22,7 @@ schema = 1
 
 [project]
 description = "A test project"
+base_branch = "main"
 """
 # The checks fail when the branch has a file named FAIL.
 BASE_CHECKS = """

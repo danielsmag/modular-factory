@@ -223,7 +223,8 @@ def test_doctor_reports_config_problems_first(world):
 
 def test_doctor_warns_when_the_factory_is_not_on_the_base_branch(bare):
     bare.cli("init")
-    (bare.repo / "factory.toml").write_text('schema = 1\n[checks]\ncommands = ["true"]\n')
+    (bare.repo / "factory.toml").write_text(
+        'schema = 1\n[project]\nbase_branch = "main"\n[checks]\ncommands = ["true"]\n')
     res = doctor(bare)
     assert "warn  factory.toml and .factory/ aren't on origin/main yet." in res.stdout
 
