@@ -1,0 +1,32 @@
+# Codex adapter: where its files go and the default model and effort per step.
+
+name = "codex"
+label = "Codex"
+cli = "codex"
+
+[paths]
+agents = ".codex/agents"
+skill = ".agents/skills/factory"
+reads_skills = [".agents/skills"]
+
+[agents]
+format = "codex"
+intake = "reply"    # intake's shell is switched off, so it returns intake.md as its reply
+
+[efforts]
+allowed = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+# `inherit` leaves the model to the session that starts the factory; the
+# effort is still set per step. Name models in factory.toml under [models.codex].
+[models]
+default           = { model = "inherit", effort = "medium" }
+intake            = { model = "inherit", effort = "high" }
+spec              = { model = "inherit", effort = "medium" }
+build             = { model = "inherit", effort = "high" }
+debug             = { model = "inherit", effort = "high" }
+reviewer-code     = { model = "inherit", effort = "medium", low = { effort = "low" } }
+reviewer-security = { model = "inherit", effort = "high" }
+reviewer-ux       = { model = "inherit", effort = "medium" }
+reviewer-ui       = { model = "inherit", effort = "low" }
+approve           = { model = "inherit", effort = "high" }
+verify            = { model = "inherit", effort = "medium" }

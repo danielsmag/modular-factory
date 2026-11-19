@@ -1,0 +1,141 @@
+# The factory's defaults. A project's factory.toml is merged on top of this
+# file, key by key, so it holds only what the project changes.
+# Don't edit this copy: `factory upgrade` replaces it.
+
+schema = 1
+
+[project]
+description = ""          # what the project is for; intake uses it to decide what belongs
+base_branch = "main"
+merge_method = "squash"   # merge, squash or rebase
+
+[tools]
+enabled = ["claude"]      # claude, cursor, codex
+
+[tools.claude]
+stop_hook = false         # run the checks when the build agent stops, as a nudge
+cost = true               # per-job cost, read from Claude Code's transcripts
+
+[tools.codex]
+intake_shell = false      # true lets intake run commands, if your Codex can't read files without a shell
+
+[run]
+concurrency = 3           # jobs worked on at once
+start = "intake"          # the step a new job starts in
+escalate_to = "escalated" # the human step a job goes to when an edge's max is reached
+
+[checks]
+commands = []             # run in order in the job's worktree; the first failure stops
+timeout_minutes = 30
+
+[labels]
+queue = "factory"
+needs_info = "factory:needs-info"
+needs_human = "factory:needs-human"
+
+[paths]
+worktrees = ".worktrees"
+protected = []            # extra fnmatch patterns no job may modify or delete
+
+[ports]
+base = 5100               # each job gets `step` ports for dev servers
+step = 10
+
+[skills]
+all = []                  # project skills every agent reads
+
+# ---- The pipeline ----------------------------------------------------------
+
+[steps.intake]
+type = "agent"
+on = { ACCEPT = "spec", NEEDS-INFO = { to = "ask-author", max = 2 }, REJECT = "rejected" }
+
+[steps.ask-author]
+type = "human"
+who = "author"
+ask = "intake has questions for the author"
+shows = "intake.md"
+on = { ANSWER = "intake", REJECT = "rejected" }
+
+[steps.spec]
+type = "agent"
+on = { DONE = "spec-approval" }
+
+[steps.spec-approval]
+type = "human"
+enabled = false
+skip = "APPROVE"
+who = "maintainer"
+ask = "approve the spec before it is built"
+shows = "spec.md"
+on = { APPROVE = "build", CHANGES = { to = "spec", max = 3 }, REJECT = "rejected" }
+
+[steps.build]
+type = "agent"
+port = true
+on = { READY = "gate", BLOCKED = "escalated" }
+
+[steps.gate]
+type = "checks"
+on = { PASS = "review", FAIL = { to = "debug", max = 2 } }
+
+[steps.debug]
+type = "agent"
+enabled = false
+skip = "FOUND"
+on = { FOUND = "build", UNKNOWN = "build" }
+
+[steps.review]
+type = "review"
+on = { PASS = "approve", CHANGES = { to = "build", max = 2 } }
+
+[steps.approve]
+type = "agent"
+on = { APPROVE = "merge", ESCALATE = "escalated" }
+
+[steps.merge]
+type = "merge"
+on = { MERGED = "verify", FAILED = "escalated" }
+
+[steps.verify]
+type = "verify"
+enabled = false
+skip = "PASS"
+after = "merge"           # "merge" or "deploy"
+commands = []
+agent = false
+retries = 1
+on_failure = "comment"    # "comment", "issue" or "revert-pr"
+wait = ""                 # for after = "deploy": exits 0 once FACTORY_MERGE_SHA is live
+timeout_minutes = 20
+url = ""
+on = { PASS = "done", FAIL = "failed" }
+
+[steps.escalated]
+type = "human"
+who = "maintainer"
+ask = "this job needs a maintainer"
+pr_ready = true
+on = { FEEDBACK = "build", REJECT = "rejected" }
+
+# ---- Reviewers -------------------------------------------------------------
+# A reviewer listed under a surface runs on jobs with that surface. Every other
+# reviewer runs on every job.
+
+[reviewers.code]
+
+[reviewers.security]
+
+[reviewers.ux]
+port = true
+
+[reviewers.ui]
+port = true
+
+[surfaces.ui]
+when = "a user will see the change on a page or screen"
+reviewers = ["ux", "ui"]
+
+[surfaces.security]
+when = "it touches auth, permissions, user input reaching queries, shells or HTML, secrets, or payments"
+reviewers = ["security"]

@@ -1,0 +1,60 @@
+# Claude Code adapter: where its files go and the default model and effort per step.
+
+name = "claude"
+label = "Claude Code"
+cli = "claude"
+
+[paths]
+agents = ".claude/agents"
+skill = ".claude/skills/factory"
+reads_skills = [".claude/skills"]   # the project folders this tool loads skills from
+skills_preload = ".claude/skills"   # only skills here can go in an agent's `skills:` list
+
+[agents]
+format = "claude"
+intake = "file"                     # intake has no shell and writes intake.md itself
+
+[efforts]
+allowed = ["low", "medium", "high", "xhigh", "max"]
+
+[models]
+default           = { model = "sonnet", effort = "medium" }
+intake            = { model = "fable",  effort = "high" }
+spec              = { model = "opus",   effort = "medium" }
+build             = { model = "opus",   effort = "high" }
+debug             = { model = "opus",   effort = "high" }
+reviewer-code     = { model = "sonnet", effort = "medium", low = { model = "haiku", effort = "low" } }
+reviewer-security = { model = "opus",   effort = "high" }
+reviewer-ux       = { model = "sonnet", effort = "medium" }
+reviewer-ui       = { model = "haiku",  effort = "low" }
+approve           = { model = "opus",   effort = "high" }
+verify            = { model = "sonnet", effort = "medium" }
+
+# API-equivalent prices in USD per million tokens, used for the per-job cost.
+[prices.claude-fable-5-1]
+input = 10.0
+output = 50.0
+cache_write_5m = 12.5
+cache_write_1h = 20.0
+cache_read = 0.25
+
+[prices.claude-opus-5-5]
+input = 4.0
+output = 20.0
+cache_write_5m = 5.0
+cache_write_1h = 8.0
+cache_read = 0.20
+
+[prices.claude-sonnet-5-5]
+input = 2.0
+output = 10.0
+cache_write_5m = 2.5
+cache_write_1h = 4.0
+cache_read = 0.20
+
+[prices.claude-haiku-5-5]
+input = 0.10
+output = 0.50
+cache_write_5m = 0.125
+cache_write_1h = 0.20
+cache_read = 0.01

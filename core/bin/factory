@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+"""The software factory's CLI. Run `factory --help`."""
+
+import sys
+from pathlib import Path
+
+# Written so that an old Python can still parse it and say what is wrong.
+if sys.version_info < (3, 11):  # noqa: UP036
+    sys.exit("factory: needs Python 3.11 or later (found %d.%d)" % sys.version_info[:2])  # noqa: UP031
+
+# The core is committed into the project, so it must not leave bytecode there.
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+
+from modfactory.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

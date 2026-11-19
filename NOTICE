@@ -1,0 +1,19 @@
+modular-factory
+Copyright (C) 2026 the modular-factory contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, version 3. It is distributed without any warranty. See LICENSE.
+
+Derived work
+------------
+
+modular-factory is derived from "Software Factory for Claude Code (v2)" by
+ZazenCodes, released under the GPLv3:
+
+  https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2
+
+The job state handling, the checks gate, the merge flow, the cost calculation
+and the agent prompts in core/roles/ started from that project's
+factory/bin/job, factory/bin/gate, factory/bin/route and .claude/agents/*.md,
+and were modified in 2026 for this project. docs/design.md lists what changed.
