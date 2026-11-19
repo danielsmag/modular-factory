@@ -123,12 +123,22 @@ default = { model = "gpt-5", effort = "medium" }
 build = { model = "claude-opus", effort = "high" }
 
 [models.codex]
-build = { model = "gpt-5-codex" }
+default = { model = "gpt-5-codex" }
+spec = { model = "gpt-5-mini" }
 """)
     assert cfg.model_for("claude", "build") == {"model": "opus", "effort": "high"}
     assert cfg.model_for("cursor", "build") == {"model": "claude-opus", "effort": "high"}
-    assert cfg.model_for("cursor", "spec") == {"model": "inherit"}       # the adapter's entry, not the default
+    assert cfg.model_for("cursor", "spec") == {"model": "gpt-5", "effort": "medium"}
+    # A step's entry sits over the tool's default key by key: the adapter's effort stays.
     assert cfg.model_for("codex", "build") == {"model": "gpt-5-codex", "effort": "high"}
+    assert cfg.model_for("codex", "spec") == {"model": "gpt-5-mini", "effort": "medium"}
+    assert cfg.model_for("codex", "reviewer-code", "low") == {"model": "gpt-5-codex", "effort": "low"}
+
+
+def test_without_model_settings_cursor_and_codex_use_the_sessions_model(world):
+    cfg = load(world, '[tools]\nenabled = ["cursor", "codex"]\n')
+    assert cfg.model_for("cursor", "build") == {"model": "inherit"}
+    assert cfg.model_for("codex", "build") == {"model": "inherit", "effort": "high"}
 
 
 def test_a_risk_variant_overrides_only_what_it_names(world):

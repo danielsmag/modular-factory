@@ -19,16 +19,7 @@ allowed = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
 # `inherit` runs a step on the model of the session that starts the factory.
 # Which model IDs you can name depends on your Cursor plan, so the defaults
-# name none. Set them per step in factory.toml under [models.cursor].
+# name none. In factory.toml, set [models.cursor] `default` for every step, or
+# a step's own entry.
 [models]
-default           = { model = "inherit" }
-intake            = { model = "inherit" }
-spec              = { model = "inherit" }
-build             = { model = "inherit" }
-debug             = { model = "inherit" }
-reviewer-code     = { model = "inherit" }
-reviewer-security = { model = "inherit" }
-reviewer-ux       = { model = "inherit" }
-reviewer-ui       = { model = "inherit" }
-approve           = { model = "inherit" }
-verify            = { model = "inherit" }
+default = { model = "inherit" }

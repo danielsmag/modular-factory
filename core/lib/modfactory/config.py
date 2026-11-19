@@ -127,9 +127,11 @@ class Config:
         return f"factory-{key}-{risk}" if risk in self.variants(key) else f"factory-{key}"
 
     def model_for(self, tool, key, risk=None):
+        """The step's entry over the tool's `default`, key by key, then the entry for the job's risk."""
         table = self.data["models"].get(tool, {})
-        entry = table.get(key) or table.get("default") or {}
-        chosen = {k: v for k, v in entry.items() if k in ("model", "effort")}
+        entry = table.get(key) or {}
+        chosen = {k: v for k, v in (table.get("default") or {}).items() if k in ("model", "effort")}
+        chosen.update({k: v for k, v in entry.items() if k in ("model", "effort")})
         if risk and isinstance(entry.get(risk), dict):
             chosen.update(entry[risk])
         return chosen

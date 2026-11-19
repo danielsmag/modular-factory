@@ -68,7 +68,7 @@ def parser():
     c.add_argument("job")
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
-    sub.add_parser("hook", help=argparse.SUPPRESS)
+    sub.add_parser("hook")  # no help text: argparse then leaves it out of the list
     c = sub.add_parser("dashboard", help="serve the read-only dashboard on this machine")
     c.add_argument("--port", type=int, default=4747)
     c.add_argument("--no-open", action="store_true", help="don't open a browser")
