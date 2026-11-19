@@ -72,7 +72,7 @@ concurrency = 3
 | --- | --- | --- |
 | `schema` | `1` | The version of this file's format. `factory upgrade` refuses a release that needs another. |
 | `[project] description` | `""` | What the project is for and what does not belong in it. Intake judges issues against it. |
-| `[project] base_branch` | `"main"` | Jobs branch from `origin/<base_branch>` and merge into it. |
+| `[project] base_branch` | `"master"` | Jobs branch from `origin/<base_branch>` and merge into it. |
 | `[project] merge_method` | `"squash"` | `merge`, `squash` or `rebase`. |
 | `[tools] enabled` | `["claude"]` | The tools to write agent files for: `claude`, `cursor`, `codex`. |
 | `[tools.claude] stop_hook` | `false` | Run the checks when the build agent stops, and send it back to work if they fail. Claude Code only. |

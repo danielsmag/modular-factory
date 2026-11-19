@@ -6,7 +6,7 @@ schema = 1
 
 [project]
 description = ""          # what the project is for; intake uses it to decide what belongs
-base_branch = "main"
+base_branch = "master"
 merge_method = "squash"   # merge, squash or rebase
 
 [tools]

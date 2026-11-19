@@ -11,7 +11,7 @@
  },
  {
   "key": "project.base_branch",
-  "value": "main",
+  "value": "master",
   "source": "default"
  },
  {

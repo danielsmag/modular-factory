@@ -3,7 +3,7 @@
  "version": "0.1.0",
  "project": {
   "description": "Sample data: an invoicing app for small clinics. These jobs are made up.",
-  "base_branch": "main",
+  "base_branch": "master",
   "merge_method": "squash"
  },
  "repo": "sample",

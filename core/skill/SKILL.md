@@ -186,7 +186,9 @@ feedback or asking for something new, ask.
   of every job on this machine and prints its address.
 - **Several projects**: `factory fleet` reads a `fleet.toml` you keep outside
   those projects and lists their queues on one dashboard. It does not build.
-  Open the project and run `/factory run` there.
+  `concurrency` in that file, or `fleet queue --concurrency N`, keeps that
+  many `new` and `resume` rows across every project. Open the project and run
+  `/factory run` there.
 
 ## Guardrails
 

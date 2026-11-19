@@ -236,3 +236,55 @@ def test_a_bad_schema_is_refused(tmp_path):
     file.write_text("schema = 2\n")
     with pytest.raises(Refused, match="schema 2"):
         Fleet.load(file)
+
+
+def test_concurrency_keeps_the_first_actionable_rows(tmp_path, monkeypatch, capsys):
+    alpha: Path = checkout(
+        tmp_path, "alpha",
+        "#!/bin/sh\nprintf '%s\\n' 'resume  1  001-one  build  round 1' "
+        "'wait  2  002-ask  ask-author  waiting for a maintainer'\n",
+    )
+    beta: Path = checkout(
+        tmp_path, "beta",
+        "#!/bin/sh\nprintf '%s\\n' 'hold  3  003-old  build  concurrency 1 reached' 'new  4  -  -  Four'\n",
+    )
+    fleet_dir: Path = tmp_path / "fleet"
+    fleet_dir.mkdir()
+    monkeypatch.chdir(fleet_dir)
+    file: Path = Fleet.init(fleet_dir)
+    group: Fleet = Fleet.load(file)
+    group.add(alpha)
+    group.add(beta)
+    group.concurrency = 1
+    group.save()
+    assert Fleet.load(file).concurrency == 1
+
+    assert main(["fleet", "queue"]) == 0
+    capped: str = capsys.readouterr().out
+    assert "alpha  resume  1  001-one  build  round 1" in capped
+    assert "alpha  wait  2  002-ask  ask-author  waiting for a maintainer" in capped
+    assert "beta  hold  3  003-old  build  concurrency 1 reached" in capped
+    assert "beta  hold  4  -  -  fleet concurrency 1 reached" in capped
+
+    assert main(["fleet", "queue", "--concurrency", "2"]) == 0
+    opened: str = capsys.readouterr().out
+    assert "alpha  resume  1  001-one  build  round 1" in opened
+    assert "beta  new  4  -  -  Four" in opened
+    assert "fleet concurrency" not in opened
+
+
+def test_a_bad_concurrency_is_refused(tmp_path, monkeypatch, capsys):
+    file: Path = tmp_path / "fleet.toml"
+    file.write_text("schema = 1\nconcurrency = 0\n")
+    with pytest.raises(Refused, match="at least 1"):
+        Fleet.load(file)
+    file.write_text("schema = 1\nconcurrency = true\n")
+    with pytest.raises(Refused, match="at least 1"):
+        Fleet.load(file)
+
+    fleet_dir: Path = tmp_path / "fleet"
+    fleet_dir.mkdir()
+    monkeypatch.chdir(fleet_dir)
+    Fleet.init(fleet_dir)
+    assert main(["fleet", "queue", "--concurrency", "0"]) == 1
+    assert "at least 1" in capsys.readouterr().err

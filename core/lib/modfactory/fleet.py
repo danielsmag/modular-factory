@@ -60,10 +60,35 @@ def labels_for(projects: list[Project]) -> dict[Path, str]:
     return labels
 
 
+def parse_concurrency(value: object, where: str) -> int:
+    """A fleet-wide cap: how many `new` and `resume` rows survive across every project."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise Refused(f"{where} must be a whole number of at least 1 (got {value})")
+    return value
+
+
+def cap_rows(
+    rows: list[tuple[str, str, str, str, str, str]], limit: int,
+) -> list[tuple[str, str, str, str, str, str]]:
+    """Keep the first `limit` actionable rows. Later `new` and `resume` rows become `hold`."""
+    kept: int = 0
+    capped: list[tuple[str, str, str, str, str, str]] = []
+    for project, action, issue, job, step, note in rows:
+        if action in ("new", "resume"):
+            if kept < limit:
+                kept += 1
+            else:
+                action = "hold"
+                note = f"fleet concurrency {limit} reached"
+        capped.append((project, action, issue, job, step, note))
+    return capped
+
+
 class Fleet:
-    def __init__(self, file: Path, projects: list[Project]) -> None:
+    def __init__(self, file: Path, projects: list[Project], concurrency: int | None = None) -> None:
         self.file: Path = file
         self.projects: list[Project] = projects
+        self.concurrency: int | None = concurrency
 
     def label(self, project: Project) -> str:
         return labels_for(self.projects)[project.path]
@@ -109,6 +134,8 @@ class Fleet:
         schema: object = parsed.get("schema")
         if schema != SCHEMA:
             raise Refused(f"{file} is schema {schema}; this factory reads schema {SCHEMA}")
+        raw_limit: object = parsed.get("concurrency")
+        limit: int | None = None if raw_limit is None else parse_concurrency(raw_limit, f"{file}: concurrency")
         raw: object = parsed.get("projects") or []
         if not isinstance(raw, list):
             raise Refused(f"{file}: projects must be a list of tables")
@@ -117,10 +144,13 @@ class Fleet:
             if not isinstance(row, dict) or not isinstance(row.get("path"), str):
                 raise Refused(f"{file}: each [[projects]] entry needs a path")
             projects.append(Project(Path(row["path"]).expanduser().resolve()))
-        return Fleet(file, projects)
+        return Fleet(file, projects, limit)
 
     def save(self) -> None:
-        lines: list[str] = [HEADER.rstrip("\n"), ""]
+        lines: list[str] = [HEADER.rstrip("\n")]
+        if self.concurrency is not None:
+            lines.append(f"concurrency = {self.concurrency}")
+        lines.append("")
         for project in self.projects:
             lines.append("[[projects]]")
             lines.append(f"path = {toml_string(str(project.path))}")
@@ -156,8 +186,14 @@ class Fleet:
         self.save()
         return chosen
 
-    def queue(self) -> tuple[list[tuple[str, str, str, str, str, str]], list[str]]:
-        """Rows of `project action issue job step note`, and one error string per project that failed."""
+    def queue(self, concurrency: int | None = None) -> tuple[list[tuple[str, str, str, str, str, str]], list[str]]:
+        """Rows of `project action issue job step note`, and one error string per project that failed.
+
+        `concurrency` overrides `fleet.toml`. It keeps that many `new` and `resume`
+        rows, in project order, and marks the rest `hold`. `wait`, `skip` and
+        `hold` do not take a slot. Omit both and each project keeps its own cap.
+        """
+        limit: int | None = self.concurrency if concurrency is None else parse_concurrency(concurrency, "--concurrency")
         rows: list[tuple[str, str, str, str, str, str]] = []
         errors: list[str] = []
         for project in self.projects:
@@ -180,6 +216,8 @@ class Fleet:
                     continue
                 action, issue, job, step, note = cells
                 rows.append((label, action, issue, job, step, note))
+        if limit is not None:
+            rows = cap_rows(rows, limit)
         return rows, errors
 
     def snapshot(self) -> dict[str, object]:

@@ -84,7 +84,9 @@ def parser():
     c = fleet_sub.add_parser("remove", help="remove a project by its path or folder name")
     c.add_argument("path")
     fleet_sub.add_parser("list", help="list the projects in fleet.toml")
-    fleet_sub.add_parser("queue", help="run each project's own factory queue")
+    c = fleet_sub.add_parser("queue", help="run each project's own factory queue")
+    c.add_argument("--concurrency", type=int, metavar="N",
+                   help="keep this many new and resume rows across every project")
     c = fleet_sub.add_parser("dashboard", help="serve one read-only board for every project")
     c.add_argument("--port", type=int, default=4747)
     c.add_argument("--no-open", action="store_true", help="don't open a browser")
@@ -128,12 +130,14 @@ def _fleet(args: argparse.Namespace) -> int:
             state: str = "ok" if project.binary.is_file() else "missing .factory/bin/factory"
             print(f"{group.label(project)}  {project.path}  {state}")
     elif command == "queue":
+        if args.concurrency is not None:
+            fleet_mod.parse_concurrency(args.concurrency, "--concurrency")
         if not group.projects:
             print("no projects yet. Run `factory fleet add <path>`.")
             return 0
         rows: list[tuple[str, str, str, str, str, str]]
         errors: list[str]
-        rows, errors = group.queue()
+        rows, errors = group.queue(args.concurrency)
         for row in rows:
             print("  ".join(row))
         if not rows and not errors:

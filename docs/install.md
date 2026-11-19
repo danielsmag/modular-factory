@@ -169,6 +169,8 @@ cd ~/work/fleet
 
 `fleet queue` runs each project's own `.factory/bin/factory queue`. A project that fails is reported, and the others still print. `fleet dashboard` serves one read-only page on this machine, grouped by project. Set `FACTORY_FLEET` to the `fleet.toml` path when you are not inside the fleet directory.
 
+`concurrency` in `fleet.toml`, or `factory fleet queue --concurrency N`, keeps that many `new` and `resume` rows across every project. Later ones print as `hold`. Projects earlier in the file get the slots. `wait`, `skip` and `hold` do not take a slot. Each project still applies its own `[run].concurrency` before the fleet sees the rows. Omit both and there is no fleet-wide cap.
+
 Building stays in the project. Open that project and run `/factory run`, or `/factory run 12` for one issue. The per-project `factory dashboard` still shows that project's pipeline.
 
 Two clones of one GitHub repository both appear if you add both paths. They do not share job files.
