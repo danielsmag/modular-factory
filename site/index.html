@@ -1,0 +1,849 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>factory</title>
+<style>
+:root {
+  --bg: #0b0b0b;
+  --panel: #151515;
+  --panel-2: #1b1b1b;
+  --line: #2a2a2a;
+  --line-2: #3a3a3a;
+  --text: #f2f2f2;
+  --muted: #9a9a9a;
+  --accent: #ff4a26;
+  --accent-fill: #d93a1b;
+  --accent-deep: #a82812;
+  --good: #2fbf71;
+  --bad: #ff5a4f;
+  --warn: #e0a83a;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+html { color-scheme: dark; }
+body {
+  margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+  font: 14px/1.45 var(--sans); border-top: 3px solid var(--accent);
+  background-image: repeating-linear-gradient(to bottom, transparent 0 3px, rgba(255, 255, 255, .018) 3px 4px);
+}
+a { color: inherit; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---- top bar ---- */
+.top {
+  display: flex; align-items: center; gap: 28px; padding: 14px 28px; max-width: 1280px; margin: 0 auto;
+  font-family: var(--mono); position: relative; z-index: 2;
+}
+.brand { display: flex; align-items: center; gap: 10px; font: 600 19px var(--sans); letter-spacing: -.01em; text-decoration: none; }
+.brand svg { width: 22px; height: 22px; }
+.nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.nav a { padding: 3px 5px; text-decoration: none; font-size: 13px; white-space: nowrap; }
+.nav a::before { content: "["; }
+.nav a::after { content: "]"; }
+.nav a:hover { color: var(--accent); }
+.nav a[aria-current="page"] { background: var(--text); color: var(--bg); }
+.tools { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-2); padding: 6px 10px; min-width: 210px; background: var(--bg); }
+.search:focus-within { border-color: var(--accent); }
+.search svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
+.search input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--text); font: 13px var(--mono); }
+.search input::placeholder { color: var(--muted); }
+kbd { font: 11px var(--mono); color: var(--muted); border: 1px solid var(--line-2); padding: 0 5px; border-radius: 2px; white-space: nowrap; }
+.cta { background: var(--text); color: var(--bg); font: 600 12px var(--mono); letter-spacing: .06em; padding: 9px 14px; text-decoration: none; white-space: nowrap; }
+.cta:hover { background: var(--accent); color: #000; }
+
+.sample { background: #1a120f; color: #ffb199; border-bottom: 1px solid #3a241c; text-align: center; font: 12px var(--mono); padding: 8px 16px; }
+/* ---- stage ---- */
+.stage { position: relative; max-width: 1280px; margin: 0 auto; padding: 38px 28px 60px; }
+.wordmark { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); width: min(880px, 90%); pointer-events: none; }
+.window { position: relative; z-index: 1; margin-top: 112px; background: #0e0e0e; border: 1px solid var(--line-2); box-shadow: 0 30px 80px rgba(0, 0, 0, .7); }
+.titlebar { display: flex; align-items: center; gap: 14px; padding: 9px 14px; border-bottom: 1px solid var(--line); }
+.dots { display: flex; gap: 7px; }
+.dots i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+.dots i:nth-child(1) { background: #ff5f57; }
+.dots i:nth-child(2) { background: #febc2e; }
+.dots i:nth-child(3) { background: #28c840; }
+.address { flex: 1; max-width: 420px; margin: 0 auto; background: var(--panel-2); color: var(--muted); font: 11px var(--mono); text-align: center; padding: 4px 10px; border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live { font: 11px var(--mono); color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+.live.stale::before { background: var(--bad); }
+.body { display: flex; min-height: 560px; }
+.rail { flex: none; width: 54px; border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 0; }
+.rail a { width: 34px; height: 34px; display: grid; place-items: center; color: var(--muted); border-radius: 6px; }
+.rail a:hover { color: var(--text); }
+.rail a[aria-current="page"] { background: var(--text); color: var(--bg); }
+.rail svg { width: 17px; height: 17px; }
+.rail hr { width: 24px; border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
+.view { flex: 1; min-width: 0; padding: 22px 24px 26px; }
+h1 { font: 500 22px var(--sans); margin: 0; letter-spacing: -.01em; }
+.sub { color: var(--muted); font-size: 12px; margin: 3px 0 18px; }
+h2 { font: 500 14px var(--sans); margin: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 16px; min-width: 0; }
+.panel > .sub { margin-bottom: 12px; }
+.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+
+/* ---- cards ---- */
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 14px; min-height: 104px; display: flex; flex-direction: column; }
+.card.accent { background: linear-gradient(135deg, var(--accent-fill), var(--accent-deep)); border-color: transparent; }
+.card .row { display: flex; justify-content: space-between; align-items: flex-start; }
+.card .icon { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--line-2); border-radius: 4px; color: var(--muted); }
+.card.accent .icon { border-color: rgba(255, 255, 255, .5); color: #fff; }
+.card .icon svg { width: 14px; height: 14px; }
+.delta { font: 11px var(--mono); padding: 1px 6px; border-radius: 3px; background: rgba(47, 191, 113, .14); color: var(--good); }
+.delta.flat { background: rgba(255, 255, 255, .07); color: var(--muted); }
+.delta.hot { background: rgba(255, 90, 79, .14); color: var(--bad); }
+.card.accent .delta { background: rgba(0, 0, 0, .28); color: #fff; }
+.card .label { margin-top: auto; font-size: 12px; color: var(--muted); }
+.card.accent .label { color: #fff; }
+.card .value { font: 500 24px var(--sans); letter-spacing: -.01em; }
+
+/* ---- charts ---- */
+.split { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); gap: 12px; margin-bottom: 12px; }
+.tabs { display: flex; gap: 2px; }
+.tabs button { font: 11px var(--mono); color: var(--muted); padding: 3px 7px; border-radius: 3px; }
+.tabs button:hover { color: var(--text); }
+.tabs button[aria-pressed="true"] { background: var(--line-2); color: var(--text); }
+.chart { width: 100%; height: auto; display: block; }
+.chart text { font: 10px var(--mono); fill: var(--muted); }
+.figures { display: flex; gap: 34px; margin-top: 12px; flex-wrap: wrap; }
+.figures div { font-size: 11px; color: var(--muted); }
+.figures b { display: block; font: 500 15px var(--sans); color: var(--text); }
+.figures b.good { color: var(--good); }
+.bars { display: grid; gap: 14px; }
+.bar .row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+.bar .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar .num { font-family: var(--mono); white-space: nowrap; }
+.bar .track { height: 3px; background: var(--line); margin-top: 7px; border-radius: 2px; }
+.bar .fill { height: 100%; background: var(--accent); border-radius: 2px; }
+.bar .pct { text-align: right; font: 10px var(--mono); color: var(--muted); margin-top: 3px; }
+.empty { color: var(--muted); font-size: 13px; padding: 26px 0; text-align: center; }
+
+/* ---- tables ---- */
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font: 500 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+tbody tr.link { cursor: pointer; }
+tbody tr.link:hover td { background: var(--panel-2); }
+td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+td.dim, .dim { color: var(--muted); }
+td.wrap { overflow-wrap: anywhere; }
+.chip { display: inline-block; font: 11px var(--mono); padding: 1px 7px; border: 1px solid var(--line-2); border-radius: 3px; white-space: nowrap; }
+.chip.wait { border-color: var(--accent); color: var(--accent); }
+.chip.done { border-color: rgba(47, 191, 113, .5); color: var(--good); }
+.chip.bad { border-color: rgba(255, 90, 79, .5); color: var(--bad); }
+.chip.run { border-color: var(--text); }
+.chip.off { color: var(--muted); border-style: dashed; }
+.ext { font-family: var(--mono); font-size: 12px; text-decoration: none; border-bottom: 1px dotted var(--line-2); }
+.ext:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ---- pipeline ---- */
+.pipe { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; }
+.graph { max-width: 100%; min-width: 400px; height: auto; display: block; margin: 0 auto; }
+.graph .node > rect { fill: var(--panel-2); stroke: var(--line-2); }
+.graph .node text { font: 12px var(--mono); fill: var(--text); }
+.graph .node .kind { font-size: 10px; fill: var(--muted); }
+.graph .node.off > rect { stroke-dasharray: 4 3; fill: var(--panel); }
+.graph .node.off text { fill: #777; }
+.graph .node.wait > rect { stroke: var(--accent); }
+.graph .node.wait .name { fill: var(--accent); }
+.graph .node.end > rect { fill: none; }
+.graph .count rect { fill: var(--text); stroke: none; }
+.graph .count text { fill: var(--bg); font-weight: 700; font-size: 11px; }
+.graph .node.wait .count rect { fill: var(--accent); }
+.graph .edge { fill: none; stroke: #6a6a6a; stroke-width: 1; }
+.graph .edge.back { stroke: #8d5a4b; }
+.graph .edge.off { stroke: #333; }
+.graph .port { fill: #8a8a8a; }
+.graph .port.back { fill: #c9836f; }
+.graph .port.off { fill: #3a3a3a; }
+.graph .elabel { font: 10px var(--mono); fill: #a8a8a8; }
+.graph .elabel.back { fill: #c9836f; }
+.graph .elabel.off { fill: #555; }
+.graph.focus .edge, .graph.focus .elabel, .graph.focus .port { opacity: .25; }
+.graph.focus .hot { opacity: 1; }
+.graph.focus .edge.hot { stroke-width: 1.6; stroke: var(--text); }
+.graph.focus .edge.back.hot { stroke: var(--accent); }
+.legend { display: flex; gap: 8px 18px; flex-wrap: wrap; font: 11px var(--mono); color: var(--muted); margin-top: 12px; }
+.legend i { display: inline-block; width: 22px; border-top: 1px solid #8a8a8a; vertical-align: middle; margin-right: 6px; }
+.legend i.back { border-top: 1px solid #c9836f; }
+.legend i.box { width: 10px; height: 10px; border: 1px solid var(--accent); }
+.legend i.box.off { border: 1px dashed #777; }
+
+/* ---- job ---- */
+.jobview { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 12px; }
+.joblist { max-height: 760px; overflow: auto; padding: 6px; }
+.joblist a { display: block; padding: 8px 10px; text-decoration: none; border-radius: 3px; border-left: 2px solid transparent; }
+.joblist a:hover { background: var(--panel-2); }
+.joblist a[aria-current="true"] { background: var(--panel-2); border-left-color: var(--accent); }
+.joblist .id { font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.joblist .meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; margin-top: 2px; }
+.detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+.facts { display: flex; gap: 8px 22px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.facts b { color: var(--text); font-weight: 500; }
+.ask { border: 1px solid var(--accent); border-radius: 4px; padding: 14px 16px; background: rgba(255, 74, 38, .06); }
+.ask h2 { color: var(--accent); }
+.ask p { margin: 6px 0 10px; font-size: 13px; overflow-wrap: anywhere; }
+.cmd { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.cmd code { flex: 1; min-width: 0; font: 12px var(--mono); background: var(--bg); border: 1px solid var(--line-2); padding: 6px 9px; overflow-x: auto; white-space: nowrap; }
+.cmd button { font: 11px var(--mono); border: 1px solid var(--line-2); padding: 5px 9px; white-space: nowrap; }
+.cmd button:hover { border-color: var(--text); }
+.steps { list-style: none; margin: 0; padding: 0; }
+.steps li { display: grid; grid-template-columns: 16px minmax(90px, 150px) minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.steps li:last-child { border-bottom: 0; }
+.steps .mark { width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); align-self: center; }
+.steps .now .mark { background: var(--accent); box-shadow: 0 0 0 3px rgba(255, 74, 38, .2); }
+.steps .ok .mark { background: var(--good); }
+.steps .ko .mark { background: var(--bad); }
+.steps .what { overflow-wrap: anywhere; }
+.steps .when { font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
+.files { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 12px; }
+.filelist button { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; padding: 6px 8px; border-radius: 3px; font: 12px var(--mono); }
+.filelist button:hover { background: var(--panel-2); }
+.filelist button[aria-pressed="true"] { background: var(--panel-2); box-shadow: inset 2px 0 var(--accent); }
+.filelist .verdict { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+pre.file { margin: 0; background: var(--bg); border: 1px solid var(--line); padding: 12px; font: 12px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 520px; overflow: auto; min-height: 120px; }
+
+/* ---- config ---- */
+.filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.filters button { font: 11px var(--mono); border: 1px solid var(--line-2); padding: 3px 9px; border-radius: 3px; color: var(--muted); }
+.filters button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.src { font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
+.src.mine { color: var(--accent); }
+
+.notice { border: 1px solid var(--line-2); padding: 14px 16px; border-radius: 4px; color: var(--muted); font-size: 13px; }
+.notice code { font-family: var(--mono); color: var(--text); }
+footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--muted); font: 11px var(--mono); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+@media (max-width: 1180px) {
+  .pipe { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  .top { flex-wrap: wrap; gap: 12px 18px; padding: 12px 16px; }
+  .tools { margin-left: 0; width: 100%; }
+  .search { flex: 1; }
+  .stage { padding: 20px 12px 40px; }
+  .wordmark { display: none; }
+  .window { margin-top: 0; }
+  .body { flex-direction: column; }
+  .rail { flex-direction: row; width: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 12px; justify-content: flex-start; }
+  .rail hr { display: none; }
+  .view { padding: 16px 14px 20px; }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .split, .jobview, .files { grid-template-columns: minmax(0, 1fr); }
+  .joblist { max-height: 220px; }
+  .scroll table { min-width: 620px; }
+  .live span { display: none; }
+  .steps li { grid-template-columns: 16px minmax(0, 1fr) auto; }
+  .steps .what { grid-column: 2 / -1; }
+}
+@media (max-width: 480px) {
+  .cards { grid-template-columns: minmax(0, 1fr); }
+  .cta { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .rail a, .nav a, .tabs button { transition: background .12s, color .12s; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/board" aria-label="factory, board">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#ff4a26" stroke-width="2" aria-hidden="true"><path d="M3 21V10l6 4V10l6 4V4h6v17z"/></svg>
+    factory
+  </a>
+  <nav class="nav" aria-label="Views">
+    <a href="#/board" data-view="board">Board</a>
+    <a href="#/pipeline" data-view="pipeline">Pipeline</a>
+    <a href="#/jobs" data-view="jobs">Jobs</a>
+    <a href="#/config" data-view="config">Config</a>
+  </nav>
+  <div class="tools">
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span class="sr">Search jobs</span>
+      <input id="search" type="search" placeholder="Search jobs..." autocomplete="off" spellcheck="false">
+      <kbd id="hotkey">Ctrl K</kbd>
+    </label>
+    <a class="cta" href="https://github.com/danielsmag/modular-factory#readme" target="_blank" rel="noopener noreferrer">DOCS</a>
+  </div>
+</header>
+<p class="sample" role="note">Sample data. These jobs are made up, so you can look at the dashboard.</p>
+
+<div class="stage">
+  <svg class="wordmark" id="wordmark" aria-hidden="true"></svg>
+  <main class="window">
+    <div class="titlebar">
+      <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="address" id="address">.factory/jobs</div>
+      <div class="live" id="live" role="status"><span>connecting</span></div>
+    </div>
+    <div class="body">
+      <nav class="rail" aria-label="Views, as icons">
+        <a href="#/board" data-view="board" title="Board" aria-label="Board"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg></a>
+        <a href="#/pipeline" data-view="pipeline" title="Pipeline" aria-label="Pipeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.5 6h9M6.5 8l4.3 7.7M17.5 8l-4.3 7.7"/></svg></a>
+        <a href="#/jobs" data-view="jobs" title="Jobs" aria-label="Jobs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg></a>
+        <hr>
+        <a href="#/config" data-view="config" title="Config" aria-label="Config"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></a>
+      </nav>
+      <section class="view" id="view" aria-live="off"></section>
+    </div>
+  </main>
+</div>
+<footer><span id="foot-left">read-only · approvals and feedback go through /factory or an issue comment</span><span id="foot-right"></span></footer>
+
+<script>
+"use strict";
+// Everything shown here may come from a GitHub issue, so no markup is ever built
+// from strings: nodes are created one by one and text goes in as text.
+const SVG = "http://www.w3.org/2000/svg";
+const REFRESH_MS = 5000;
+const RUNNING = new Set(["agent", "checks", "review", "merge", "verify"]);
+const state = { index: null, graph: null, config: null, error: null, query: "", range: "30", file: null, source: "all" };
+
+function el(tag, props, ...kids) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props || {})) {
+    if (value === null || value === undefined || value === false) continue;
+    if (key === "class") node.className = value;
+    else if (key === "text") node.textContent = value;
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value === true ? "" : String(value));
+  }
+  for (const kid of kids.flat(Infinity)) if (kid !== null && kid !== undefined && kid !== false) node.append(kid);
+  return node;
+}
+function svg(tag, attrs, ...kids) {
+  const node = document.createElementNS(SVG, tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (key === "text") node.textContent = value;
+    else if (value !== null && value !== undefined) node.setAttribute(key, String(value));
+  }
+  for (const kid of kids.flat(Infinity)) if (kid) node.append(kid);
+  return node;
+}
+function icon(path) {
+  const node = svg("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2, "aria-hidden": "true" });
+  node.append(svg("path", { d: path }));
+  return node;
+}
+function link(url, text) {
+  // Only real web addresses become links; anything else is shown as plain text.
+  return /^https:\/\//.test(url || "") ? el("a", { class: "ext", href: url, target: "_blank", rel: "noopener noreferrer", text }) : el("span", { class: "mono", text });
+}
+
+// ---- data helpers ----
+const time = (stamp) => (stamp ? new Date(stamp).getTime() : null);
+function ago(stamp) {
+  const t = time(stamp);
+  if (!t) return "-";
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 90) return "just now";
+  if (s < 5400) return Math.round(s / 60) + "m ago";
+  if (s < 129600) return Math.round(s / 3600) + "h ago";
+  return Math.round(s / 86400) + "d ago";
+}
+function span(seconds) {
+  if (seconds === null || seconds === undefined || isNaN(seconds)) return "-";
+  if (seconds < 60) return Math.round(seconds) + "s";
+  if (seconds < 3600) return Math.round(seconds / 60) + "m";
+  if (seconds < 172800) return (seconds / 3600).toFixed(1).replace(/\.0$/, "") + "h";
+  return Math.round(seconds / 86400) + "d";
+}
+const money = (n) => "$" + Number(n).toFixed(2);
+const stepOf = (name) => (state.graph ? state.graph.steps.find((s) => s.name === name) : null);
+const isEnd = (name) => !!state.graph && state.graph.end_states.includes(name);
+function kindOf(job) {
+  if (job.step === "done") return "done";
+  if (job.step === "rejected" || job.step === "failed") return "bad";
+  if (job.waiting) return "wait";
+  return "run";
+}
+function chip(job) {
+  return el("span", { class: "chip " + kindOf(job), text: job.step });
+}
+function matches(job) {
+  const q = state.query.trim().toLowerCase();
+  if (!q) return true;
+  return [job.id, job.title, "#" + job.issue, job.step, job.author, job.pr ? "#" + job.pr : ""].some((v) => String(v || "").toLowerCase().includes(q));
+}
+function jobs() {
+  return state.index ? state.index.jobs.slice().sort((a, b) => (a.id < b.id ? 1 : -1)) : [];
+}
+function stepSeconds(job) {
+  // Time spent in each step, from the job's history plus the step it is in now.
+  const out = {};
+  for (const h of job.history || []) {
+    const a = time(h.entered_at), b = time(h.at);
+    if (a && b) out[h.step] = (out[h.step] || 0) + (b - a) / 1000;
+  }
+  return out;
+}
+function commands(job) {
+  const step = stepOf(job.step);
+  if (!step || !job.waiting) return [];
+  const hint = { REJECT: " <why>", ANSWER: " <your answer>", APPROVE: "" };
+  return step.edges.map((e) => "/factory " + e.outcome.toLowerCase() + " " + job.issue + (e.outcome in hint ? hint[e.outcome] : " <what to change>"));
+}
+
+// ---- wordmark: FACTORY in outlined pixel letters ----
+const FONT = {
+  F: ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+  A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+  C: ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+  T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+  R: ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+  Y: ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+};
+function drawWordmark() {
+  const root = document.getElementById("wordmark");
+  const cell = 22, gap = 3, word = "FACTORY";
+  const width = word.length * 6 * cell - cell, height = 7 * cell;
+  root.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  [...word].forEach((letter, i) => {
+    FONT[letter].forEach((row, y) => {
+      [...row].forEach((bit, x) => {
+        if (bit !== "1") return;
+        root.append(svg("rect", { x: i * 6 * cell + x * cell + gap / 2, y: y * cell + gap / 2, width: cell - gap, height: cell - gap, fill: "#191919", stroke: "#3c3c3c", "stroke-width": 1.5 }));
+      });
+    });
+  });
+}
+
+// ---- board ----
+function card(label, value, delta, path, accent, deltaClass) {
+  return el("div", { class: "card" + (accent ? " accent" : "") },
+    el("div", { class: "row" }, el("span", { class: "icon" }, icon(path)), delta ? el("span", { class: "delta " + (deltaClass || ""), text: delta }) : null),
+    el("div", { class: "label", text: label }),
+    el("div", { class: "value", text: value }));
+}
+function days(count) {
+  const out = [], today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = count - 1; i >= 0; i--) out.push(new Date(today.getTime() - i * 86400000));
+  return out;
+}
+function areaChart(all) {
+  const done = all.filter((j) => j.step === "done" && j.finished_at);
+  let count = Number(state.range);
+  if (state.range === "all") {
+    const first = Math.min(...done.map((j) => time(j.finished_at)), Date.now());
+    count = Math.min(365, Math.max(7, Math.ceil((Date.now() - first) / 86400000) + 1));
+  }
+  const axis = days(count);
+  const daily = axis.map((day) => done.filter((j) => { const t = time(j.finished_at); return t >= day.getTime() && t < day.getTime() + 86400000; }).length);
+  let sum = 0;
+  const values = daily.map((v) => (sum += v));
+  const total = sum;
+  const W = 640, H = 230, L = 34, R = 8, T = 10, B = 26;
+  const ticks = total <= 4 ? Math.max(2, total) : 4, top = Math.max(2, Math.ceil(total / ticks) * ticks);
+  const x = (i) => L + (axis.length === 1 ? 0 : (i * (W - L - R)) / (axis.length - 1));
+  const y = (v) => T + (1 - v / top) * (H - T - B);
+  const root = svg("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `Jobs merged over ${count} days, as a running total: ${total}` });
+  const grad = svg("linearGradient", { id: "fill", x1: 0, y1: 0, x2: 0, y2: 1 },
+    svg("stop", { offset: "0", "stop-color": "#ff4a26", "stop-opacity": ".55" }), svg("stop", { offset: "1", "stop-color": "#ff4a26", "stop-opacity": ".04" }));
+  root.append(svg("defs", {}, grad));
+  for (let i = 0; i <= ticks; i++) {
+    const v = Math.round((top * i) / ticks);
+    root.append(svg("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: "#232323" }), svg("text", { x: L - 8, y: y(v) + 3, "text-anchor": "end", text: v }));
+  }
+  const line = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  root.append(svg("path", { d: `${line} L${x(values.length - 1)},${y(0)} L${x(0)},${y(0)} Z`, fill: "url(#fill)" }), svg("path", { d: line, fill: "none", stroke: "#ff4a26", "stroke-width": 1.6 }));
+  if (total) root.append(svg("line", { x1: x(0), x2: x(values.length - 1), y1: y(0), y2: y(total), stroke: "#d8d8d8", "stroke-dasharray": "4 4", "stroke-width": 1 }));
+  const every = Math.max(1, Math.ceil(axis.length / 8));
+  axis.forEach((day, i) => {
+    const last = axis.length - 1;
+    if (i !== last && (i % every || last - i < every * 0.7)) return;
+    root.append(svg("text", { x: x(i), y: H - 8, "text-anchor": i === 0 ? "start" : i === axis.length - 1 ? "end" : "middle", text: day.toLocaleDateString(undefined, { month: "short", day: "numeric" }) }));
+  });
+  return { root, total, mean: total / values.length };
+}
+function byStep(all) {
+  const priced = all.some((j) => j.cost_usd !== null && j.cost_usd !== undefined);
+  const totals = {};
+  for (const job of all) {
+    const source = priced ? job.cost_by_step || {} : stepSeconds(job);
+    for (const [step, v] of Object.entries(source)) {
+      const s = stepOf(step);
+      if (!priced && s && (s.type === "human")) continue;   // waiting for a person isn't work
+      totals[step] = (totals[step] || 0) + v;
+    }
+  }
+  const rows = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const sum = Object.values(totals).reduce((a, b) => a + b, 0);
+  return { priced, rows, sum };
+}
+function jobTable(list) {
+  if (!list.length) return el("div", { class: "empty", text: state.query ? "No job matches the search." : "No jobs yet. Label an issue and run /factory run." });
+  const body = el("tbody", {}, list.map((job) => {
+    const row = el("tr", { class: "link", tabindex: 0, onclick: () => { location.hash = "#/jobs/" + encodeURIComponent(job.id); },
+      onkeydown: (e) => { if (e.key === "Enter") location.hash = "#/jobs/" + encodeURIComponent(job.id); } },
+      el("td", { class: "mono", text: job.id }),
+      el("td", { class: "wrap", text: job.title }),
+      el("td", {}, chip(job)),
+      el("td", { class: "mono dim", text: job.round || "-" }),
+      el("td", { class: "mono dim", text: job.pr ? "#" + job.pr : "-" }),
+      el("td", { class: "mono dim", text: job.cost_usd !== null && job.cost_usd !== undefined ? money(job.cost_usd) : "-" }),
+      el("td", { class: "mono dim", text: ago(job.updated_at) }));
+    return row;
+  }));
+  return el("div", { class: "scroll" }, el("table", {},
+    el("thead", {}, el("tr", {}, ["Job", "Title", "Step", "Round", "PR", "Cost", "Updated"].map((t) => el("th", { scope: "col", text: t })))), body));
+}
+function board() {
+  const all = jobs(), idx = state.index;
+  const running = all.filter((j) => { const s = stepOf(j.step); return s && RUNNING.has(s.type) && !j.waiting; });
+  const merged = all.filter((j) => j.step === "done");
+  const week = merged.filter((j) => time(j.finished_at) > Date.now() - 7 * 86400000).length;
+  const waiting = all.filter((j) => j.waiting);
+  const authors = waiting.filter((j) => j.waiting.who === "author").length;
+  const split = byStep(all);
+  const total = all.reduce((a, j) => a + (j.cost_usd || 0), 0);
+  const finished = all.filter((j) => j.finished_at && j.step === "done").map((j) => (time(j.finished_at) - time(j.created_at)) / 1000).sort((a, b) => a - b);
+  const median = finished.length ? finished[Math.floor(finished.length / 2)] : null;
+  const chart = areaChart(all);
+  const rangeTab = (key, text) => el("button", { type: "button", "aria-pressed": String(state.range === key), text, onclick: () => { state.range = key; render(); } });
+
+  return [
+    el("h1", { text: "Board" }),
+    el("p", { class: "sub", text: idx.project.description || "Every job at a glance" }),
+    el("div", { class: "cards" },
+      card("Running", String(running.length), `of ${idx.concurrency} slots`, "M5 3l14 9-14 9z", true),
+      card("Merged", String(merged.length), week ? `+${week} this week` : "none this week", "M5 12l5 5L20 7", false, week ? "" : "flat"),
+      card("Needs you", String(waiting.length), waiting.length ? `${authors} author · ${waiting.length - authors} maintainer` : "nothing waiting", "M12 8v5M12 17h.01M12 3a9 9 0 100 18 9 9 0 000-18z", false, waiting.length ? "hot" : "flat"),
+      split.priced ? card("Cost", money(total), "Claude Code", "M12 3v18M16 7H10a3 3 0 000 6h4a3 3 0 010 6H7", false, "flat")
+                   : card("Median time to merge", span(median), `${merged.length} merged`, "M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z", false, "flat")),
+    el("div", { class: "split" },
+      el("div", { class: "panel" },
+        el("div", { class: "head" }, el("div", {}, el("h2", { text: "Jobs merged" }), el("p", { class: "sub", text: "Running total for the period. Dashed line: a steady pace" })),
+          el("div", { class: "tabs", role: "group", "aria-label": "Period" }, rangeTab("7", "7D"), rangeTab("30", "30D"), rangeTab("all", "ALL"))),
+        chart.root,
+        el("div", { class: "figures" },
+          el("div", {}, "Merged in period", el("b", { text: String(chart.total) })),
+          el("div", {}, "Per day", el("b", { text: chart.mean.toFixed(1) })),
+          el("div", {}, "Merged of finished", el("b", { class: "good", text: all.some((j) => j.finished_at) ? Math.round((100 * merged.length) / all.filter((j) => j.finished_at).length) + "%" : "-" })))),
+      el("div", { class: "panel" },
+        el("h2", { text: split.priced ? "Cost by step" : "Time by step" }),
+        el("p", { class: "sub", text: split.priced ? "API-equivalent, all jobs" : "Agents and scripts, all jobs" }),
+        split.rows.length ? el("div", { class: "bars" }, split.rows.map(([step, v]) => el("div", { class: "bar" },
+          el("div", { class: "row" }, el("span", { class: "name", text: step }), el("span", { class: "num", text: split.priced ? money(v) : span(v) })),
+          el("div", { class: "track" }, el("div", { class: "fill", style: `width:${Math.max(2, (100 * v) / split.rows[0][1]).toFixed(1)}%` })),
+          el("div", { class: "pct", text: ((100 * v) / split.sum).toFixed(1) + "%" }))))
+          : el("div", { class: "empty", text: "Nothing has run yet." }))),
+    el("div", { class: "panel" }, el("div", { class: "head" }, el("h2", { text: "Jobs" }), el("span", { class: "src", text: `${all.filter(matches).length} of ${all.length}` })), jobTable(all.filter(matches))),
+  ];
+}
+
+// ---- pipeline ----
+function order(graph) {
+  // The first edge of each step is its normal way on; that chain is the spine.
+  // A step off the spine sits right under the last spine step that leads to it,
+  // except the escalation step: any step can lead there, so it goes last.
+  const steps = new Map(graph.steps.map((s) => [s.name, s]));
+  const spine = [];
+  let name = graph.start;
+  while (name && steps.has(name) && !spine.includes(name)) {
+    spine.push(name);
+    const step = steps.get(name);
+    const next = step.enabled === false ? step.edges.find((e) => e.outcome === step.skip) : step.edges.find((e) => !spine.includes(e.to));
+    name = next ? next.to : null;
+  }
+  const out = spine.slice();
+  let moved = true;
+  while (moved) {
+    moved = false;
+    for (const step of graph.steps) {
+      if (out.includes(step.name) || step.name === graph.escalate_to) continue;
+      const from = out.filter((n) => steps.get(n).edges.some((e) => e.to === step.name));
+      if (!from.length) continue;
+      let at = Math.max(...from.map((n) => out.indexOf(n))) + 1;
+      while (at < out.length && !spine.includes(out[at])) at++;
+      out.splice(at, 0, step.name);
+      moved = true;
+    }
+  }
+  for (const step of graph.steps) if (!out.includes(step.name)) out.push(step.name);
+  const ends = graph.end_states.slice().sort((x, y) => (x === "done" ? -1 : y === "done" ? 1 : x < y ? -1 : 1));
+  return out.concat(ends);
+}
+function lanes(groups) {
+  // Shortest runs sit closest to the steps; runs that do not overlap share a lane.
+  const taken = [];
+  for (const group of groups.slice().sort((x, y) => (x.hi - x.lo) - (y.hi - y.lo))) {
+    let lane = 0;
+    while ((taken[lane] || []).some((g) => group.lo < g.hi + 8 && g.lo < group.hi + 8)) lane++;
+    (taken[lane] = taken[lane] || []).push(group);
+    group.lane = lane;
+  }
+  return taken.length;
+}
+function pipelineGraph(graph, count) {
+  const NW = 172, LABEL = 106, LANE = 12, PORT = 16, GAP = 14, PAD = 12, R = 5;
+  const names = order(graph), index = new Map(names.map((n, i) => [n, i]));
+  const nodes = new Map();
+  let y = PAD;
+  for (const name of names) {
+    const step = stepOf(name);
+    const edges = step ? step.edges.filter((e) => index.has(e.to)) : [];
+    const fwd = edges.filter((e) => index.get(e.to) > index.get(name)), back = edges.filter((e) => index.get(e.to) <= index.get(name));
+    const h = Math.max(42, 26 + PORT * (Math.max(fwd.length, back.length, 1) - 1) + 12);
+    nodes.set(name, { name, step, y, h, fwd, back });
+    y += h + GAP;
+  }
+  const H = y - GAP + PAD;
+  const runs = [];
+  for (const node of nodes.values()) {
+    for (const [side, list] of [["fwd", node.fwd], ["back", node.back]]) {
+      list.forEach((edge, i) => {
+        const target = nodes.get(edge.to);
+        runs.push({ side, from: node.name, to: edge.to, edge, y1: node.y + 26 + PORT * i, y2: target.y + 9,
+          off: node.step.enabled === false && edge.outcome !== node.step.skip });
+      });
+    }
+  }
+  const groups = { fwd: new Map(), back: new Map() };
+  for (const run of runs) {
+    const group = groups[run.side].get(run.to) || { lo: Infinity, hi: -Infinity };
+    group.lo = Math.min(group.lo, run.y1, run.y2);
+    group.hi = Math.max(group.hi, run.y1, run.y2);
+    groups[run.side].set(run.to, group);
+  }
+  const leftLanes = lanes([...groups.back.values()]), rightLanes = lanes([...groups.fwd.values()]);
+  const xl = PAD + Math.max(0, leftLanes - 1) * LANE + (leftLanes ? LABEL : 0), xr = xl + NW;
+  const W = xr + (rightLanes ? LABEL : 0) + Math.max(0, rightLanes - 1) * LANE + PAD;
+
+  const root = svg("svg", { class: "graph", viewBox: `0 0 ${W} ${H}`, style: `width:${W}px`, role: "img",
+    "aria-label": "The pipeline's steps and the edges between them. The Steps table lists the same." });
+  const marker = (id, colour) => svg("marker", { id, viewBox: "0 0 8 8", refX: 7, refY: 4, markerWidth: 6, markerHeight: 6, orient: "auto" }, svg("path", { d: "M0,0 L8,4 L0,8 z", fill: colour }));
+  root.append(svg("defs", {}, marker("arrow", "#8a8a8a"), marker("arrow-back", "#c9836f"), marker("arrow-off", "#3a3a3a")));
+  const wires = svg("g", {}), labels = svg("g", {});
+  for (const run of runs.sort((a, b) => Number(b.off) - Number(a.off))) {
+    const right = run.side === "fwd", dir = right ? 1 : -1, down = run.y2 > run.y1 ? 1 : -1;
+    const x0 = right ? xr : xl, lane = x0 + dir * (LABEL + groups[run.side].get(run.to).lane * LANE);
+    const d = `M${x0},${run.y1} H${lane - dir * R} Q${lane},${run.y1} ${lane},${run.y1 + down * R} V${run.y2 - down * R} Q${lane},${run.y2} ${lane - dir * R},${run.y2} H${x0 + dir * 2}`;
+    const kind = run.off ? " off" : right ? "" : " back";
+    wires.append(svg("path", { class: "edge" + kind, d, "marker-end": `url(#arrow${run.off ? "-off" : right ? "" : "-back"})`, "data-from": run.from, "data-to": run.to }));
+    const text = run.edge.outcome + (run.edge.max !== null && run.edge.max !== undefined ? ` · max ${run.edge.max}` : "");
+    labels.append(svg("circle", { class: "port" + kind, cx: x0, cy: run.y1, r: 2.5, "data-from": run.from, "data-to": run.to }),
+      svg("text", { class: "elabel" + kind, x: x0 + dir * 8, y: run.y1 - 4, "text-anchor": right ? "start" : "end", text, "data-from": run.from, "data-to": run.to }));
+  }
+  root.append(wires);
+  for (const node of nodes.values()) {
+    const { name, step, h } = node, n = count(name), end = !step;
+    const waiting = step && step.type === "human" && n > 0;
+    const kind = end ? "end" : step.type + (step.who ? " · " + step.who : "") + (step.enabled === false ? " · off" : "");
+    const group = svg("g", { class: "node" + (end ? " end" : "") + (step && step.enabled === false ? " off" : "") + (waiting ? " wait" : "") });
+    group.append(svg("rect", { x: xl, y: node.y, width: NW, height: h, rx: 3 }),
+      svg("text", { class: "name", x: xl + 11, y: node.y + 18, text: name.length > 20 ? name.slice(0, 19) + "…" : name }),
+      svg("text", { class: "kind", x: xl + 11, y: node.y + 32, text: kind }));
+    if (n) group.append(svg("g", { class: "count" }, svg("rect", { x: xr - 34, y: node.y + 9, width: 24, height: 18, rx: 9 }), svg("text", { x: xr - 22, y: node.y + 22, "text-anchor": "middle", text: n })));
+    group.append(svg("title", { text: `${name}: ${n} job${n === 1 ? "" : "s"}` }));
+    const focus = (on) => {
+      root.classList.toggle("focus", on);
+      for (const part of root.querySelectorAll("[data-from]")) part.classList.toggle("hot", on && (part.dataset.from === name || part.dataset.to === name));
+    };
+    group.addEventListener("mouseenter", () => focus(true));
+    group.addEventListener("mouseleave", () => focus(false));
+    root.append(group);
+  }
+  root.append(labels);
+  return root;
+}
+function pipeline() {
+  const graph = state.graph, all = jobs();
+  const count = (name) => all.filter((j) => j.step === name).length;
+  const off = (step) => step.enabled === false;
+  const stepRows = graph.steps.map((step) => el("tr", {},
+    el("td", { class: "mono", text: step.name }),
+    el("td", {}, el("span", { class: "chip" + (off(step) ? " off" : ""), text: step.type + (off(step) ? " · off" : "") }),
+      step.who ? el("div", { class: "dim", style: "font-size:11px;margin-top:4px", text: step.who }) : null),
+    el("td", { class: "mono wrap" }, step.edges.map((e) => el("div", { class: off(step) && e.outcome !== step.skip ? "dim" : "" },
+      e.outcome, el("span", { class: "dim", text: " → " }), e.to, e.max !== null && e.max !== undefined ? el("span", { class: "dim", text: `  max ${e.max}` }) : null))),
+    el("td", { class: "mono dim", text: count(step.name) || "-" })));
+  return [
+    el("h1", { text: "Pipeline" }),
+    el("p", { class: "sub", text: `Starts at ${graph.start}. When an edge's max is used up, the job goes to ${graph.escalate_to}.` }),
+    el("div", { class: "pipe" },
+      el("div", { class: "panel" }, el("div", { class: "scroll" }, pipelineGraph(graph, count)),
+        el("div", { class: "legend" }, el("span", {}, el("i"), "on to a later step"), el("span", {}, el("i", { class: "back" }), "back to an earlier step"),
+          el("span", {}, el("i", { class: "box" }), "waiting for a person"), el("span", {}, el("i", { class: "box off" }), "step is off"))),
+      el("div", { class: "panel" }, el("h2", { text: "Steps" }), el("p", { class: "sub", text: "As set in factory.toml over the defaults" }),
+        el("div", { class: "scroll" }, el("table", {}, el("thead", {}, el("tr", {}, ["Step", "Type", "Outcomes", "Jobs"].map((t) => el("th", { scope: "col", text: t })))), el("tbody", {}, stepRows))))),
+  ];
+}
+
+// ---- jobs ----
+async function showFile(job, path) {
+  state.file = { job: job.id, path, text: "Loading..." };
+  render();
+  let text;
+  try {
+    const res = await fetch("jobs/" + encodeURIComponent(job.id) + "/" + path.split("/").map(encodeURIComponent).join("/"), { cache: "no-store" });
+    text = res.ok ? await res.text() : `Could not load ${path} (${res.status}).`;
+  } catch (e) {
+    text = `Could not load ${path}.`;
+  }
+  if (state.file && state.file.job === job.id && state.file.path === path) { state.file.text = text; render(); }
+}
+function jobDetail(job) {
+  const step = stepOf(job.step);
+  const parts = [];
+  parts.push(el("div", { class: "panel" },
+    el("div", { class: "head" }, el("div", { style: "min-width:0" }, el("h2", { style: "font-size:17px;overflow-wrap:anywhere", text: job.title }), el("div", { class: "mono dim", style: "margin-top:3px", text: job.id })), chip(job)),
+    el("div", { class: "facts" },
+      el("span", {}, "Issue ", link(job.issue_url, "#" + job.issue)),
+      job.pr ? el("span", {}, "PR ", link(job.pr_url, "#" + job.pr)) : null,
+      el("span", {}, "By ", el("b", { text: "@" + job.author })),
+      job.intake ? el("span", {}, "Risk ", el("b", { text: job.intake.risk })) : null,
+      job.intake ? el("span", {}, "Surfaces ", el("b", { text: (job.intake.surfaces || []).join(", ") || "none" })) : null,
+      el("span", {}, "Round ", el("b", { text: `${job.round || 0}` + (job.attempt > 1 ? `, attempt ${job.attempt}` : "") })),
+      job.cost_usd !== null && job.cost_usd !== undefined ? el("span", {}, "Cost ", el("b", { text: money(job.cost_usd) })) : null,
+      el("span", {}, "Started ", el("b", { text: ago(job.created_at) })))));
+
+  if (job.waiting) {
+    parts.push(el("div", { class: "ask" },
+      el("h2", { text: `Waiting for ${job.waiting.who === "author" ? "the author, @" + job.author : "a maintainer"} since ${ago(job.waiting.since)}` }),
+      el("p", { text: job.reason || `Step ${job.step} needs a reply. Type one of these in your coding tool, or comment it on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} without the number.` }),
+      commands(job).map((cmd) => el("div", { class: "cmd" }, el("code", { text: cmd }),
+        el("button", { type: "button", text: "Copy", onclick: async (e) => {
+          const literal = cmd.replace(/ <[^>]+>$/, " ");
+          try { await navigator.clipboard.writeText(literal); e.target.textContent = "Copied"; } catch (_) { e.target.textContent = "Select it"; }
+          setTimeout(() => { e.target.textContent = "Copy"; }, 1500);
+        } })))));
+  } else if (job.reason && isEnd(job.step) && job.step !== "done") {
+    parts.push(el("div", { class: "notice", style: "white-space:pre-wrap;overflow-wrap:anywhere", text: job.reason }));
+  }
+
+  const items = (job.history || []).map((h) => {
+    const bad = /^(FAIL|FAILED|REJECT|CHANGES|BLOCKED|ESCALATE|UNKNOWN|NEEDS-INFO)$/.test(h.outcome);
+    return el("li", { class: bad ? "ko" : "ok" }, el("span", { class: "mark" }), el("span", { class: "mono", text: h.step }),
+      el("span", { class: "what" }, el("span", { class: "mono", text: h.outcome + " → " + h.to }),
+        h.skipped && h.skipped.length ? el("span", { class: "dim", text: "  skipped " + h.skipped.join(", ") }) : null,
+        h.reason ? el("div", { class: "dim", style: "font-size:12px", text: h.reason.split("\n")[0].slice(0, 200) }) : null),
+      el("span", { class: "when", text: span((time(h.at) - time(h.entered_at)) / 1000) + " · " + ago(h.at) }));
+  });
+  if (!isEnd(job.step)) {
+    items.push(el("li", { class: "now" }, el("span", { class: "mark" }), el("span", { class: "mono", text: job.step }),
+      el("span", { class: "what dim", text: job.waiting ? "waiting for a person" : step ? `${step.type} step, in progress` : "this step is no longer in factory.toml" }),
+      el("span", { class: "when", text: "since " + ago(job.entered_at) })));
+  }
+  parts.push(el("div", { class: "panel" }, el("h2", { text: "Steps" }), el("p", { class: "sub", text: "In the order the job took them" }), el("ol", { class: "steps" }, items)));
+
+  const files = job.files || [];
+  const open = state.file && state.file.job === job.id ? state.file : null;
+  parts.push(el("div", { class: "panel" }, el("h2", { text: "Files" }), el("p", { class: "sub", text: "What each step wrote, with its first line" }),
+    files.length ? el("div", { class: "files" },
+      el("div", { class: "filelist" }, files.map((f) => el("button", { type: "button", "aria-pressed": String(!!open && open.path === f.path), onclick: () => showFile(job, f.path) },
+        el("span", { text: f.path }), el("span", { class: "verdict", text: f.first_line || "" })))),
+      el("pre", { class: "file", tabindex: 0, text: open ? open.text : "Pick a file to read it." }))
+      : el("div", { class: "empty", text: "No files yet." })));
+  return el("div", { class: "detail" }, parts);
+}
+function jobsView(id) {
+  const all = jobs(), shown = all.filter(matches);
+  const current = all.find((j) => j.id === id) || shown[0] || null;
+  if (!all.length) return [el("h1", { text: "Jobs" }), el("p", { class: "sub", text: "One job per labeled issue" }), el("div", { class: "notice" }, "No jobs yet. Label an issue ", el("code", { text: state.index.labels.queue }), " and run ", el("code", { text: "/factory run" }), " in your coding tool.")];
+  return [
+    el("h1", { text: "Jobs" }),
+    el("p", { class: "sub", text: `${shown.length} of ${all.length}` + (state.query ? " match the search" : "") }),
+    el("div", { class: "jobview" },
+      el("nav", { class: "panel joblist", "aria-label": "Jobs" }, shown.length ? shown.map((job) => el("a", { href: "#/jobs/" + encodeURIComponent(job.id), "aria-current": String(!!current && job.id === current.id) },
+        el("div", { class: "id", text: job.id }), el("div", { class: "meta" }, el("span", { text: "#" + job.issue + " · " + ago(job.updated_at) }), chip(job)))) : el("div", { class: "empty", text: "No job matches." })),
+      current ? jobDetail(current) : el("div", { class: "notice", text: "Pick a job." })),
+  ];
+}
+
+// ---- config ----
+function configView() {
+  if (!state.config) return [el("h1", { text: "Config" }), el("p", { class: "sub", text: "Loading..." })];
+  const sources = ["all", ...new Set(state.config.map((r) => r.source))];
+  const q = state.query.trim().toLowerCase();
+  const rows = state.config.filter((r) => (state.source === "all" || r.source === state.source) && (!q || r.key.toLowerCase().includes(q) || JSON.stringify(r.value).toLowerCase().includes(q)));
+  return [
+    el("h1", { text: "Config" }),
+    el("p", { class: "sub", text: "factory.toml merged over the defaults, and where each value comes from" }),
+    el("div", { class: "filters", role: "group", "aria-label": "Source" }, sources.map((s) => el("button", { type: "button", "aria-pressed": String(state.source === s), text: s, onclick: () => { state.source = s; render(); } }))),
+    el("div", { class: "panel" }, rows.length ? el("div", { class: "scroll" }, el("table", {},
+      el("thead", {}, el("tr", {}, ["Key", "Value", "Source"].map((t) => el("th", { scope: "col", text: t })))),
+      el("tbody", {}, rows.map((r) => el("tr", {}, el("td", { class: "mono", text: r.key }), el("td", { class: "mono wrap", text: JSON.stringify(r.value) }),
+        el("td", {}, el("span", { class: "src" + (r.source === "factory.toml" ? " mine" : ""), text: r.source }))))))) : el("div", { class: "empty", text: "No setting matches." })),
+  ];
+}
+
+// ---- shell ----
+function route() {
+  const parts = location.hash.replace(/^#\/?/, "").split("/");
+  return { view: ["board", "pipeline", "jobs", "config"].includes(parts[0]) ? parts[0] : "board", id: parts[1] ? decodeURIComponent(parts[1]) : null };
+}
+function render() {
+  const { view, id } = route();
+  document.querySelectorAll("[data-view]").forEach((a) => {
+    if (a.dataset.view === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+  const live = document.getElementById("live");
+  live.className = "live" + (state.error ? " stale" : "");
+  live.replaceChildren(el("span", { text: state.error ? "not connected" : state.index ? "live · " + new Date(state.index.generated_at).toLocaleTimeString() : "connecting" }));
+  const target = document.getElementById("view");
+  const keep = document.activeElement && target.contains(document.activeElement) ? null : document.activeElement;
+  const scroll = [...target.querySelectorAll(".joblist, pre.file")].map((n) => n.scrollTop);
+  let content;
+  if (!state.index || !state.graph) {
+    content = [el("h1", { text: "factory" }), el("div", { class: "notice" }, state.error
+      ? el("span", {}, "The dashboard's data could not be loaded: ", el("code", { text: state.error }), ". Start it with ", el("code", { text: ".factory/bin/factory dashboard" }), ".")
+      : "Loading...")];
+  } else {
+    document.getElementById("address").textContent = `${state.index.repo}/.factory/jobs`;
+    document.getElementById("foot-right").textContent = `factory ${state.index.version} · ${state.index.tools.join(", ")}`;
+    document.title = `factory · ${state.index.repo}`;
+    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id) : view === "config" ? configView() : board();
+  }
+  target.replaceChildren(...content);
+  [...target.querySelectorAll(".joblist, pre.file")].forEach((n, i) => { if (scroll[i]) n.scrollTop = scroll[i]; });
+  if (keep && keep !== document.body) keep.focus({ preventScroll: true });
+}
+async function load(path) {
+  const res = await fetch(path, { cache: "no-store" });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.status);
+  return data;
+}
+async function refresh() {
+  try {
+    const [index, graph] = await Promise.all([load("jobs/index.json"), load("jobs/graph.json")]);
+    const changed = JSON.stringify([index.jobs, graph]) !== JSON.stringify([state.index && state.index.jobs, state.graph]);
+    state.index = index; state.graph = graph;
+    const hadError = state.error; state.error = null;
+    if (route().view === "config" || !state.config) state.config = await load("jobs/config.json");
+    // Re-drawing only on change keeps selections and scroll positions while you read.
+    if (changed || hadError || route().view === "config") render(); else document.getElementById("live").replaceChildren(el("span", { text: "live · " + new Date(index.generated_at).toLocaleTimeString() }));
+  } catch (e) {
+    state.error = String(e.message || e);
+    render();
+  }
+}
+const search = document.getElementById("search");
+if (/Mac|iPhone|iPad/.test(navigator.platform)) document.getElementById("hotkey").textContent = "⌘ K";
+search.addEventListener("input", () => {
+  state.query = search.value;
+  if (route().view === "pipeline") location.hash = "#/jobs"; else render();
+});
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); search.focus(); search.select(); }
+  else if (e.key === "Escape" && document.activeElement === search) { search.value = ""; state.query = ""; search.blur(); render(); }
+});
+window.addEventListener("hashchange", () => { if (route().view === "config") refresh(); render(); });
+drawWordmark();
+render();
+refresh();
+setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>

@@ -1,0 +1,3372 @@
+{
+ "generated_at": "2026-11-19T18:09:45Z",
+ "version": "0.1.0",
+ "project": {
+  "description": "Sample data: an invoicing app for small clinics. These jobs are made up.",
+  "base_branch": "main",
+  "merge_method": "squash"
+ },
+ "repo": "sample",
+ "tools": [
+  "claude",
+  "cursor"
+ ],
+ "concurrency": 3,
+ "labels": {
+  "queue": "factory",
+  "needs_info": "factory:needs-info",
+  "needs_human": "factory:needs-human"
+ },
+ "jobs": [
+  {
+   "id": "001-add-dark-mode-to",
+   "number": 1,
+   "issue": 31,
+   "title": "Add dark mode to the settings page",
+   "issue_url": "https://example.com/sample/issues/31",
+   "author": "ines",
+   "step": "done",
+   "entered_at": "2026-10-23T15:47:52Z",
+   "running_since": null,
+   "round": 2,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/001-add-dark-mode-to",
+   "pr": 101,
+   "pr_url": "https://example.com/sample/pull/101",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "low",
+    "surfaces": [],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-10-23T13:09:45Z",
+     "at": "2026-10-23T13:14:24Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-10-23T13:14:24Z",
+     "at": "2026-10-23T13:18:17Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-10-23T13:18:17Z",
+     "at": "2026-10-23T14:24:14Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-10-23T14:24:14Z",
+     "at": "2026-10-23T14:50:15Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "FAIL",
+     "entered_at": "2026-10-23T14:50:15Z",
+     "at": "2026-10-23T14:53:31Z",
+     "reason": null,
+     "to": "debug",
+     "skipped": []
+    },
+    {
+     "step": "debug",
+     "outcome": "FOUND",
+     "entered_at": "2026-10-23T14:53:31Z",
+     "at": "2026-10-23T14:57:38Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-10-23T14:57:38Z",
+     "at": "2026-10-23T15:07:43Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-10-23T15:07:43Z",
+     "at": "2026-10-23T15:10:21Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-10-23T15:10:21Z",
+     "at": "2026-10-23T15:18:31Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "CHANGES",
+     "entered_at": "2026-10-23T15:18:31Z",
+     "at": "2026-10-23T15:28:21Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-10-23T15:28:21Z",
+     "at": "2026-10-23T15:38:17Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-10-23T15:38:17Z",
+     "at": "2026-10-23T15:40:53Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-10-23T15:40:53Z",
+     "at": "2026-10-23T15:43:21Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-10-23T15:43:21Z",
+     "at": "2026-10-23T15:44:49Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-10-23T15:44:49Z",
+     "at": "2026-10-23T15:47:52Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 11.47,
+   "cost_by_step": {
+    "intake": 0.16,
+    "spec": 0.55,
+    "build": 7.45,
+    "debug": 0.46,
+    "review": 2.27,
+    "approve": 0.37,
+    "verify": 0.21
+   },
+   "created_at": "2026-10-23T13:09:45Z",
+   "finished_at": "2026-10-23T15:47:52Z",
+   "updated_at": "2026-10-23T15:47:52Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 77,
+     "first_line": "# Issue #31: Add dark mode to the settings page"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 191,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "002-export-invoices-as-csv",
+   "number": 2,
+   "issue": 32,
+   "title": "Export invoices as CSV",
+   "issue_url": "https://example.com/sample/issues/32",
+   "author": "mira",
+   "step": "done",
+   "entered_at": "2026-10-26T18:16:27Z",
+   "running_since": null,
+   "round": 2,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/002-export-invoices-as-csv",
+   "pr": 102,
+   "pr_url": "https://example.com/sample/pull/102",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "low",
+    "surfaces": [
+     "ui"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-10-26T15:09:45Z",
+     "at": "2026-10-26T15:12:40Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-10-26T15:12:40Z",
+     "at": "2026-10-26T15:16:39Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-10-26T15:16:39Z",
+     "at": "2026-10-26T16:33:13Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-10-26T16:33:13Z",
+     "at": "2026-10-26T17:01:23Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "FAIL",
+     "entered_at": "2026-10-26T17:01:23Z",
+     "at": "2026-10-26T17:05:02Z",
+     "reason": null,
+     "to": "debug",
+     "skipped": []
+    },
+    {
+     "step": "debug",
+     "outcome": "FOUND",
+     "entered_at": "2026-10-26T17:05:02Z",
+     "at": "2026-10-26T17:12:09Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-10-26T17:12:09Z",
+     "at": "2026-10-26T17:22:57Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-10-26T17:22:57Z",
+     "at": "2026-10-26T17:28:09Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-10-26T17:28:09Z",
+     "at": "2026-10-26T17:34:03Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "CHANGES",
+     "entered_at": "2026-10-26T17:34:03Z",
+     "at": "2026-10-26T17:43:03Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-10-26T17:43:03Z",
+     "at": "2026-10-26T18:03:00Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-10-26T18:03:00Z",
+     "at": "2026-10-26T18:09:19Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-10-26T18:09:19Z",
+     "at": "2026-10-26T18:11:28Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-10-26T18:11:28Z",
+     "at": "2026-10-26T18:14:11Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-10-26T18:14:11Z",
+     "at": "2026-10-26T18:16:27Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 9.96,
+   "cost_by_step": {
+    "intake": 0.19,
+    "spec": 0.24,
+    "build": 6.32,
+    "debug": 0.48,
+    "review": 2.21,
+    "approve": 0.32,
+    "verify": 0.2
+   },
+   "created_at": "2026-10-26T15:09:45Z",
+   "finished_at": "2026-10-26T18:16:27Z",
+   "updated_at": "2026-10-26T18:16:27Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 65,
+     "first_line": "# Issue #32: Export invoices as CSV"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 179,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "003-fix-rounding-of-vat",
+   "number": 3,
+   "issue": 33,
+   "title": "Fix rounding of VAT on credit notes",
+   "issue_url": "https://example.com/sample/issues/33",
+   "author": "kofi",
+   "step": "done",
+   "entered_at": "2026-10-29T17:22:17Z",
+   "running_since": null,
+   "round": 2,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/003-fix-rounding-of-vat",
+   "pr": 103,
+   "pr_url": "https://example.com/sample/pull/103",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "low",
+    "surfaces": [
+     "ui"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-10-29T13:09:45Z",
+     "at": "2026-10-29T13:13:38Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-10-29T13:13:38Z",
+     "at": "2026-10-29T13:20:43Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-10-29T13:20:43Z",
+     "at": "2026-10-29T15:37:31Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-10-29T15:37:31Z",
+     "at": "2026-10-29T16:11:30Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "FAIL",
+     "entered_at": "2026-10-29T16:11:30Z",
+     "at": "2026-10-29T16:16:33Z",
+     "reason": null,
+     "to": "debug",
+     "skipped": []
+    },
+    {
+     "step": "debug",
+     "outcome": "FOUND",
+     "entered_at": "2026-10-29T16:16:33Z",
+     "at": "2026-10-29T16:20:31Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-10-29T16:20:31Z",
+     "at": "2026-10-29T16:35:29Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-10-29T16:35:29Z",
+     "at": "2026-10-29T16:41:10Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-10-29T16:41:10Z",
+     "at": "2026-10-29T16:47:22Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "CHANGES",
+     "entered_at": "2026-10-29T16:47:22Z",
+     "at": "2026-10-29T16:57:31Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-10-29T16:57:31Z",
+     "at": "2026-10-29T17:13:26Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-10-29T17:13:26Z",
+     "at": "2026-10-29T17:16:19Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-10-29T17:16:19Z",
+     "at": "2026-10-29T17:18:17Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-10-29T17:18:17Z",
+     "at": "2026-10-29T17:19:45Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-10-29T17:19:45Z",
+     "at": "2026-10-29T17:22:17Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 9.68,
+   "cost_by_step": {
+    "intake": 0.2,
+    "spec": 0.4,
+    "build": 6.59,
+    "debug": 0.6,
+    "review": 1.27,
+    "approve": 0.44,
+    "verify": 0.18
+   },
+   "created_at": "2026-10-29T13:09:45Z",
+   "finished_at": "2026-10-29T17:22:17Z",
+   "updated_at": "2026-10-29T17:22:17Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 78,
+     "first_line": "# Issue #33: Fix rounding of VAT on credit notes"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 192,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "004-show-a-history-of",
+   "number": 4,
+   "issue": 34,
+   "title": "Show a history of reminders sent",
+   "issue_url": "https://example.com/sample/issues/34",
+   "author": "tomas",
+   "step": "done",
+   "entered_at": "2026-10-30T13:53:35Z",
+   "running_since": null,
+   "round": 1,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/004-show-a-history-of",
+   "pr": 104,
+   "pr_url": "https://example.com/sample/pull/104",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "medium",
+    "surfaces": [
+     "ui"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-10-30T11:09:45Z",
+     "at": "2026-10-30T11:12:46Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-10-30T11:12:46Z",
+     "at": "2026-10-30T11:17:11Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-10-30T11:17:11Z",
+     "at": "2026-10-30T13:06:27Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-10-30T13:06:27Z",
+     "at": "2026-10-30T13:35:12Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-10-30T13:35:12Z",
+     "at": "2026-10-30T13:40:19Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-10-30T13:40:19Z",
+     "at": "2026-10-30T13:47:11Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-10-30T13:47:11Z",
+     "at": "2026-10-30T13:49:14Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-10-30T13:49:14Z",
+     "at": "2026-10-30T13:51:45Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-10-30T13:51:45Z",
+     "at": "2026-10-30T13:53:35Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 4.81,
+   "cost_by_step": {
+    "intake": 0.14,
+    "spec": 0.39,
+    "build": 3.12,
+    "review": 0.66,
+    "approve": 0.23,
+    "verify": 0.27
+   },
+   "created_at": "2026-10-30T11:09:45Z",
+   "finished_at": "2026-10-30T13:53:35Z",
+   "updated_at": "2026-10-30T13:53:35Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 75,
+     "first_line": "# Issue #34: Show a history of reminders sent"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 189,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "005-let-admins-resend-an",
+   "number": 5,
+   "issue": 35,
+   "title": "Let admins resend an invoice",
+   "issue_url": "https://example.com/sample/issues/35",
+   "author": "kofi",
+   "step": "done",
+   "entered_at": "2026-11-03T20:25:08Z",
+   "running_since": null,
+   "round": 1,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/005-let-admins-resend-an",
+   "pr": 105,
+   "pr_url": "https://example.com/sample/pull/105",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "low",
+    "surfaces": [
+     "security"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-03T18:09:45Z",
+     "at": "2026-11-03T18:12:00Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-03T18:12:00Z",
+     "at": "2026-11-03T18:19:15Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-03T18:19:15Z",
+     "at": "2026-11-03T19:28:10Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-03T19:28:10Z",
+     "at": "2026-11-03T20:00:17Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-03T20:00:17Z",
+     "at": "2026-11-03T20:05:18Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-11-03T20:05:18Z",
+     "at": "2026-11-03T20:14:40Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-03T20:14:40Z",
+     "at": "2026-11-03T20:19:05Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-11-03T20:19:05Z",
+     "at": "2026-11-03T20:21:39Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-11-03T20:21:39Z",
+     "at": "2026-11-03T20:25:08Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 5.13,
+   "cost_by_step": {
+    "intake": 0.19,
+    "spec": 0.34,
+    "build": 3.05,
+    "review": 0.86,
+    "approve": 0.51,
+    "verify": 0.18
+   },
+   "created_at": "2026-11-03T18:09:45Z",
+   "finished_at": "2026-11-03T20:25:08Z",
+   "updated_at": "2026-11-03T20:25:08Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 71,
+     "first_line": "# Issue #35: Let admins resend an invoice"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 185,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "006-paginate-the-patients-list",
+   "number": 6,
+   "issue": 36,
+   "title": "Paginate the patients list",
+   "issue_url": "https://example.com/sample/issues/36",
+   "author": "ines",
+   "step": "done",
+   "entered_at": "2026-11-06T14:14:43Z",
+   "running_since": null,
+   "round": 1,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/006-paginate-the-patients-list",
+   "pr": 106,
+   "pr_url": "https://example.com/sample/pull/106",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "medium",
+    "surfaces": [
+     "security"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-06T12:09:45Z",
+     "at": "2026-11-06T12:11:45Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-06T12:11:45Z",
+     "at": "2026-11-06T12:16:36Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-06T12:16:36Z",
+     "at": "2026-11-06T13:45:54Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-06T13:45:54Z",
+     "at": "2026-11-06T14:00:15Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-06T14:00:15Z",
+     "at": "2026-11-06T14:03:16Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-11-06T14:03:16Z",
+     "at": "2026-11-06T14:08:10Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-06T14:08:10Z",
+     "at": "2026-11-06T14:10:03Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-11-06T14:10:03Z",
+     "at": "2026-11-06T14:12:29Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-11-06T14:12:29Z",
+     "at": "2026-11-06T14:14:43Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 2.84,
+   "cost_by_step": {
+    "intake": 0.1,
+    "spec": 0.28,
+    "build": 1.05,
+    "review": 0.78,
+    "approve": 0.48,
+    "verify": 0.15
+   },
+   "created_at": "2026-11-06T12:09:45Z",
+   "finished_at": "2026-11-06T14:14:43Z",
+   "updated_at": "2026-11-06T14:14:43Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 69,
+     "first_line": "# Issue #36: Paginate the patients list"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 183,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "007-add-a-health-check",
+   "number": 7,
+   "issue": 37,
+   "title": "Add a health check endpoint",
+   "issue_url": "https://example.com/sample/issues/37",
+   "author": "ines",
+   "step": "done",
+   "entered_at": "2026-11-07T20:21:06Z",
+   "running_since": null,
+   "round": 2,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/007-add-a-health-check",
+   "pr": 107,
+   "pr_url": "https://example.com/sample/pull/107",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "low",
+    "surfaces": [
+     "ui"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-07T17:09:45Z",
+     "at": "2026-11-07T17:11:54Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-07T17:11:54Z",
+     "at": "2026-11-07T17:21:22Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-07T17:21:22Z",
+     "at": "2026-11-07T18:48:00Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-07T18:48:00Z",
+     "at": "2026-11-07T19:04:22Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "FAIL",
+     "entered_at": "2026-11-07T19:04:22Z",
+     "at": "2026-11-07T19:09:44Z",
+     "reason": null,
+     "to": "debug",
+     "skipped": []
+    },
+    {
+     "step": "debug",
+     "outcome": "FOUND",
+     "entered_at": "2026-11-07T19:09:44Z",
+     "at": "2026-11-07T19:16:12Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-07T19:16:12Z",
+     "at": "2026-11-07T19:29:36Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-07T19:29:36Z",
+     "at": "2026-11-07T19:35:48Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-11-07T19:35:48Z",
+     "at": "2026-11-07T19:42:32Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "CHANGES",
+     "entered_at": "2026-11-07T19:42:32Z",
+     "at": "2026-11-07T19:54:39Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-07T19:54:39Z",
+     "at": "2026-11-07T20:08:07Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-07T20:08:07Z",
+     "at": "2026-11-07T20:10:53Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-07T20:10:53Z",
+     "at": "2026-11-07T20:15:13Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-11-07T20:15:13Z",
+     "at": "2026-11-07T20:18:14Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-11-07T20:18:14Z",
+     "at": "2026-11-07T20:21:06Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 10.39,
+   "cost_by_step": {
+    "intake": 0.18,
+    "spec": 0.41,
+    "build": 6.5,
+    "debug": 0.6,
+    "review": 2.2,
+    "approve": 0.36,
+    "verify": 0.14
+   },
+   "created_at": "2026-11-07T17:09:45Z",
+   "finished_at": "2026-11-07T20:21:06Z",
+   "updated_at": "2026-11-07T20:21:06Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 70,
+     "first_line": "# Issue #37: Add a health check endpoint"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 184,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "008-remember-the-last-used",
+   "number": 8,
+   "issue": 38,
+   "title": "Remember the last used filter",
+   "issue_url": "https://example.com/sample/issues/38",
+   "author": "mira",
+   "step": "done",
+   "entered_at": "2026-11-10T18:21:20Z",
+   "running_since": null,
+   "round": 2,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/008-remember-the-last-used",
+   "pr": 108,
+   "pr_url": "https://example.com/sample/pull/108",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "low",
+    "surfaces": [
+     "security"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-10T15:09:45Z",
+     "at": "2026-11-10T15:14:01Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-10T15:14:01Z",
+     "at": "2026-11-10T15:18:58Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-10T15:18:58Z",
+     "at": "2026-11-10T16:49:45Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-10T16:49:45Z",
+     "at": "2026-11-10T17:03:35Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "FAIL",
+     "entered_at": "2026-11-10T17:03:35Z",
+     "at": "2026-11-10T17:07:06Z",
+     "reason": null,
+     "to": "debug",
+     "skipped": []
+    },
+    {
+     "step": "debug",
+     "outcome": "FOUND",
+     "entered_at": "2026-11-10T17:07:06Z",
+     "at": "2026-11-10T17:12:16Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-10T17:12:16Z",
+     "at": "2026-11-10T17:30:56Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-10T17:30:56Z",
+     "at": "2026-11-10T17:37:05Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-11-10T17:37:05Z",
+     "at": "2026-11-10T17:48:12Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "CHANGES",
+     "entered_at": "2026-11-10T17:48:12Z",
+     "at": "2026-11-10T17:55:55Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-10T17:55:55Z",
+     "at": "2026-11-10T18:08:19Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-10T18:08:19Z",
+     "at": "2026-11-10T18:11:32Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-10T18:11:32Z",
+     "at": "2026-11-10T18:15:13Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-11-10T18:15:13Z",
+     "at": "2026-11-10T18:18:06Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-11-10T18:18:06Z",
+     "at": "2026-11-10T18:21:20Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 8.49,
+   "cost_by_step": {
+    "intake": 0.22,
+    "spec": 0.43,
+    "build": 4.56,
+    "debug": 0.6,
+    "review": 1.96,
+    "approve": 0.49,
+    "verify": 0.23
+   },
+   "created_at": "2026-11-10T15:09:45Z",
+   "finished_at": "2026-11-10T18:21:20Z",
+   "updated_at": "2026-11-10T18:21:20Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 72,
+     "first_line": "# Issue #38: Remember the last used filter"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 186,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "009-validate-iban-on-the",
+   "number": 9,
+   "issue": 39,
+   "title": "Validate IBAN on the payout form",
+   "issue_url": "https://example.com/sample/issues/39",
+   "author": "tomas",
+   "step": "done",
+   "entered_at": "2026-11-13T19:27:54Z",
+   "running_since": null,
+   "round": 2,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/009-validate-iban-on-the",
+   "pr": 109,
+   "pr_url": "https://example.com/sample/pull/109",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "high",
+    "surfaces": [
+     "ui"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-13T15:09:45Z",
+     "at": "2026-11-13T15:12:59Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-13T15:12:59Z",
+     "at": "2026-11-13T15:21:19Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-13T15:21:19Z",
+     "at": "2026-11-13T17:34:24Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-13T17:34:24Z",
+     "at": "2026-11-13T18:08:59Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "FAIL",
+     "entered_at": "2026-11-13T18:08:59Z",
+     "at": "2026-11-13T18:12:59Z",
+     "reason": null,
+     "to": "debug",
+     "skipped": []
+    },
+    {
+     "step": "debug",
+     "outcome": "FOUND",
+     "entered_at": "2026-11-13T18:12:59Z",
+     "at": "2026-11-13T18:22:16Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-13T18:22:16Z",
+     "at": "2026-11-13T18:31:30Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-13T18:31:30Z",
+     "at": "2026-11-13T18:34:31Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-11-13T18:34:31Z",
+     "at": "2026-11-13T18:45:03Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "CHANGES",
+     "entered_at": "2026-11-13T18:45:03Z",
+     "at": "2026-11-13T18:51:01Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-13T18:51:01Z",
+     "at": "2026-11-13T19:14:43Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-13T19:14:43Z",
+     "at": "2026-11-13T19:18:31Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-13T19:18:31Z",
+     "at": "2026-11-13T19:21:58Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-11-13T19:21:58Z",
+     "at": "2026-11-13T19:23:12Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-11-13T19:23:12Z",
+     "at": "2026-11-13T19:27:54Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 9.53,
+   "cost_by_step": {
+    "intake": 0.12,
+    "spec": 0.35,
+    "build": 5.63,
+    "debug": 0.61,
+    "review": 2.37,
+    "approve": 0.22,
+    "verify": 0.23
+   },
+   "created_at": "2026-11-13T15:09:45Z",
+   "finished_at": "2026-11-13T19:27:54Z",
+   "updated_at": "2026-11-13T19:27:54Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 75,
+     "first_line": "# Issue #39: Validate IBAN on the payout form"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 189,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "010-speed-up-the-monthly",
+   "number": 10,
+   "issue": 40,
+   "title": "Speed up the monthly report",
+   "issue_url": "https://example.com/sample/issues/40",
+   "author": "tomas",
+   "step": "done",
+   "entered_at": "2026-11-14T17:33:43Z",
+   "running_since": null,
+   "round": 1,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/010-speed-up-the-monthly",
+   "pr": 110,
+   "pr_url": "https://example.com/sample/pull/110",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "low",
+    "surfaces": [],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-14T15:09:45Z",
+     "at": "2026-11-14T15:11:38Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-14T15:11:38Z",
+     "at": "2026-11-14T15:18:15Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-14T15:18:15Z",
+     "at": "2026-11-14T16:46:13Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-14T16:46:13Z",
+     "at": "2026-11-14T17:11:23Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-14T17:11:23Z",
+     "at": "2026-11-14T17:14:02Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-11-14T17:14:02Z",
+     "at": "2026-11-14T17:23:25Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-14T17:23:25Z",
+     "at": "2026-11-14T17:27:12Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-11-14T17:27:12Z",
+     "at": "2026-11-14T17:29:26Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-11-14T17:29:26Z",
+     "at": "2026-11-14T17:33:43Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 5.46,
+   "cost_by_step": {
+    "intake": 0.13,
+    "spec": 0.53,
+    "build": 2.8,
+    "review": 1.26,
+    "approve": 0.46,
+    "verify": 0.28
+   },
+   "created_at": "2026-11-14T15:09:45Z",
+   "finished_at": "2026-11-14T17:33:43Z",
+   "updated_at": "2026-11-14T17:33:43Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 70,
+     "first_line": "# Issue #40: Speed up the monthly report"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 184,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "011-add-keyboard-shortcuts-to",
+   "number": 11,
+   "issue": 41,
+   "title": "Add keyboard shortcuts to the editor",
+   "issue_url": "https://example.com/sample/issues/41",
+   "author": "ines",
+   "step": "done",
+   "entered_at": "2026-11-16T14:08:55Z",
+   "running_since": null,
+   "round": 2,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/011-add-keyboard-shortcuts-to",
+   "pr": 111,
+   "pr_url": "https://example.com/sample/pull/111",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "high",
+    "surfaces": [
+     "security"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-16T11:09:45Z",
+     "at": "2026-11-16T11:13:53Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-16T11:13:53Z",
+     "at": "2026-11-16T11:22:08Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-16T11:22:08Z",
+     "at": "2026-11-16T12:32:35Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-16T12:32:35Z",
+     "at": "2026-11-16T12:59:25Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "FAIL",
+     "entered_at": "2026-11-16T12:59:25Z",
+     "at": "2026-11-16T13:02:03Z",
+     "reason": null,
+     "to": "debug",
+     "skipped": []
+    },
+    {
+     "step": "debug",
+     "outcome": "FOUND",
+     "entered_at": "2026-11-16T13:02:03Z",
+     "at": "2026-11-16T13:09:45Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-16T13:09:45Z",
+     "at": "2026-11-16T13:22:44Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-16T13:22:44Z",
+     "at": "2026-11-16T13:28:40Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-11-16T13:28:40Z",
+     "at": "2026-11-16T13:33:16Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "CHANGES",
+     "entered_at": "2026-11-16T13:33:16Z",
+     "at": "2026-11-16T13:38:25Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-16T13:38:25Z",
+     "at": "2026-11-16T13:54:11Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-16T13:54:11Z",
+     "at": "2026-11-16T14:00:10Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-16T14:00:10Z",
+     "at": "2026-11-16T14:02:09Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-11-16T14:02:09Z",
+     "at": "2026-11-16T14:05:18Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-11-16T14:05:18Z",
+     "at": "2026-11-16T14:08:55Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 7.67,
+   "cost_by_step": {
+    "intake": 0.2,
+    "spec": 0.27,
+    "build": 5.09,
+    "debug": 0.52,
+    "review": 1.16,
+    "approve": 0.29,
+    "verify": 0.14
+   },
+   "created_at": "2026-11-16T11:09:45Z",
+   "finished_at": "2026-11-16T14:08:55Z",
+   "updated_at": "2026-11-16T14:08:55Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 79,
+     "first_line": "# Issue #41: Add keyboard shortcuts to the editor"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 193,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "012-warn-before-deleting-a",
+   "number": 12,
+   "issue": 42,
+   "title": "Warn before deleting a draft",
+   "issue_url": "https://example.com/sample/issues/42",
+   "author": "mira",
+   "step": "done",
+   "entered_at": "2026-11-18T12:28:09Z",
+   "running_since": null,
+   "round": 1,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/012-warn-before-deleting-a",
+   "pr": 112,
+   "pr_url": "https://example.com/sample/pull/112",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "low",
+    "surfaces": [
+     "ui"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-18T10:09:45Z",
+     "at": "2026-11-18T10:14:23Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-18T10:14:23Z",
+     "at": "2026-11-18T10:23:14Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-18T10:23:14Z",
+     "at": "2026-11-18T11:44:54Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-18T11:44:54Z",
+     "at": "2026-11-18T12:10:25Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-18T12:10:25Z",
+     "at": "2026-11-18T12:16:10Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-11-18T12:16:10Z",
+     "at": "2026-11-18T12:21:20Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-18T12:21:20Z",
+     "at": "2026-11-18T12:24:27Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-11-18T12:24:27Z",
+     "at": "2026-11-18T12:26:08Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-11-18T12:26:08Z",
+     "at": "2026-11-18T12:28:09Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 4.85,
+   "cost_by_step": {
+    "intake": 0.22,
+    "spec": 0.61,
+    "build": 3.03,
+    "review": 0.56,
+    "approve": 0.2,
+    "verify": 0.23
+   },
+   "created_at": "2026-11-18T10:09:45Z",
+   "finished_at": "2026-11-18T12:28:09Z",
+   "updated_at": "2026-11-18T12:28:09Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 71,
+     "first_line": "# Issue #42: Warn before deleting a draft"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 185,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "013-support-a-second-logo",
+   "number": 13,
+   "issue": 43,
+   "title": "Support a second logo on invoices",
+   "issue_url": "https://example.com/sample/issues/43",
+   "author": "ines",
+   "step": "rejected",
+   "entered_at": "2026-11-11T18:17:52Z",
+   "running_since": null,
+   "round": 0,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/013-support-a-second-logo",
+   "pr": null,
+   "pr_url": null,
+   "merge_sha": null,
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "low",
+    "surfaces": [
+     "ui"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": "Duplicates the export added in #31.",
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "spec",
+     "outcome": "REJECT",
+     "entered_at": "2026-11-11T16:12:19Z",
+     "at": "2026-11-11T16:18:43Z",
+     "reason": "Duplicates the export added in #31.",
+     "to": "rejected",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 3.55,
+   "cost_by_step": {
+    "intake": 0.11,
+    "spec": 0.52,
+    "build": 1.39,
+    "review": 1.09,
+    "approve": 0.32,
+    "verify": 0.12
+   },
+   "created_at": "2026-11-11T16:09:45Z",
+   "finished_at": "2026-11-11T18:17:52Z",
+   "updated_at": "2026-11-11T18:17:52Z",
+   "files": [
+    {
+     "path": "issue.md",
+     "size": 76,
+     "first_line": "# Issue #43: Support a second logo on invoices"
+    },
+    {
+     "path": "spec.md",
+     "size": 190,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "014-translate-the-reminder-emails",
+   "number": 14,
+   "issue": 44,
+   "title": "Translate the reminder emails",
+   "issue_url": "https://example.com/sample/issues/44",
+   "author": "kofi",
+   "step": "failed",
+   "entered_at": "2026-11-17T12:37:32Z",
+   "running_since": null,
+   "round": 1,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/014-translate-the-reminder-emails",
+   "pr": 114,
+   "pr_url": "https://example.com/sample/pull/114",
+   "merge_sha": "9f2c1ab",
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "medium",
+    "surfaces": [
+     "security"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": "The commands failed with exit 1.",
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-17T10:09:45Z",
+     "at": "2026-11-17T10:12:56Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-17T10:12:56Z",
+     "at": "2026-11-17T10:18:50Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-17T10:18:50Z",
+     "at": "2026-11-17T11:43:54Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-17T11:43:54Z",
+     "at": "2026-11-17T12:18:15Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-17T12:18:15Z",
+     "at": "2026-11-17T12:24:19Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-11-17T12:24:19Z",
+     "at": "2026-11-17T12:30:07Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-17T12:30:07Z",
+     "at": "2026-11-17T12:32:10Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-11-17T12:32:10Z",
+     "at": "2026-11-17T12:35:11Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "FAIL",
+     "entered_at": "2026-11-17T12:35:11Z",
+     "at": "2026-11-17T12:37:32Z",
+     "reason": "The commands failed with exit 1.",
+     "to": "failed",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 3.7,
+   "cost_by_step": {
+    "intake": 0.22,
+    "spec": 0.43,
+    "build": 1.29,
+    "review": 1.24,
+    "approve": 0.27,
+    "verify": 0.25
+   },
+   "created_at": "2026-11-17T10:09:45Z",
+   "finished_at": "2026-11-17T12:37:32Z",
+   "updated_at": "2026-11-17T12:37:32Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 72,
+     "first_line": "# Issue #44: Translate the reminder emails"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 186,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "015-archive-clinics-that-closed",
+   "number": 15,
+   "issue": 45,
+   "title": "Archive clinics that closed",
+   "issue_url": "https://example.com/sample/issues/45",
+   "author": "tomas",
+   "step": "build",
+   "entered_at": "2026-11-19T17:43:15Z",
+   "running_since": "2026-11-19T17:43:15Z",
+   "round": 1,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/015-archive-clinics-that-closed",
+   "pr": null,
+   "pr_url": null,
+   "merge_sha": null,
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "high",
+    "surfaces": [],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-19T16:09:45Z",
+     "at": "2026-11-19T16:13:10Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-19T16:13:10Z",
+     "at": "2026-11-19T16:19:44Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-19T16:19:44Z",
+     "at": "2026-11-19T17:43:15Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 0.53,
+   "cost_by_step": {
+    "intake": 0.18,
+    "spec": 0.35
+   },
+   "created_at": "2026-11-19T16:09:45Z",
+   "finished_at": null,
+   "updated_at": "2026-11-19T17:43:15Z",
+   "files": [
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 70,
+     "first_line": "# Issue #45: Archive clinics that closed"
+    },
+    {
+     "path": "spec.md",
+     "size": 184,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "016-show-totals-per-practitioner",
+   "number": 16,
+   "issue": 46,
+   "title": "Show totals per practitioner",
+   "issue_url": "https://example.com/sample/issues/46",
+   "author": "tomas",
+   "step": "review",
+   "entered_at": "2026-11-19T17:26:52Z",
+   "running_since": "2026-11-19T17:26:52Z",
+   "round": 2,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/016-show-totals-per-practitioner",
+   "pr": 116,
+   "pr_url": "https://example.com/sample/pull/116",
+   "merge_sha": null,
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "low",
+    "surfaces": [
+     "ui"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": null,
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-19T14:09:45Z",
+     "at": "2026-11-19T14:14:22Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-19T14:14:22Z",
+     "at": "2026-11-19T14:22:47Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-19T14:22:47Z",
+     "at": "2026-11-19T16:41:07Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-19T16:41:07Z",
+     "at": "2026-11-19T16:55:47Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "FAIL",
+     "entered_at": "2026-11-19T16:55:47Z",
+     "at": "2026-11-19T17:00:00Z",
+     "reason": null,
+     "to": "debug",
+     "skipped": []
+    },
+    {
+     "step": "debug",
+     "outcome": "FOUND",
+     "entered_at": "2026-11-19T17:00:00Z",
+     "at": "2026-11-19T17:05:38Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-19T17:05:38Z",
+     "at": "2026-11-19T17:23:57Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-19T17:23:57Z",
+     "at": "2026-11-19T17:26:52Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 5.45,
+   "cost_by_step": {
+    "intake": 0.2,
+    "spec": 0.25,
+    "build": 4.47,
+    "debug": 0.53
+   },
+   "created_at": "2026-11-19T14:09:45Z",
+   "finished_at": null,
+   "updated_at": "2026-11-19T17:26:52Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 71,
+     "first_line": "# Issue #46: Show totals per practitioner"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 185,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "017-add-dark-mode-to",
+   "number": 17,
+   "issue": 47,
+   "title": "Add dark mode to the settings page",
+   "issue_url": "https://example.com/sample/issues/47",
+   "author": "tomas",
+   "step": "spec-approval",
+   "entered_at": "2026-11-19T14:17:11Z",
+   "running_since": null,
+   "round": 0,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/017-add-dark-mode-to",
+   "pr": null,
+   "pr_url": null,
+   "merge_sha": null,
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "medium",
+    "surfaces": [
+     "security"
+    ],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": {
+    "step": "spec-approval",
+    "who": "maintainer",
+    "label": "factory:needs-human",
+    "since": "2026-11-19T14:17:11Z",
+    "asked_on": "issue"
+   },
+   "consumed": [],
+   "reason": null,
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-19T14:09:45Z",
+     "at": "2026-11-19T14:11:42Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-19T14:11:42Z",
+     "at": "2026-11-19T14:17:11Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 0.47,
+   "cost_by_step": {
+    "intake": 0.13,
+    "spec": 0.34
+   },
+   "created_at": "2026-11-19T14:09:45Z",
+   "finished_at": null,
+   "updated_at": "2026-11-19T14:17:11Z",
+   "files": [
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 77,
+     "first_line": "# Issue #47: Add dark mode to the settings page"
+    },
+    {
+     "path": "spec.md",
+     "size": 191,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  },
+  {
+   "id": "018-export-invoices-as-csv",
+   "number": 18,
+   "issue": 48,
+   "title": "Export invoices as CSV",
+   "issue_url": "https://example.com/sample/issues/48",
+   "author": "mira",
+   "step": "escalated",
+   "entered_at": "2026-11-18T12:51:35Z",
+   "running_since": null,
+   "round": 2,
+   "attempt": 1,
+   "gate_failed": false,
+   "taken": {},
+   "handoff": [],
+   "branch": "factory/018-export-invoices-as-csv",
+   "pr": 118,
+   "pr_url": "https://example.com/sample/pull/118",
+   "merge_sha": null,
+   "intake": {
+    "decision": "ACCEPT",
+    "risk": "low",
+    "surfaces": [],
+    "rescoped": false
+   },
+   "agents": {
+    "reviewers": {
+     "code": "factory-reviewer-code"
+    }
+   },
+   "gate": null,
+   "reviews": {},
+   "waiting": {
+    "step": "escalated",
+    "who": "maintainer",
+    "label": "factory:needs-human",
+    "since": "2026-11-18T12:51:35Z",
+    "asked_on": "pr"
+   },
+   "consumed": [],
+   "reason": "[steps.gate].on.FAIL max = 3 reached",
+   "escalated_from": null,
+   "last_file": null,
+   "verify": null,
+   "history": [
+    {
+     "step": "intake",
+     "outcome": "ACCEPT",
+     "entered_at": "2026-11-18T10:09:45Z",
+     "at": "2026-11-18T10:13:34Z",
+     "reason": null,
+     "to": "spec",
+     "skipped": []
+    },
+    {
+     "step": "spec",
+     "outcome": "DONE",
+     "entered_at": "2026-11-18T10:13:34Z",
+     "at": "2026-11-18T10:22:00Z",
+     "reason": null,
+     "to": "spec-approval",
+     "skipped": []
+    },
+    {
+     "step": "spec-approval",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-18T10:22:00Z",
+     "at": "2026-11-18T11:22:30Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-18T11:22:30Z",
+     "at": "2026-11-18T11:36:07Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "FAIL",
+     "entered_at": "2026-11-18T11:36:07Z",
+     "at": "2026-11-18T11:42:25Z",
+     "reason": null,
+     "to": "debug",
+     "skipped": []
+    },
+    {
+     "step": "debug",
+     "outcome": "FOUND",
+     "entered_at": "2026-11-18T11:42:25Z",
+     "at": "2026-11-18T11:49:06Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-18T11:49:06Z",
+     "at": "2026-11-18T12:01:40Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-18T12:01:40Z",
+     "at": "2026-11-18T12:06:40Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "PASS",
+     "entered_at": "2026-11-18T12:06:40Z",
+     "at": "2026-11-18T12:15:28Z",
+     "reason": null,
+     "to": "review",
+     "skipped": []
+    },
+    {
+     "step": "review",
+     "outcome": "CHANGES",
+     "entered_at": "2026-11-18T12:15:28Z",
+     "at": "2026-11-18T12:27:23Z",
+     "reason": null,
+     "to": "build",
+     "skipped": []
+    },
+    {
+     "step": "build",
+     "outcome": "READY",
+     "entered_at": "2026-11-18T12:27:23Z",
+     "at": "2026-11-18T12:41:00Z",
+     "reason": null,
+     "to": "gate",
+     "skipped": []
+    },
+    {
+     "step": "gate",
+     "outcome": "PASS",
+     "entered_at": "2026-11-18T12:41:00Z",
+     "at": "2026-11-18T12:44:19Z",
+     "reason": null,
+     "to": "approve",
+     "skipped": []
+    },
+    {
+     "step": "approve",
+     "outcome": "APPROVE",
+     "entered_at": "2026-11-18T12:44:19Z",
+     "at": "2026-11-18T12:46:43Z",
+     "reason": null,
+     "to": "merge",
+     "skipped": []
+    },
+    {
+     "step": "merge",
+     "outcome": "MERGED",
+     "entered_at": "2026-11-18T12:46:43Z",
+     "at": "2026-11-18T12:49:22Z",
+     "reason": null,
+     "to": "verify",
+     "skipped": []
+    },
+    {
+     "step": "verify",
+     "outcome": "PASS",
+     "entered_at": "2026-11-18T12:49:22Z",
+     "at": "2026-11-18T12:51:35Z",
+     "reason": null,
+     "to": "done",
+     "skipped": []
+    }
+   ],
+   "cost_usd": 10.22,
+   "cost_by_step": {
+    "intake": 0.14,
+    "spec": 0.63,
+    "build": 6.04,
+    "debug": 0.37,
+    "review": 2.26,
+    "approve": 0.48,
+    "verify": 0.3
+   },
+   "created_at": "2026-11-18T10:09:45Z",
+   "finished_at": null,
+   "updated_at": "2026-11-18T12:51:35Z",
+   "files": [
+    {
+     "path": "build.md",
+     "size": 51,
+     "first_line": "STATUS: READY"
+    },
+    {
+     "path": "decision.md",
+     "size": 50,
+     "first_line": "DECISION: APPROVE"
+    },
+    {
+     "path": "intake.md",
+     "size": 136,
+     "first_line": "DECISION: ACCEPT"
+    },
+    {
+     "path": "issue.md",
+     "size": 65,
+     "first_line": "# Issue #48: Export invoices as CSV"
+    },
+    {
+     "path": "round-1/checks.log",
+     "size": 24,
+     "first_line": null
+    },
+    {
+     "path": "round-1/checks.md",
+     "size": 38,
+     "first_line": "GATE: PASS"
+    },
+    {
+     "path": "round-1/review-code.md",
+     "size": 33,
+     "first_line": "VERDICT: PASS"
+    },
+    {
+     "path": "spec.md",
+     "size": 179,
+     "first_line": "STATUS: DONE"
+    }
+   ]
+  }
+ ]
+}

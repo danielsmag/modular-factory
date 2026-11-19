@@ -1,0 +1,244 @@
+{
+ "start": "intake",
+ "escalate_to": "escalated",
+ "end_states": [
+  "done",
+  "failed",
+  "rejected"
+ ],
+ "steps": [
+  {
+   "name": "intake",
+   "type": "agent",
+   "enabled": true,
+   "skip": null,
+   "who": null,
+   "edges": [
+    {
+     "outcome": "ACCEPT",
+     "to": "spec",
+     "max": null
+    },
+    {
+     "outcome": "NEEDS-INFO",
+     "to": "ask-author",
+     "max": 2
+    },
+    {
+     "outcome": "REJECT",
+     "to": "rejected",
+     "max": null
+    }
+   ]
+  },
+  {
+   "name": "ask-author",
+   "type": "human",
+   "enabled": true,
+   "skip": null,
+   "who": "author",
+   "edges": [
+    {
+     "outcome": "ANSWER",
+     "to": "intake",
+     "max": null
+    },
+    {
+     "outcome": "REJECT",
+     "to": "rejected",
+     "max": null
+    }
+   ]
+  },
+  {
+   "name": "spec",
+   "type": "agent",
+   "enabled": true,
+   "skip": null,
+   "who": null,
+   "edges": [
+    {
+     "outcome": "DONE",
+     "to": "spec-approval",
+     "max": null
+    }
+   ]
+  },
+  {
+   "name": "spec-approval",
+   "type": "human",
+   "enabled": true,
+   "skip": "APPROVE",
+   "who": "maintainer",
+   "edges": [
+    {
+     "outcome": "APPROVE",
+     "to": "build",
+     "max": null
+    },
+    {
+     "outcome": "CHANGES",
+     "to": "spec",
+     "max": 3
+    },
+    {
+     "outcome": "REJECT",
+     "to": "rejected",
+     "max": null
+    }
+   ]
+  },
+  {
+   "name": "build",
+   "type": "agent",
+   "enabled": true,
+   "skip": null,
+   "who": null,
+   "edges": [
+    {
+     "outcome": "READY",
+     "to": "gate",
+     "max": null
+    },
+    {
+     "outcome": "BLOCKED",
+     "to": "escalated",
+     "max": null
+    }
+   ]
+  },
+  {
+   "name": "gate",
+   "type": "checks",
+   "enabled": true,
+   "skip": null,
+   "who": null,
+   "edges": [
+    {
+     "outcome": "PASS",
+     "to": "review",
+     "max": null
+    },
+    {
+     "outcome": "FAIL",
+     "to": "debug",
+     "max": 3
+    }
+   ]
+  },
+  {
+   "name": "debug",
+   "type": "agent",
+   "enabled": true,
+   "skip": "FOUND",
+   "who": null,
+   "edges": [
+    {
+     "outcome": "FOUND",
+     "to": "build",
+     "max": null
+    },
+    {
+     "outcome": "UNKNOWN",
+     "to": "build",
+     "max": null
+    }
+   ]
+  },
+  {
+   "name": "review",
+   "type": "review",
+   "enabled": true,
+   "skip": null,
+   "who": null,
+   "edges": [
+    {
+     "outcome": "PASS",
+     "to": "approve",
+     "max": null
+    },
+    {
+     "outcome": "CHANGES",
+     "to": "build",
+     "max": 2
+    }
+   ]
+  },
+  {
+   "name": "approve",
+   "type": "agent",
+   "enabled": true,
+   "skip": null,
+   "who": null,
+   "edges": [
+    {
+     "outcome": "APPROVE",
+     "to": "merge",
+     "max": null
+    },
+    {
+     "outcome": "ESCALATE",
+     "to": "escalated",
+     "max": null
+    }
+   ]
+  },
+  {
+   "name": "merge",
+   "type": "merge",
+   "enabled": true,
+   "skip": null,
+   "who": null,
+   "edges": [
+    {
+     "outcome": "MERGED",
+     "to": "verify",
+     "max": null
+    },
+    {
+     "outcome": "FAILED",
+     "to": "escalated",
+     "max": null
+    }
+   ]
+  },
+  {
+   "name": "verify",
+   "type": "verify",
+   "enabled": true,
+   "skip": "PASS",
+   "who": null,
+   "edges": [
+    {
+     "outcome": "PASS",
+     "to": "done",
+     "max": null
+    },
+    {
+     "outcome": "FAIL",
+     "to": "failed",
+     "max": null
+    }
+   ]
+  },
+  {
+   "name": "escalated",
+   "type": "human",
+   "enabled": true,
+   "skip": null,
+   "who": "maintainer",
+   "edges": [
+    {
+     "outcome": "FEEDBACK",
+     "to": "build",
+     "max": null
+    },
+    {
+     "outcome": "REJECT",
+     "to": "rejected",
+     "max": null
+    }
+   ]
+  }
+ ]
+}

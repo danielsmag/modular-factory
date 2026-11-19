@@ -1,0 +1,676 @@
+[
+ {
+  "key": "schema",
+  "value": 1,
+  "source": "factory.toml"
+ },
+ {
+  "key": "project.description",
+  "value": "Sample data: an invoicing app for small clinics. These jobs are made up.",
+  "source": "factory.toml"
+ },
+ {
+  "key": "project.base_branch",
+  "value": "main",
+  "source": "default"
+ },
+ {
+  "key": "project.merge_method",
+  "value": "squash",
+  "source": "default"
+ },
+ {
+  "key": "tools.enabled",
+  "value": [
+   "claude",
+   "cursor"
+  ],
+  "source": "factory.toml"
+ },
+ {
+  "key": "tools.claude.stop_hook",
+  "value": false,
+  "source": "default"
+ },
+ {
+  "key": "tools.claude.cost",
+  "value": true,
+  "source": "default"
+ },
+ {
+  "key": "tools.codex.intake_shell",
+  "value": false,
+  "source": "default"
+ },
+ {
+  "key": "run.concurrency",
+  "value": 3,
+  "source": "default"
+ },
+ {
+  "key": "run.start",
+  "value": "intake",
+  "source": "default"
+ },
+ {
+  "key": "run.escalate_to",
+  "value": "escalated",
+  "source": "default"
+ },
+ {
+  "key": "checks.commands",
+  "value": [
+   "npm ci --prefer-offline",
+   "npm run lint",
+   "npm test -- --run"
+  ],
+  "source": "factory.toml"
+ },
+ {
+  "key": "checks.timeout_minutes",
+  "value": 30,
+  "source": "default"
+ },
+ {
+  "key": "labels.queue",
+  "value": "factory",
+  "source": "default"
+ },
+ {
+  "key": "labels.needs_info",
+  "value": "factory:needs-info",
+  "source": "default"
+ },
+ {
+  "key": "labels.needs_human",
+  "value": "factory:needs-human",
+  "source": "default"
+ },
+ {
+  "key": "paths.worktrees",
+  "value": ".worktrees",
+  "source": "default"
+ },
+ {
+  "key": "paths.protected",
+  "value": [],
+  "source": "default"
+ },
+ {
+  "key": "ports.base",
+  "value": 5100,
+  "source": "default"
+ },
+ {
+  "key": "ports.step",
+  "value": 10,
+  "source": "default"
+ },
+ {
+  "key": "skills.all",
+  "value": [],
+  "source": "default"
+ },
+ {
+  "key": "steps.intake.type",
+  "value": "agent",
+  "source": "default"
+ },
+ {
+  "key": "steps.intake.on.ACCEPT.to",
+  "value": "spec",
+  "source": "default"
+ },
+ {
+  "key": "steps.intake.on.NEEDS-INFO.to",
+  "value": "ask-author",
+  "source": "default"
+ },
+ {
+  "key": "steps.intake.on.NEEDS-INFO.max",
+  "value": 2,
+  "source": "default"
+ },
+ {
+  "key": "steps.intake.on.REJECT.to",
+  "value": "rejected",
+  "source": "default"
+ },
+ {
+  "key": "steps.ask-author.type",
+  "value": "human",
+  "source": "default"
+ },
+ {
+  "key": "steps.ask-author.who",
+  "value": "author",
+  "source": "default"
+ },
+ {
+  "key": "steps.ask-author.ask",
+  "value": "intake has questions for the author",
+  "source": "default"
+ },
+ {
+  "key": "steps.ask-author.shows",
+  "value": "intake.md",
+  "source": "default"
+ },
+ {
+  "key": "steps.ask-author.on.ANSWER.to",
+  "value": "intake",
+  "source": "default"
+ },
+ {
+  "key": "steps.ask-author.on.REJECT.to",
+  "value": "rejected",
+  "source": "default"
+ },
+ {
+  "key": "steps.spec.type",
+  "value": "agent",
+  "source": "default"
+ },
+ {
+  "key": "steps.spec.on.DONE.to",
+  "value": "spec-approval",
+  "source": "default"
+ },
+ {
+  "key": "steps.spec-approval.type",
+  "value": "human",
+  "source": "default"
+ },
+ {
+  "key": "steps.spec-approval.enabled",
+  "value": true,
+  "source": "factory.toml"
+ },
+ {
+  "key": "steps.spec-approval.skip",
+  "value": "APPROVE",
+  "source": "default"
+ },
+ {
+  "key": "steps.spec-approval.who",
+  "value": "maintainer",
+  "source": "default"
+ },
+ {
+  "key": "steps.spec-approval.ask",
+  "value": "approve the spec before it is built",
+  "source": "default"
+ },
+ {
+  "key": "steps.spec-approval.shows",
+  "value": "spec.md",
+  "source": "default"
+ },
+ {
+  "key": "steps.spec-approval.on.APPROVE.to",
+  "value": "build",
+  "source": "default"
+ },
+ {
+  "key": "steps.spec-approval.on.CHANGES.to",
+  "value": "spec",
+  "source": "default"
+ },
+ {
+  "key": "steps.spec-approval.on.CHANGES.max",
+  "value": 3,
+  "source": "default"
+ },
+ {
+  "key": "steps.spec-approval.on.REJECT.to",
+  "value": "rejected",
+  "source": "default"
+ },
+ {
+  "key": "steps.build.type",
+  "value": "agent",
+  "source": "default"
+ },
+ {
+  "key": "steps.build.port",
+  "value": true,
+  "source": "default"
+ },
+ {
+  "key": "steps.build.on.READY.to",
+  "value": "gate",
+  "source": "default"
+ },
+ {
+  "key": "steps.build.on.BLOCKED.to",
+  "value": "escalated",
+  "source": "default"
+ },
+ {
+  "key": "steps.gate.type",
+  "value": "checks",
+  "source": "default"
+ },
+ {
+  "key": "steps.gate.on.PASS.to",
+  "value": "review",
+  "source": "default"
+ },
+ {
+  "key": "steps.gate.on.FAIL.to",
+  "value": "debug",
+  "source": "default"
+ },
+ {
+  "key": "steps.gate.on.FAIL.max",
+  "value": 3,
+  "source": "factory.toml"
+ },
+ {
+  "key": "steps.debug.type",
+  "value": "agent",
+  "source": "default"
+ },
+ {
+  "key": "steps.debug.enabled",
+  "value": true,
+  "source": "factory.toml"
+ },
+ {
+  "key": "steps.debug.skip",
+  "value": "FOUND",
+  "source": "default"
+ },
+ {
+  "key": "steps.debug.on.FOUND.to",
+  "value": "build",
+  "source": "default"
+ },
+ {
+  "key": "steps.debug.on.UNKNOWN.to",
+  "value": "build",
+  "source": "default"
+ },
+ {
+  "key": "steps.review.type",
+  "value": "review",
+  "source": "default"
+ },
+ {
+  "key": "steps.review.on.PASS.to",
+  "value": "approve",
+  "source": "default"
+ },
+ {
+  "key": "steps.review.on.CHANGES.to",
+  "value": "build",
+  "source": "default"
+ },
+ {
+  "key": "steps.review.on.CHANGES.max",
+  "value": 2,
+  "source": "default"
+ },
+ {
+  "key": "steps.approve.type",
+  "value": "agent",
+  "source": "default"
+ },
+ {
+  "key": "steps.approve.on.APPROVE.to",
+  "value": "merge",
+  "source": "default"
+ },
+ {
+  "key": "steps.approve.on.ESCALATE.to",
+  "value": "escalated",
+  "source": "default"
+ },
+ {
+  "key": "steps.merge.type",
+  "value": "merge",
+  "source": "default"
+ },
+ {
+  "key": "steps.merge.on.MERGED.to",
+  "value": "verify",
+  "source": "default"
+ },
+ {
+  "key": "steps.merge.on.FAILED.to",
+  "value": "escalated",
+  "source": "default"
+ },
+ {
+  "key": "steps.verify.type",
+  "value": "verify",
+  "source": "default"
+ },
+ {
+  "key": "steps.verify.enabled",
+  "value": true,
+  "source": "factory.toml"
+ },
+ {
+  "key": "steps.verify.skip",
+  "value": "PASS",
+  "source": "default"
+ },
+ {
+  "key": "steps.verify.after",
+  "value": "merge",
+  "source": "default"
+ },
+ {
+  "key": "steps.verify.commands",
+  "value": [
+   "npm run test:smoke"
+  ],
+  "source": "factory.toml"
+ },
+ {
+  "key": "steps.verify.agent",
+  "value": false,
+  "source": "default"
+ },
+ {
+  "key": "steps.verify.retries",
+  "value": 1,
+  "source": "default"
+ },
+ {
+  "key": "steps.verify.on_failure",
+  "value": "comment",
+  "source": "default"
+ },
+ {
+  "key": "steps.verify.wait",
+  "value": "",
+  "source": "default"
+ },
+ {
+  "key": "steps.verify.timeout_minutes",
+  "value": 20,
+  "source": "default"
+ },
+ {
+  "key": "steps.verify.url",
+  "value": "",
+  "source": "default"
+ },
+ {
+  "key": "steps.verify.on.PASS.to",
+  "value": "done",
+  "source": "default"
+ },
+ {
+  "key": "steps.verify.on.FAIL.to",
+  "value": "failed",
+  "source": "default"
+ },
+ {
+  "key": "steps.escalated.type",
+  "value": "human",
+  "source": "default"
+ },
+ {
+  "key": "steps.escalated.who",
+  "value": "maintainer",
+  "source": "default"
+ },
+ {
+  "key": "steps.escalated.ask",
+  "value": "this job needs a maintainer",
+  "source": "default"
+ },
+ {
+  "key": "steps.escalated.pr_ready",
+  "value": true,
+  "source": "default"
+ },
+ {
+  "key": "steps.escalated.on.FEEDBACK.to",
+  "value": "build",
+  "source": "default"
+ },
+ {
+  "key": "steps.escalated.on.REJECT.to",
+  "value": "rejected",
+  "source": "default"
+ },
+ {
+  "key": "reviewers.code",
+  "value": {},
+  "source": "default"
+ },
+ {
+  "key": "reviewers.security",
+  "value": {},
+  "source": "default"
+ },
+ {
+  "key": "reviewers.ux.port",
+  "value": true,
+  "source": "default"
+ },
+ {
+  "key": "reviewers.ui.port",
+  "value": true,
+  "source": "default"
+ },
+ {
+  "key": "surfaces.ui.when",
+  "value": "a user will see the change on a page or screen",
+  "source": "default"
+ },
+ {
+  "key": "surfaces.ui.reviewers",
+  "value": [
+   "ux",
+   "ui"
+  ],
+  "source": "default"
+ },
+ {
+  "key": "surfaces.security.when",
+  "value": "it touches auth, permissions, user input reaching queries, shells or HTML, secrets, or payments",
+  "source": "default"
+ },
+ {
+  "key": "surfaces.security.reviewers",
+  "value": [
+   "security"
+  ],
+  "source": "default"
+ },
+ {
+  "key": "models.claude.default.model",
+  "value": "sonnet",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.default.effort",
+  "value": "medium",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.intake.model",
+  "value": "fable",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.intake.effort",
+  "value": "high",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.spec.model",
+  "value": "opus",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.spec.effort",
+  "value": "medium",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.build.model",
+  "value": "opus",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.build.effort",
+  "value": "high",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.debug.model",
+  "value": "opus",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.debug.effort",
+  "value": "high",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.reviewer-code.model",
+  "value": "sonnet",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.reviewer-code.effort",
+  "value": "medium",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.reviewer-code.low.model",
+  "value": "haiku",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.reviewer-code.low.effort",
+  "value": "low",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.reviewer-security.model",
+  "value": "opus",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.reviewer-security.effort",
+  "value": "high",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.reviewer-ux.model",
+  "value": "sonnet",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.reviewer-ux.effort",
+  "value": "medium",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.reviewer-ui.model",
+  "value": "haiku",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.reviewer-ui.effort",
+  "value": "low",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.approve.model",
+  "value": "opus",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.approve.effort",
+  "value": "high",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.verify.model",
+  "value": "sonnet",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.claude.verify.effort",
+  "value": "medium",
+  "source": "adapter claude"
+ },
+ {
+  "key": "models.codex.default.model",
+  "value": "inherit",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.default.effort",
+  "value": "medium",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.intake.effort",
+  "value": "high",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.spec.effort",
+  "value": "medium",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.build.effort",
+  "value": "high",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.debug.effort",
+  "value": "high",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.reviewer-code.effort",
+  "value": "medium",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.reviewer-code.low.effort",
+  "value": "low",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.reviewer-security.effort",
+  "value": "high",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.reviewer-ux.effort",
+  "value": "medium",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.reviewer-ui.effort",
+  "value": "low",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.approve.effort",
+  "value": "high",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.codex.verify.effort",
+  "value": "medium",
+  "source": "adapter codex"
+ },
+ {
+  "key": "models.cursor.default.model",
+  "value": "inherit",
+  "source": "adapter cursor"
+ }
+]
