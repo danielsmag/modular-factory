@@ -1,7 +1,188 @@
 # modular-factory
 
-A modular software factory for coding agents: one pipeline, configured from a
-single `factory.toml`, that installs into any project for Claude Code, Cursor
-or Codex.
+A software factory you install into any repository. You label a GitHub issue;
+agents decide whether it is worth building, write a spec, build it on a branch,
+review it and merge the pull request. It runs inside the coding tool you already
+use: Claude Code, Cursor or Codex.
 
-Status: nothing is implemented yet. This repository holds only this README.
+Everything a project changes lives in one file, `factory.toml`: the pipeline's
+steps, the commands that prove a build works, which model and effort each step
+uses, how often a step may send work back, and which of the project's own
+skills each agent reads.
+
+![The dashboard's board view, showing made-up sample jobs](docs/dashboard-board.png)
+
+> **Status: 0.1.0, not yet run inside a real tool.** The pipeline is covered by
+> 135 automated tests that play the orchestrator and the agents against a
+> stand-in for GitHub. Nobody has yet run a job end to end in Claude Code,
+> Cursor or Codex. Expect to find problems on the first real run; see
+> [what is untested](docs/design.md#what-is-untested).
+
+## Install
+
+In the repository you want the factory in:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --tool claude
+```
+
+Use `--tool cursor` or `--tool codex` instead, or name several:
+`--tool claude,cursor`. You need Python 3.11 or later, `git`, and the GitHub
+CLI `gh`, signed in.
+
+Then, in your coding tool:
+
+```text
+/factory setup
+```
+
+This reads the project and fills in `factory.toml`: what the project is for and
+the commands that install, lint and test it. Commit `factory.toml`, `.factory/`
+and the generated agent files to your base branch, and push. The
+[install guide](docs/install.md) has each step and what to do when
+`factory doctor` reports a problem.
+
+## Use
+
+```text
+/factory run                  work through every issue labeled `factory`
+/factory run 12               run issue 12 now
+/factory approve 12           answer a job that is waiting for you
+/factory <anything else>      ask about jobs, or describe a feature to file as an issue
+```
+
+A job that needs a person stops and says so on the issue or the pull request.
+You answer there with a comment, such as `/factory changes Use the existing
+Money type`, or in your tool. Nothing else waits for it: other jobs keep
+running.
+
+## The pipeline is a graph you can read and change
+
+Each step names its type and where each outcome leads. This is the default
+pipeline, printed by `.factory/bin/factory graph`:
+
+```text
+intake         agent   ACCEPT -> spec | NEEDS-INFO -> ask-author (max 2) | REJECT -> rejected
+ask-author     human   ANSWER -> intake | REJECT -> rejected
+spec           agent   DONE -> spec-approval
+spec-approval  human   off, continues as APPROVE -> build
+build          agent   READY -> gate | BLOCKED -> escalated
+gate           checks  PASS -> review | FAIL -> debug (max 2)
+debug          agent   off, continues as FOUND -> build
+review         review  PASS -> approve | CHANGES -> build (max 2)
+approve        agent   APPROVE -> merge | ESCALATE -> escalated
+merge          merge   MERGED -> verify | FAILED -> escalated
+verify         verify  off, continues as PASS -> done
+escalated      human   FEEDBACK -> build | REJECT -> rejected
+```
+
+Three steps ship switched off. Turning one on is two lines in `factory.toml`:
+
+```toml
+[steps.spec-approval]     # a maintainer approves the spec before anything is built
+enabled = true
+
+[steps.debug]             # a debugger diagnoses failing checks before the builder retries
+enabled = true
+
+[steps.verify]            # check the change again after it is merged or deployed
+enabled = true
+commands = ["npm run test:smoke"]
+```
+
+Adding your own step is a block and one changed edge:
+
+```toml
+[steps.docs]
+type = "agent"
+instructions = "Update docs/ for the change on this branch."
+on = { DONE = "gate" }
+
+[steps.build]
+on = { READY = "docs" }   # build now hands over to docs, which hands over to the checks
+```
+
+A `max` on an edge is a loop limit: how many times in a row a step may send a
+job that way. When it is used up, the job goes to a maintainer instead of going
+round again.
+
+```toml
+[steps.review]
+on = { CHANGES = { max = 2 } }    # review may ask for changes twice
+```
+
+## Models and effort per step
+
+```toml
+[models.claude]
+build = { model = "opus", effort = "high" }
+reviewer-code = { model = "sonnet", effort = "medium", low = { model = "haiku", effort = "low" } }
+
+[models.cursor]
+default = { model = "gpt-5.6-sol", effort = "medium" }   # every step that names no model of its own
+```
+
+`low`, `medium` and `high` are the job's risk, which intake decides: the
+example reviews low-risk jobs with a cheaper model. Run
+`.factory/bin/factory models` to see what every agent uses in every tool.
+
+## Your project's skills
+
+Agents read the skills you already keep in `.claude/skills`, `.cursor/skills`,
+`.agents/skills` or `.codex/skills`. You say which:
+
+```toml
+[skills]
+all = ["code-style"]          # every agent
+
+[steps.build]
+skills = ["testing"]          # only the builder
+```
+
+## Dashboard
+
+```bash
+.factory/bin/factory dashboard
+```
+
+It serves a read-only page on your machine: every job and its current step, the
+pipeline with the number of jobs in each step, what each job wrote, and the
+merged configuration with the source of each value. It changes nothing;
+approvals and feedback go through `/factory` or an issue comment.
+
+![The dashboard's pipeline view, showing made-up sample jobs](docs/dashboard-pipeline.png)
+
+## Commands
+
+```text
+factory init | sync | doctor | upgrade            install and maintain
+factory config show | graph | models | skills     see the configuration
+factory queue | create | next | done | answer     run jobs (the /factory skill uses these)
+factory summary | checks | dashboard | version
+```
+
+Run them as `.factory/bin/factory <command>` from anywhere in the repository.
+
+## Documentation
+
+- [Install guide](docs/install.md): installing, setting up, upgrading, removing.
+- [Configuration reference](docs/configuration.md): every key in `factory.toml`.
+- [Design notes](docs/design.md): how it works, what guards it, what is
+  untested, and what changed from the project it is derived from.
+
+## Development
+
+```bash
+python3 -m pip install pytest ruff
+python3 -m pytest
+ruff check .
+python3 tests/sample_dashboard.py     # the dashboard with made-up jobs
+```
+
+The factory itself uses only Python's standard library.
+
+## Licence
+
+GPLv3. modular-factory is derived from
+[Software Factory for Claude Code (v2)](https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2)
+by ZazenCodes. See [NOTICE](NOTICE) and [what changed](docs/design.md#what-changed-from-the-reference).
