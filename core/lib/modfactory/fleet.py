@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
+import time
 import tomllib
 import webbrowser
 from collections.abc import Callable
@@ -22,6 +24,7 @@ from .util import CORE, FactoryError, Refused, find_repo, first_line, run, write
 
 FILE = "fleet.toml"
 SCHEMA = 1
+QUEUE_TTL_SECONDS = 15.0
 SERVED = {".md": "text/plain", ".log": "text/plain"}
 HEADER = (
     "# Checkouts where the factory is already installed. One job still belongs to one project.\n"
@@ -285,8 +288,42 @@ def read_jobs(project: Project) -> dict[str, object]:
     return {"jobs": jobs, "project": {}, "error": None}
 
 
+def queue_payload(
+    rows: list[tuple[str, str, str, str, str, str]], errors: list[str],
+) -> dict[str, object]:
+    items: list[dict[str, str]] = []
+    for project, action, issue, job, step, note in rows:
+        items.append({
+            "project": project, "action": action, "issue": issue, "job": job, "step": step, "note": note,
+        })
+    return {"rows": items, "errors": errors}
+
+
+class QueueCache:
+    """One queue result, reused so the open page does not ask GitHub on every tick."""
+
+    def __init__(self, file: Path, ttl: float = QUEUE_TTL_SECONDS) -> None:
+        self._file: Path = file
+        self._ttl: float = ttl
+        self._lock: threading.Lock = threading.Lock()
+        self._at: float | None = None
+        self._body: dict[str, object] = {"rows": [], "errors": []}
+
+    def get(self) -> dict[str, object]:
+        with self._lock:
+            now: float = time.monotonic()
+            if self._at is not None and now - self._at < self._ttl:
+                return self._body
+            fleet: Fleet = Fleet.load(self._file)
+            rows, errors = fleet.queue()
+            self._body = queue_payload(rows, errors)
+            self._at = time.monotonic()
+            return self._body
+
+
 def handler(file: Path) -> type[BaseHTTPRequestHandler]:
     page: bytes = (CORE / "fleet.html").read_bytes()
+    cache: QueueCache = QueueCache(file)
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "factory-fleet"
@@ -320,6 +357,9 @@ def handler(file: Path) -> type[BaseHTTPRequestHandler]:
                     return
                 if path == "/projects.json":
                     self.send(json.dumps(fleet.snapshot()), "application/json")
+                    return
+                if path == "/queue.json":
+                    self.send(json.dumps(cache.get()), "application/json")
                     return
                 if path.startswith("/projects/"):
                     rest: str = path.removeprefix("/projects/")

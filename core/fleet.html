@@ -40,6 +40,7 @@ button { background: none; border: 0; cursor: pointer; padding: 0; }
 .board { max-width: 1100px; margin: 0 auto; padding: 28px; display: flex; flex-direction: column; gap: 22px; }
 .project { border: 1px solid var(--line); background: var(--panel); padding: 16px 18px; }
 .project h2 { margin: 0; font: 600 16px var(--sans); }
+.project h3 { margin: 14px 0 4px; font: 12px var(--mono); color: var(--muted); letter-spacing: .04em; }
 .path, .muted { color: var(--muted); font: 12px var(--mono); margin: 4px 0 12px; word-break: break-all; }
 .job { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--line); }
 .step { font: 12px var(--mono); color: var(--accent); min-width: 7em; }
@@ -75,6 +76,10 @@ const detailTitle = document.getElementById("detail-title");
 const detailText = document.getElementById("detail-text");
 let selected = "all";
 let projects = [];
+let queueRows = [];
+let queueErrors = [];
+let projectsDown = false;
+let queueStale = false;
 
 function el(tag, props) {
   const node = document.createElement(tag);
@@ -139,6 +144,40 @@ function jobRow(project, job) {
     files);
 }
 
+function queueLine(row) {
+  return el("article", { class: "job" },
+    el("span", { class: "step", text: row.action || "" }),
+    el("span", { class: "title", text: row.note || "" }),
+    el("span", { class: "muted", text: "#" + (row.issue || "") }),
+    el("span", { class: "muted", text: row.job || "" }),
+    el("span", { class: "muted", text: row.step || "" }));
+}
+
+function queueBlock(project) {
+  const block = el("div", {});
+  block.append(el("h3", { text: "queue" }));
+  queueErrors.forEach(function (item) {
+    if (String(item).indexOf(project.id + ": ") === 0) block.append(el("p", { class: "error", text: item }));
+  });
+  const mine = queueRows.filter(function (row) { return row.project === project.id; });
+  if (!mine.length) block.append(el("p", { class: "muted", text: "nothing in the queue" }));
+  mine.forEach(function (row) { block.append(queueLine(row)); });
+  return block;
+}
+
+function markLive() {
+  if (projectsDown) {
+    live.textContent = "offline";
+    live.classList.add("stale");
+  } else if (queueStale) {
+    live.textContent = "queue stale";
+    live.classList.add("stale");
+  } else {
+    live.textContent = "live";
+    live.classList.remove("stale");
+  }
+}
+
 function render() {
   const buttons = [filterButton("all", "all")];
   projects.forEach(function (project) { buttons.push(filterButton(project.id, project.name)); });
@@ -155,10 +194,12 @@ function render() {
       el("h2", { text: project.name }),
       el("p", { class: "path", text: project.path }),
       project.description ? el("p", { class: "muted", text: project.description }) : null,
+      queueBlock(project),
       body));
   });
   if (!blocks.length) blocks.push(el("p", { class: "muted", text: "no projects yet" }));
   board.replaceChildren.apply(board, blocks);
+  markLive();
 }
 
 async function tick() {
@@ -167,17 +208,31 @@ async function tick() {
     if (!response.ok) throw new Error(String(response.status));
     const body = await response.json();
     projects = body.projects || [];
-    live.textContent = "live";
-    live.classList.remove("stale");
+    projectsDown = false;
   } catch (error) {
-    live.textContent = "offline";
-    live.classList.add("stale");
+    projectsDown = true;
+  }
+  render();
+}
+
+async function tickQueue() {
+  try {
+    const response = await fetch("/queue.json", { cache: "no-store" });
+    if (!response.ok) throw new Error(String(response.status));
+    const body = await response.json();
+    queueRows = body.rows || [];
+    queueErrors = body.errors || [];
+    queueStale = false;
+  } catch (error) {
+    queueStale = true;
   }
   render();
 }
 
 tick();
+tickQueue();
 setInterval(tick, 2000);
+setInterval(tickQueue, 15000);
 </script>
 </body>
 </html>

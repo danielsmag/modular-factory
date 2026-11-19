@@ -204,9 +204,41 @@ def test_the_fleet_dashboard_serves_nothing_outside_a_jobs_folder(served):
 
 def test_the_fleet_dashboard_answers_only_to_its_own_address(served):
     _one, base = served
-    with pytest.raises(urllib.error.HTTPError) as error:
-        fetch(base + "/projects.json", host="evil.example")
-    assert error.value.code == 403
+    for path in ("/projects.json", "/queue.json"):
+        with pytest.raises(urllib.error.HTTPError) as error:
+            fetch(base + path, host="evil.example")
+        assert error.value.code == 403, path
+
+
+def test_the_fleet_dashboard_serves_the_queue_and_caches_it(tmp_path):
+    counts: Path = tmp_path / "counts"
+    good_script: str = (
+        "#!/bin/sh\n"
+        f"printf 'x\\n' >> {shlex.quote(str(counts))}\n"
+        "printf '%s\\n' 'new  12  -  -  Add a widget'\n"
+        "exit 0\n"
+    )
+    good: Path = checkout(tmp_path, "alpha", good_script)
+    bad: Path = checkout(tmp_path, "beta", "#!/bin/sh\necho 'factory: queue broke' >&2\nexit 1\n")
+    file: Path = tmp_path / "fleet.toml"
+    group: Fleet = Fleet(file, [Project(good), Project(bad)])
+    group.save()
+    server: ThreadingHTTPServer = ThreadingHTTPServer(("127.0.0.1", 0), handler(file))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base: str = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        first: dict = json.loads(fetch(base + "/queue.json")[0])
+        second: dict = json.loads(fetch(base + "/queue.json")[0])
+    finally:
+        server.shutdown()
+        server.server_close()
+    expected: dict[str, str] = {
+        "project": "alpha", "action": "new", "issue": "12", "job": "-", "step": "-", "note": "Add a widget",
+    }
+    assert first["rows"] == [expected]
+    assert second["rows"] == [expected]
+    assert any("beta" in item and "queue broke" in item for item in first["errors"])
+    assert counts.read_text().count("x") == 1
 
 
 def test_the_fleet_page_never_puts_job_text_into_html_unescaped():
