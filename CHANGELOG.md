@@ -4,6 +4,11 @@ Versions follow [semantic versioning](https://semver.org). Until 1.0.0, a minor
 version may change `factory.toml` keys; the `schema` number in `factory.toml`
 changes when it does, and this file says what to change.
 
+## Unreleased
+
+- `factory fleet`: one local queue and one read-only dashboard for several
+  installed projects. Each job stays in its own checkout.
+
 ## 0.1.0
 
 First version. `schema = 1`.

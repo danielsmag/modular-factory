@@ -1,0 +1,238 @@
+"""One queue and one dashboard over several installed factories."""
+
+import json
+import shlex
+import shutil
+import subprocess
+import sys
+import threading
+import urllib.error
+import urllib.request
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+
+import pytest
+from conftest import CLI, ROOT, git
+from modfactory.cli import main
+from modfactory.fleet import Fleet, Project, handler
+from modfactory.util import Refused
+
+
+def factory_script(repo: Path, body: str) -> None:
+    binary: Path = repo / ".factory" / "bin" / "factory"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    binary.write_text(body)
+    binary.chmod(0o755)
+
+
+def checkout(tmp: Path, name: str, body: str = "#!/bin/sh\nexit 0\n") -> Path:
+    repo: Path = tmp / name
+    repo.mkdir(parents=True)
+    git("init", "-q", "-b", "main", cwd=repo)
+    factory_script(repo, body)
+    return repo
+
+
+def real_factory(repo: Path) -> None:
+    factory_script(repo, f"#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(CLI))} \"$@\"\n")
+
+
+def test_init_add_list_and_remove(tmp_path, monkeypatch, capsys):
+    fleet_dir: Path = tmp_path / "fleet"
+    fleet_dir.mkdir()
+    monkeypatch.chdir(fleet_dir)
+    assert main(["fleet", "init"]) == 0
+    assert main(["fleet", "init"]) == 1
+    assert "already exists" in capsys.readouterr().err
+
+    plain: Path = tmp_path / "plain"
+    plain.mkdir()
+    assert main(["fleet", "add", str(plain)]) == 1
+    assert "not inside a git repository" in capsys.readouterr().err
+
+    bare: Path = tmp_path / "bare"
+    bare.mkdir()
+    git("init", "-q", "-b", "main", cwd=bare)
+    assert main(["fleet", "add", str(bare)]) == 1
+    assert "no .factory/bin/factory" in capsys.readouterr().err
+
+    repo: Path = checkout(tmp_path, "alpha")
+    assert main(["fleet", "add", str(repo)]) == 0
+    assert main(["fleet", "add", str(repo)]) == 1
+    assert "already in" in capsys.readouterr().err
+    assert main(["fleet", "list"]) == 0
+    listed: str = capsys.readouterr().out
+    assert "alpha" in listed and str(repo.resolve()) in listed and "ok" in listed
+
+    assert main(["fleet", "remove", "alpha"]) == 0
+    assert main(["fleet", "list"]) == 0
+    assert "no projects yet" in capsys.readouterr().out
+
+
+def test_two_checkouts_with_the_same_folder_name_get_distinct_labels(tmp_path):
+    left: Path = checkout(tmp_path / "a", "app")
+    right: Path = checkout(tmp_path / "b", "app")
+    file: Path = tmp_path / "fleet.toml"
+    group: Fleet = Fleet(file, [])
+    group.add(left)
+    group.add(right)
+    labels: set[str] = {group.label(project) for project in group.projects}
+    assert len(labels) == 2
+    assert all(label.startswith("app-") for label in labels)
+
+
+def test_queue_keeps_the_projects_that_succeed(world, tmp_path, monkeypatch, capsys):
+    real_factory(world.repo)
+    number: int = world.issue(title="Add a widget")
+    failed: Path = checkout(tmp_path, "beta", "#!/bin/sh\necho 'factory: queue broke' >&2\nexit 1\n")
+    fleet_dir: Path = tmp_path / "fleet"
+    fleet_dir.mkdir()
+    monkeypatch.chdir(fleet_dir)
+    assert main(["fleet", "init"]) == 0
+    capsys.readouterr()
+    group: Fleet = Fleet.find()
+    group.projects.append(Project(failed))
+    group.save()
+    assert main(["fleet", "add", str(world.repo)]) == 0
+    capsys.readouterr()
+
+    code: int = main(["fleet", "queue"])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert f"repo  new  {number}  -  -  Add a widget" in captured.out
+    assert "beta" in captured.err and "queue broke" in captured.err
+    assert "note:" not in captured.out
+
+
+def test_a_missing_binary_does_not_hide_the_other_project(tmp_path, monkeypatch, capsys):
+    good: Path = checkout(tmp_path, "alpha", "#!/bin/sh\nprintf '%s\\n' 'resume  4  001-one  build  round 1'\nexit 0\n")
+    missing: Path = tmp_path / "gone"
+    fleet_dir: Path = tmp_path / "fleet"
+    fleet_dir.mkdir()
+    monkeypatch.chdir(fleet_dir)
+    file: Path = fleet_dir / "fleet.toml"
+    Fleet.init(fleet_dir)
+    group: Fleet = Fleet.load(file)
+    group.projects = [Project(missing), Project(good)]
+    group.save()
+    code: int = main(["fleet", "queue"])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "alpha  resume  4  001-one  build  round 1" in captured.out
+    assert "gone" in captured.err and "missing" in captured.err
+
+
+def test_factory_fleet_follows_factory_fleet_env(tmp_path, monkeypatch):
+    repo: Path = checkout(tmp_path, "alpha")
+    file: Path = tmp_path / "elsewhere.toml"
+    Fleet(file, []).save()
+    group: Fleet = Fleet.load(file)
+    group.add(repo)
+    monkeypatch.setenv("FACTORY_FLEET", str(file))
+    found: Fleet = Fleet.find(tmp_path / "no-such")
+    assert found.file.resolve() == file.resolve()
+    assert found.projects[0].path == repo.resolve()
+
+
+def write_jobs(repo: Path, job: dict[str, object], index: bool) -> None:
+    folder: Path = repo / ".factory" / "jobs" / job["id"]
+    folder.mkdir(parents=True)
+    (folder / "job.json").write_text(json.dumps(job))
+    (folder / "note.md").write_text("STATUS: ok\n")
+    if index:
+        payload: dict = {
+            "project": {"description": "A test project"},
+            "jobs": [dict(job, files=[{"path": "note.md", "size": 11, "first_line": "STATUS: ok"}])],
+        }
+        (folder.parent / "index.json").write_text(json.dumps(payload))
+
+
+@pytest.fixture
+def served(tmp_path):
+    one: Path = tmp_path / "one"
+    two: Path = tmp_path / "two"
+    one.mkdir()
+    two.mkdir()
+    alpha: dict[str, object] = {
+        "id": "001-a", "issue": 1, "title": "Alpha", "step": "build", "issue_url": "https://example.test/1",
+    }
+    write_jobs(one, alpha, True)
+    write_jobs(two, {"id": "001-b", "issue": 2, "title": "Beta", "step": "spec"}, False)
+    (one / "secret.md").write_text("secret\n")
+    file: Path = tmp_path / "fleet.toml"
+    group: Fleet = Fleet(file, [Project(one.resolve()), Project(two.resolve())])
+    group.save()
+    server: ThreadingHTTPServer = ThreadingHTTPServer(("127.0.0.1", 0), handler(file))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield one, f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+    server.server_close()
+
+
+def fetch(url, host=None):
+    request = urllib.request.Request(url, headers={"Host": host} if host else {})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return response.read().decode(), response.headers
+
+
+def test_the_fleet_dashboard_serves_both_projects(served):
+    _one, base = served
+    page, headers = fetch(base + "/")
+    assert page == (ROOT / "core/fleet.html").read_text()
+    assert "default-src 'none'" in headers["Content-Security-Policy"]
+    body: dict = json.loads(fetch(base + "/projects.json")[0])
+    by_name: dict = {item["name"]: item for item in body["projects"]}
+    assert by_name["one"]["jobs"][0]["title"] == "Alpha"
+    assert by_name["one"]["description"] == "A test project"
+    assert by_name["two"]["jobs"][0]["title"] == "Beta"
+    assert by_name["two"]["jobs"][0]["files"][0]["path"] == "note.md"
+    text, kind = fetch(base + "/projects/one/jobs/001-a/note.md")
+    assert text == "STATUS: ok\n"
+    assert kind["Content-Type"] == "text/plain; charset=utf-8"
+    other, _headers = fetch(base + "/projects/two/jobs/001-b/note.md")
+    assert other == "STATUS: ok\n"
+
+
+def test_the_fleet_dashboard_serves_nothing_outside_a_jobs_folder(served):
+    _one, base = served
+    for path in ("/projects/one/jobs/../../secret.md", "/projects/one/jobs/%2e%2e/%2e%2e/secret.md",
+                 "/projects/one/jobs/001-a/job.json", "/fleet.toml"):
+        with pytest.raises(urllib.error.HTTPError) as error:
+            fetch(base + path)
+        assert error.value.code == 404, path
+
+
+def test_the_fleet_dashboard_answers_only_to_its_own_address(served):
+    _one, base = served
+    with pytest.raises(urllib.error.HTTPError) as error:
+        fetch(base + "/projects.json", host="evil.example")
+    assert error.value.code == 403
+
+
+def test_the_fleet_page_never_puts_job_text_into_html_unescaped():
+    page: str = (ROOT / "core/fleet.html").read_text()
+    for unsafe in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval("):
+        assert unsafe not in page, unsafe
+
+
+def test_the_fleet_page_loads_nothing_from_elsewhere():
+    page: str = (ROOT / "core/fleet.html").read_text()
+    for remote in ("<script src", "<link", "@import", "url(http", 'src="http', "<iframe", "<img"):
+        assert remote not in page, remote
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="needs node to parse the page's script")
+def test_the_fleet_script_parses(tmp_path):
+    page: str = (ROOT / "core/fleet.html").read_text()
+    script: str = page[page.index("<script>") + len("<script>"):page.rindex("</script>")]
+    (tmp_path / "page.js").write_text(script)
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        ["node", "--check", str(tmp_path / "page.js")], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_bad_schema_is_refused(tmp_path):
+    file: Path = tmp_path / "fleet.toml"
+    file.write_text("schema = 2\n")
+    with pytest.raises(Refused, match="schema 2"):
+        Fleet.load(file)

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>factory fleet</title>
+<style>
+:root {
+  --bg: #0b0b0b;
+  --panel: #151515;
+  --line: #2a2a2a;
+  --text: #f2f2f2;
+  --muted: #9a9a9a;
+  --accent: #ff4a26;
+  --good: #2fbf71;
+  --bad: #ff5a4f;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+html { color-scheme: dark; }
+body {
+  margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+  font: 14px/1.45 var(--sans); border-top: 3px solid var(--accent);
+}
+button, a { font: inherit; color: inherit; }
+button { background: none; border: 0; cursor: pointer; padding: 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.top {
+  display: flex; align-items: center; gap: 16px; padding: 16px 28px;
+  border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg);
+}
+.brand { font: 600 18px var(--sans); }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.filters button { font: 12px var(--mono); border: 1px solid var(--line); padding: 4px 8px; }
+.filters button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+.live { margin-left: auto; font: 12px var(--mono); color: var(--muted); }
+.live::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); margin-right: 6px; }
+.live.stale::before { background: var(--bad); }
+.board { max-width: 1100px; margin: 0 auto; padding: 28px; display: flex; flex-direction: column; gap: 22px; }
+.project { border: 1px solid var(--line); background: var(--panel); padding: 16px 18px; }
+.project h2 { margin: 0; font: 600 16px var(--sans); }
+.path, .muted { color: var(--muted); font: 12px var(--mono); margin: 4px 0 12px; word-break: break-all; }
+.job { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--line); }
+.step { font: 12px var(--mono); color: var(--accent); min-width: 7em; }
+.title { flex: 1; min-width: 12em; }
+.links, .files { display: flex; flex-wrap: wrap; gap: 8px; }
+.links a, .files button { font: 12px var(--mono); color: var(--muted); text-decoration: none; }
+.links a:hover, .files button:hover { color: var(--text); }
+.error { color: var(--bad); font: 12px var(--mono); }
+.detail { max-width: 1100px; margin: 0 auto 40px; padding: 0 28px; }
+.detail pre {
+  margin: 0; padding: 16px; background: var(--panel); border: 1px solid var(--line);
+  white-space: pre-wrap; font: 13px/1.5 var(--mono);
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">factory fleet</div>
+  <div id="filters" class="filters"></div>
+  <div id="live" class="live">live</div>
+</header>
+<main id="board" class="board"></main>
+<section id="detail" class="detail" hidden>
+  <p id="detail-title" class="muted"></p>
+  <pre id="detail-text"></pre>
+</section>
+<script>
+const board = document.getElementById("board");
+const filters = document.getElementById("filters");
+const live = document.getElementById("live");
+const detail = document.getElementById("detail");
+const detailTitle = document.getElementById("detail-title");
+const detailText = document.getElementById("detail-text");
+let selected = "all";
+let projects = [];
+
+function el(tag, props) {
+  const node = document.createElement(tag);
+  const kids = Array.prototype.slice.call(arguments, 2);
+  Object.keys(props || {}).forEach(function (key) {
+    const value = props[key];
+    if (key === "text") node.textContent = value == null ? "" : String(value);
+    else if (key === "onclick") node.addEventListener("click", value);
+    else node.setAttribute(key, value);
+  });
+  kids.forEach(function (kid) { if (kid) node.append(kid); });
+  return node;
+}
+
+function safeUrl(value) {
+  return typeof value === "string" && /^https?:\/\//.test(value) ? value : "";
+}
+
+function filterButton(id, text) {
+  return el("button", {
+    type: "button",
+    text: text,
+    "aria-pressed": selected === id ? "true" : "false",
+    onclick: function () { selected = id; render(); },
+  });
+}
+
+function showFile(projectId, jobId, path) {
+  const parts = [jobId].concat(String(path).split("/")).map(encodeURIComponent).join("/");
+  const url = "/projects/" + encodeURIComponent(projectId) + "/jobs/" + parts;
+  detail.hidden = false;
+  detailTitle.textContent = projectId + " / " + jobId + " / " + path;
+  detailText.textContent = "loading";
+  fetch(url, { cache: "no-store" }).then(function (response) {
+    if (!response.ok) throw new Error(String(response.status));
+    return response.text();
+  }).then(function (text) {
+    detailText.textContent = text;
+  }).catch(function () {
+    detailText.textContent = "could not read " + path;
+  });
+}
+
+function jobRow(project, job) {
+  const links = el("span", { class: "links" });
+  const issue = safeUrl(job.issue_url);
+  const pr = safeUrl(job.pr_url);
+  if (issue) links.append(el("a", { href: issue, text: "#" + (job.issue == null ? "" : job.issue) }));
+  if (pr) links.append(el("a", { href: pr, text: job.pr ? "PR " + job.pr : "PR" }));
+  const files = el("span", { class: "files" });
+  (job.files || []).forEach(function (file) {
+    files.append(el("button", {
+      type: "button",
+      text: file.path,
+      onclick: function () { showFile(project.id, job.id, file.path); },
+    }));
+  });
+  return el("article", { class: "job" },
+    el("span", { class: "step", text: job.step || "" }),
+    el("span", { class: "title", text: job.title || job.id || "" }),
+    links,
+    files);
+}
+
+function render() {
+  const buttons = [filterButton("all", "all")];
+  projects.forEach(function (project) { buttons.push(filterButton(project.id, project.name)); });
+  filters.replaceChildren.apply(filters, buttons);
+  const blocks = [];
+  projects.forEach(function (project) {
+    if (selected !== "all" && selected !== project.id) return;
+    const body = el("div", {});
+    if (project.error) body.append(el("p", { class: "error", text: project.error }));
+    const jobs = project.jobs || [];
+    if (!jobs.length && !project.error) body.append(el("p", { class: "muted", text: "no jobs" }));
+    jobs.forEach(function (job) { body.append(jobRow(project, job)); });
+    blocks.push(el("section", { class: "project" },
+      el("h2", { text: project.name }),
+      el("p", { class: "path", text: project.path }),
+      project.description ? el("p", { class: "muted", text: project.description }) : null,
+      body));
+  });
+  if (!blocks.length) blocks.push(el("p", { class: "muted", text: "no projects yet" }));
+  board.replaceChildren.apply(board, blocks);
+}
+
+async function tick() {
+  try {
+    const response = await fetch("/projects.json", { cache: "no-store" });
+    if (!response.ok) throw new Error(String(response.status));
+    const body = await response.json();
+    projects = body.projects || [];
+    live.textContent = "live";
+    live.classList.remove("stale");
+  } catch (error) {
+    live.textContent = "offline";
+    live.classList.add("stale");
+  }
+  render();
+}
+
+tick();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>

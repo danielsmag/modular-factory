@@ -36,7 +36,7 @@ def test_init_installs_everything_a_project_needs(bare):
     assert res.returncode == 0, res.stderr
     repo = bare.repo
     for item in ("bin/factory", "lib/modfactory/cli.py", "roles/build.md", "skill/SKILL.md", "defaults.toml",
-                 "adapters/claude.toml", "dashboard.html", "VERSION", "LICENSE", "NOTICE"):
+                 "adapters/claude.toml", "dashboard.html", "fleet.html", "VERSION", "LICENSE", "NOTICE"):
         assert (repo / ".factory" / item).exists(), item
     assert not list((repo / ".factory").rglob("__pycache__"))
     assert installed(bare).stdout.strip() == (ROOT / "core/VERSION").read_text().strip()

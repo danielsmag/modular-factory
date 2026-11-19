@@ -50,11 +50,13 @@ core/lib/modfactory/      the CLI's code
   sync.py                 agent and skill files for each tool
   install.py              init, upgrade, doctor
   dashboard.py            the local server for the dashboard
+  fleet.py                several projects: fleet.toml, one queue, one dashboard
   store.py, gh.py, cost.py, util.py
 core/roles/*.md           one prompt per agent step and reviewer
 core/skill/SKILL.md       the orchestrator
 core/defaults.toml        the default pipeline and settings
 core/dashboard.html       the dashboard
+core/fleet.html           the dashboard for several projects
 adapters/*.toml           per tool: folders, agent file format, default models
 install.sh
 tests/
@@ -182,6 +184,9 @@ each tool allows.
 - **The dashboard reads live state.** The server builds the list of jobs on
   each request instead of relying on a file written at each change, so it
   cannot show an out-of-date list.
+- **A fleet is a list of checkouts.** `fleet.toml` lives outside the projects.
+  The fleet runs each project's own `factory queue` and reads that project's
+  job files. It does not merge pipelines or move a job between repositories.
 - **The board's chart is a running total** of merged jobs with a steady-pace
   line, not jobs per day: with a few merges a week, a per-day chart is mostly
   zeros.

@@ -146,6 +146,33 @@ To watch the jobs:
 .factory/bin/factory dashboard
 ```
 
+## Several projects
+
+The factory in a project only sees that project. To watch several, keep a fleet file in a directory of your own. That directory is not one of the projects, and you do not commit it into them.
+
+```bash
+mkdir -p ~/work/fleet
+cd ~/work/fleet
+/path/to/modular-factory/core/bin/factory fleet init
+/path/to/modular-factory/core/bin/factory fleet add /path/to/project-a
+/path/to/modular-factory/core/bin/factory fleet add /path/to/project-b
+/path/to/modular-factory/core/bin/factory fleet queue
+/path/to/modular-factory/core/bin/factory fleet dashboard
+```
+
+`fleet add` accepts a checkout only after the factory is installed there. After you upgrade a project, that project's `.factory/bin/factory` is the same command. Run it from the fleet directory:
+
+```bash
+cd ~/work/fleet
+/path/to/project-a/.factory/bin/factory fleet queue
+```
+
+`fleet queue` runs each project's own `.factory/bin/factory queue`. A project that fails is reported, and the others still print. `fleet dashboard` serves one read-only page on this machine, grouped by project. Set `FACTORY_FLEET` to the `fleet.toml` path when you are not inside the fleet directory.
+
+Building stays in the project. Open that project and run `/factory run`, or `/factory run 12` for one issue. The per-project `factory dashboard` still shows that project's pipeline.
+
+Two clones of one GitHub repository both appear if you add both paths. They do not share job files.
+
 ## Permissions your tool will ask for
 
 The orchestrator runs `.factory/bin/factory`. The agents it starts run `git`,

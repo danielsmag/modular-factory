@@ -152,6 +152,20 @@ approvals and feedback go through `/factory` or an issue comment.
 
 ![The dashboard's pipeline view, showing made-up sample jobs](docs/dashboard-pipeline.png)
 
+## Several projects
+
+Install the factory in each project. Then, in a directory of your own:
+
+```bash
+mkdir -p ~/work/fleet && cd ~/work/fleet
+/path/to/modular-factory/core/bin/factory fleet init
+/path/to/modular-factory/core/bin/factory fleet add /path/to/project-a
+/path/to/modular-factory/core/bin/factory fleet add /path/to/project-b
+/path/to/modular-factory/core/bin/factory fleet dashboard
+```
+
+`factory fleet queue` and `factory fleet dashboard` show every project's jobs. Each job stays in its own checkout. Open that project and run `/factory run` there. The [install guide](docs/install.md#several-projects) has the rest.
+
 ## Commands
 
 ```text
@@ -159,6 +173,7 @@ factory init | sync | doctor | upgrade            install and maintain
 factory config show | graph | models | skills     see the configuration
 factory queue | create | next | done | answer     run jobs (the /factory skill uses these)
 factory summary | checks | dashboard | version
+factory fleet init | add | remove | list | queue | dashboard
 ```
 
 Run them as `.factory/bin/factory <command>` from anywhere in the repository.

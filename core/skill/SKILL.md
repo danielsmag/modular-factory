@@ -146,7 +146,7 @@ generated agent files.
 3. Edit `factory.toml`:
    - `[project] description`: two or three sentences on what the project is
      for and what does not belong in it. Intake judges issues against this.
-   - `[project] base_branch`, if it isn't `main`.
+   - `[project] base_branch`, if it isn't `master`.
    - `[checks] commands`: the commands from step 2, in the order CI runs them.
      Each must exit non-zero on failure and must not rewrite files.
    - `[skills]` and `skills = [...]` under a step or reviewer, when a project
@@ -184,6 +184,9 @@ feedback or asking for something new, ask.
 
 - **The dashboard**: `.factory/bin/factory dashboard` serves a read-only view
   of every job on this machine and prints its address.
+- **Several projects**: `factory fleet` reads a `fleet.toml` you keep outside
+  those projects and lists their queues on one dashboard. It does not build.
+  Open the project and run `/factory run` there.
 
 ## Guardrails
 

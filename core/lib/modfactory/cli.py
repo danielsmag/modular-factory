@@ -4,9 +4,11 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 from . import checks, config, graph, install
 from . import dashboard as dash
+from . import fleet as fleet_mod
 from . import sync as syncer
 from .engine import Factory
 from .store import Store
@@ -21,6 +23,8 @@ run jobs (the orchestrator skill uses these)
   queue | create <issue> | next <job> | done <job> | answer <job> <outcome> | summary
 other
   checks | dashboard | version
+several projects
+  fleet init | add <path> | remove <path> | list | queue | dashboard
 
 A <job> is its id (004-dark-mode), the number in its id (004) or its issue (12 or #12).
 """
@@ -72,6 +76,18 @@ def parser():
     c = sub.add_parser("dashboard", help="serve the read-only dashboard on this machine")
     c.add_argument("--port", type=int, default=4747)
     c.add_argument("--no-open", action="store_true", help="don't open a browser")
+    fleet = sub.add_parser("fleet", help="one queue and one dashboard for several installed projects")
+    fleet_sub = fleet.add_subparsers(dest="fleet_command", required=True, metavar="<command>")
+    fleet_sub.add_parser("init", help="write fleet.toml in the current directory")
+    c = fleet_sub.add_parser("add", help="add a checkout where the factory is already installed")
+    c.add_argument("path")
+    c = fleet_sub.add_parser("remove", help="remove a project by its path or folder name")
+    c.add_argument("path")
+    fleet_sub.add_parser("list", help="list the projects in fleet.toml")
+    fleet_sub.add_parser("queue", help="run each project's own factory queue")
+    c = fleet_sub.add_parser("dashboard", help="serve one read-only board for every project")
+    c.add_argument("--port", type=int, default=4747)
+    c.add_argument("--no-open", action="store_true", help="don't open a browser")
     sub.add_parser("version", help="print the factory's version")
     return p
 
@@ -91,11 +107,52 @@ def _stdin_text():
     return "" if sys.stdin.isatty() else sys.stdin.read()
 
 
+def _fleet(args: argparse.Namespace) -> int:
+    command: str = args.fleet_command
+    if command == "init":
+        file: Path = fleet_mod.Fleet.init(Path.cwd())
+        print(f"ok    {file}")
+        return 0
+    group: fleet_mod.Fleet = fleet_mod.Fleet.find()
+    if command == "add":
+        project: fleet_mod.Project = group.add(Path(args.path))
+        print(f"ok    {group.label(project)}  {project.path}")
+    elif command == "remove":
+        removed: fleet_mod.Project = group.remove(args.path)
+        print(f"ok    removed {removed.path}")
+    elif command == "list":
+        if not group.projects:
+            print("no projects yet. Run `factory fleet add <path>`.")
+            return 0
+        for project in group.projects:
+            state: str = "ok" if project.binary.is_file() else "missing .factory/bin/factory"
+            print(f"{group.label(project)}  {project.path}  {state}")
+    elif command == "queue":
+        if not group.projects:
+            print("no projects yet. Run `factory fleet add <path>`.")
+            return 0
+        rows: list[tuple[str, str, str, str, str, str]]
+        errors: list[str]
+        rows, errors = group.queue()
+        for row in rows:
+            print("  ".join(row))
+        if not rows and not errors:
+            print("nothing to do")
+        for error in errors:
+            print(f"factory: {error}", file=sys.stderr)
+        return 1 if errors else 0
+    elif command == "dashboard":
+        fleet_mod.serve(group.file, args.port, not args.no_open)
+    return 0
+
+
 def run(args):
     command = args.command
     if command == "version":
         print(version())
         return 0
+    if command == "fleet":
+        return _fleet(args)
     if command == "hook":
         repo = find_repo(os.environ.get("CLAUDE_PROJECT_DIR"))
         cfg = config.load(repo)
