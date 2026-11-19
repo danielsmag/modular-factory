@@ -187,9 +187,10 @@ each tool allows.
 - **A fleet is a list of checkouts.** `fleet.toml` lives outside the projects.
   The fleet runs each project's own `factory queue` and reads that project's
   job files. It does not merge pipelines or move a job between repositories.
-  Optional `concurrency` in that file, or `--concurrency` on `fleet queue`,
-  caps `new` and `resume` rows across projects. Each project applies its own
-  `[run].concurrency` first.
+  Each project applies its own `[run].concurrency` first. The fleet then
+  applies `[fleet].concurrency` from this factory's `defaults.toml`.
+  `concurrency` in `fleet.toml`, or `--concurrency` on `fleet queue`, overrides
+  that fleet cap.
 - **The board's chart is a running total** of merged jobs with a steady-pace
   line, not jobs per day: with a few merges a week, a per-day chart is mostly
   zeros.

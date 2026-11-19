@@ -58,6 +58,11 @@
   "source": "default"
  },
  {
+  "key": "fleet.concurrency",
+  "value": 3,
+  "source": "default"
+ },
+ {
   "key": "checks.commands",
   "value": [
    "npm ci --prefer-offline",

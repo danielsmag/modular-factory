@@ -86,7 +86,7 @@ def parser():
     fleet_sub.add_parser("list", help="list the projects in fleet.toml")
     c = fleet_sub.add_parser("queue", help="run each project's own factory queue")
     c.add_argument("--concurrency", type=int, metavar="N",
-                   help="keep this many new and resume rows across every project")
+                   help="fleet-wide cap for new and resume rows (default: [fleet].concurrency)")
     c = fleet_sub.add_parser("dashboard", help="serve one read-only board for every project")
     c.add_argument("--port", type=int, default=4747)
     c.add_argument("--no-open", action="store_true", help="don't open a browser")

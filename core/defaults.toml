@@ -20,9 +20,12 @@ cost = true               # per-job cost, read from Claude Code's transcripts
 intake_shell = false      # true lets intake run commands, if your Codex can't read files without a shell
 
 [run]
-concurrency = 3           # jobs worked on at once
+concurrency = 3           # jobs this project works on at once
 start = "intake"          # the step a new job starts in
 escalate_to = "escalated" # the human step a job goes to when an edge's max is reached
+
+[fleet]
+concurrency = 3           # new and resume rows across every project; fleet.toml or --concurrency overrides
 
 [checks]
 commands = []             # run in order in the job's worktree; the first failure stops

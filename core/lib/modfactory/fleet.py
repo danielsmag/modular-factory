@@ -63,6 +63,18 @@ def labels_for(projects: list[Project]) -> dict[Path, str]:
     return labels
 
 
+def default_concurrency() -> int | None:
+    """Fleet-wide cap shipped in this factory's defaults.toml. None when that copy has no [fleet] table."""
+    path: Path = CORE / "defaults.toml"
+    parsed: object = tomllib.loads(path.read_text())
+    if not isinstance(parsed, dict):
+        return None
+    table: object = parsed.get("fleet")
+    if not isinstance(table, dict) or "concurrency" not in table:
+        return None
+    return parse_concurrency(table["concurrency"], f"{path}: [fleet].concurrency")
+
+
 def parse_concurrency(value: object, where: str) -> int:
     """A fleet-wide cap: how many `new` and `resume` rows survive across every project."""
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -192,11 +204,14 @@ class Fleet:
     def queue(self, concurrency: int | None = None) -> tuple[list[tuple[str, str, str, str, str, str]], list[str]]:
         """Rows of `project action issue job step note`, and one error string per project that failed.
 
-        `concurrency` overrides `fleet.toml`. It keeps that many `new` and `resume`
-        rows, in project order, and marks the rest `hold`. `wait`, `skip` and
-        `hold` do not take a slot. Omit both and each project keeps its own cap.
+        Each project has already applied its own `[run].concurrency`. This cap is
+        across projects: `--concurrency`, then `fleet.toml`, then `[fleet].concurrency`
+        in defaults.toml. It keeps that many `new` and `resume` rows, in project
+        order, and marks the rest `hold`. `wait`, `skip` and `hold` do not take a slot.
         """
-        limit: int | None = self.concurrency if concurrency is None else parse_concurrency(concurrency, "--concurrency")
+        limit: int | None = self.concurrency if self.concurrency is not None else default_concurrency()
+        if concurrency is not None:
+            limit = parse_concurrency(concurrency, "--concurrency")
         rows: list[tuple[str, str, str, str, str, str]] = []
         errors: list[str] = []
         for project in self.projects:

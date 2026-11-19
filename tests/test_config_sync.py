@@ -24,6 +24,15 @@ def test_tables_merge_key_by_key_and_other_values_replace(world):
     cfg = load(world, '[run]\nconcurrency = 5\n[checks]\ncommands = ["make test"]\n')
     assert cfg["run"] == {"concurrency": 5, "start": "intake", "escalate_to": "escalated"}
     assert cfg["checks"] == {"commands": ["make test"], "timeout_minutes": 30}
+    assert cfg["fleet"] == {"concurrency": 3}
+    assert cfg.sources[("fleet", "concurrency")] == "default"
+
+
+def test_a_project_cannot_set_the_fleet_cap(world):
+    assert problems(world, "[fleet]\nconcurrency = 4\n") == [
+        "[fleet].concurrency is the cap across projects. Set it in fleet.toml, "
+        "or pass --concurrency to `factory fleet queue`.",
+    ]
 
 
 def test_an_edge_can_change_its_limit_or_its_target_alone(world):

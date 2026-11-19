@@ -186,9 +186,9 @@ feedback or asking for something new, ask.
   of every job on this machine and prints its address.
 - **Several projects**: `factory fleet` reads a `fleet.toml` you keep outside
   those projects and lists their queues on one dashboard. It does not build.
-  `concurrency` in that file, or `fleet queue --concurrency N`, keeps that
-  many `new` and `resume` rows across every project. Open the project and run
-  `/factory run` there.
+  `[run].concurrency` caps one project. `[fleet].concurrency` caps `new` and
+  `resume` rows across every project. `fleet.toml` or `fleet queue --concurrency N`
+  overrides the fleet cap. Open the project and run `/factory run` there.
 
 ## Guardrails
 

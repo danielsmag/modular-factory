@@ -7,9 +7,10 @@ changes when it does, and this file says what to change.
 ## Unreleased
 
 - `factory fleet`: one local queue and one read-only dashboard for several
-  installed projects. Each job stays in its own checkout. `concurrency` in
-  `fleet.toml`, or `factory fleet queue --concurrency N`, caps `new` and
-  `resume` rows across those projects.
+  installed projects. Each job stays in its own checkout. `[run].concurrency`
+  caps one project. `[fleet].concurrency` in `defaults.toml` caps `new` and
+  `resume` rows across projects. `fleet.toml` or `--concurrency` overrides
+  the fleet cap.
 
 ## 0.1.0
 

@@ -219,6 +219,7 @@ TABLES = {
     "project": {"description": a_string, "base_branch": a_filled_string,
                 "merge_method": one_of("merge", "squash", "rebase")},
     "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string},
+    "fleet": {"concurrency": an_int(1)},
     "checks": {"commands": a_string_list, "timeout_minutes": an_int(1)},
     "labels": {"queue": a_filled_string, "needs_info": a_filled_string, "needs_human": a_filled_string},
     "paths": {"worktrees": a_filled_string, "protected": a_string_list},
@@ -267,6 +268,9 @@ def check(cfg):
                    "Run `factory upgrade`, or set schema to match.")
     for name, spec in TABLES.items():
         test_table(name, d.get(name, {}), spec)
+    if cfg.sources.get(("fleet", "concurrency")) == FILE:
+        out.append("[fleet].concurrency is the cap across projects. Set it in fleet.toml, "
+                   "or pass --concurrency to `factory fleet queue`.")
 
     # tools
     tools = d.get("tools", {})

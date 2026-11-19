@@ -305,6 +305,34 @@ def test_concurrency_keeps_the_first_actionable_rows(tmp_path, monkeypatch, caps
     assert "fleet concurrency" not in opened
 
 
+def test_the_default_fleet_cap_comes_from_defaults_toml(tmp_path, monkeypatch, capsys):
+    script: str = (
+        "#!/bin/sh\nprintf '%s\\n' "
+        "'new  1  -  -  One' 'new  2  -  -  Two' 'new  3  -  -  Three' 'new  4  -  -  Four'\n"
+    )
+    repo: Path = checkout(tmp_path, "alpha", script)
+    fleet_dir: Path = tmp_path / "fleet"
+    fleet_dir.mkdir()
+    monkeypatch.chdir(fleet_dir)
+    Fleet.init(fleet_dir)
+    group: Fleet = Fleet.find()
+    group.add(repo)
+    assert group.concurrency is None
+
+    assert main(["fleet", "queue"]) == 0
+    capped: str = capsys.readouterr().out
+    assert "alpha  new  1  -  -  One" in capped
+    assert "alpha  new  3  -  -  Three" in capped
+    assert "alpha  hold  4  -  -  fleet concurrency 3 reached" in capped
+
+    group.concurrency = 4
+    group.save()
+    assert main(["fleet", "queue"]) == 0
+    opened: str = capsys.readouterr().out
+    assert "alpha  new  4  -  -  Four" in opened
+    assert "fleet concurrency" not in opened
+
+
 def test_a_bad_concurrency_is_refused(tmp_path, monkeypatch, capsys):
     file: Path = tmp_path / "fleet.toml"
     file.write_text("schema = 1\nconcurrency = 0\n")
