@@ -63,6 +63,8 @@ kbd { font: 11px var(--mono); color: var(--muted); border: 1px solid var(--line-
 .live { font: 11px var(--mono); color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
 .live.stale::before { background: var(--bad); }
+#clock:empty { display: none; }
+#clock:not(:empty)::before { content: " · "; }
 h1 { font: 500 22px var(--sans); margin: 0; letter-spacing: -.01em; }
 .sub { color: var(--muted); font-size: 12px; margin: 3px 0 18px; }
 h2 { font: 500 14px var(--sans); margin: 0; }
@@ -322,7 +324,7 @@ footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--m
       <input id="search" type="search" placeholder="Search jobs..." autocomplete="off" spellcheck="false">
       <kbd id="hotkey">Ctrl K</kbd>
     </label>
-    <div class="live" id="live" role="status"><span>connecting</span></div>
+    <div class="live" id="live"><span id="live-readout"><span id="live-status" role="status">connecting</span><span id="clock" aria-hidden="true"></span></span></div>
     <a class="cta" href="https://github.com/danielsmag/modular-factory#readme" target="_blank" rel="noopener noreferrer">DOCS</a>
   </div>
 </header>
@@ -1377,24 +1379,23 @@ function renderFilters() {
   state.projects.forEach((project) => buttons.push(filterButton(project.id, projectLabel(project))));
   box.replaceChildren(...buttons);
 }
-function latestStamp() {
-  let latest = 0;
-  visibleProjects().forEach((project) => {
-    const at = project.generated_at ? new Date(project.generated_at).getTime() : 0;
-    if (at > latest) latest = at;
-  });
-  return latest ? new Date(latest).toLocaleTimeString() : "";
-}
-function liveLabel() {
-  if (!state.fleet) {
-    if (state.error) return "not connected";
-    if (!state.index) return "connecting";
-    return "live · " + new Date(state.index.generated_at).toLocaleTimeString();
-  }
+function connectionLabel() {
   if (state.error) return "not connected";
-  if (state.queueStale) return "queue stale";
-  const stamp = latestStamp();
-  return stamp ? "live · " + stamp : (state.projects.length ? "live" : "connecting");
+  if (state.fleet && state.queueStale) return "queue stale";
+  if (state.fleet) return state.projects.length ? "live" : "connecting";
+  if (!state.index) return "connecting";
+  return "live";
+}
+function paintLive() {
+  const live = document.getElementById("live");
+  if (!live) return;
+  const stale = !!(state.error || (state.fleet && state.queueStale));
+  live.className = "live" + (stale ? " stale" : "");
+  const label = connectionLabel();
+  const status = document.getElementById("live-status");
+  const clock = document.getElementById("clock");
+  if (status) status.textContent = label;
+  if (clock) clock.textContent = label === "live" ? new Date().toLocaleTimeString() : "";
 }
 function fleetTitle() {
   const projects = visibleProjects();
@@ -1416,9 +1417,7 @@ function render() {
   document.querySelectorAll("[data-view]").forEach((a) => {
     if (a.dataset.view === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   });
-  const live = document.getElementById("live");
-  live.className = "live" + (state.error || (state.fleet && state.queueStale) ? " stale" : "");
-  live.replaceChildren(el("span", { text: liveLabel() }));
+  paintLive();
   const target = document.getElementById("view");
   const keep = document.activeElement && target.contains(document.activeElement) ? null : document.activeElement;
   const scrollers = ".joblist, pre.file, .d-doc, .d-files, .filelist";
@@ -1483,7 +1482,7 @@ async function refreshQueue() {
     state.queueErrors = errors;
     state.queueStale = false;
     if (changed) render();
-    else document.getElementById("live").replaceChildren(el("span", { text: liveLabel() }));
+    else paintLive();
   } catch (error) {
     state.queueStale = true;
     render();
@@ -1500,8 +1499,7 @@ async function refreshFleet() {
     render();
     refetchDrawer();
   } else {
-    document.getElementById("live").className = "live" + (state.queueStale ? " stale" : "");
-    document.getElementById("live").replaceChildren(el("span", { text: liveLabel() }));
+    paintLive();
   }
 }
 async function refreshSingle() {
@@ -1514,7 +1512,7 @@ async function refreshSingle() {
   if (changed || hadError || route().view === "config") {
     render();
     refetchDrawer();
-  } else document.getElementById("live").replaceChildren(el("span", { text: "live · " + new Date(index.generated_at).toLocaleTimeString() }));
+  } else paintLive();
 }
 async function tryProjects() {
   // false: this server has no fleet. null: try again next tick. object: the fleet.
@@ -1573,6 +1571,7 @@ window.addEventListener("hashchange", () => { if (route().view === "config") ref
 render();
 refresh();
 setInterval(refresh, REFRESH_MS);
+setInterval(paintLive, 1000);
 </script>
 </body>
 </html>
