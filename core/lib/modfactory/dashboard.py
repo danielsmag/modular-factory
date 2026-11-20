@@ -1,14 +1,20 @@
 """`factory dashboard`: serve the read-only dashboard on this machine."""
 
 import json
+import os
 import webbrowser
+from collections.abc import Callable
+from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from . import config, graph
 from .store import Store
-from .util import CORE, FactoryError, Refused
+from .util import CORE, FactoryError, Refused, user_dir
+
+STATE_NAME: str = "dashboard.json"
 
 SERVED = {".md": "text/plain", ".log": "text/plain"}
 
@@ -67,18 +73,86 @@ def handler(repo):
     return Handler
 
 
-def serve(repo, port=4747, open_browser=True, say=print):
+@dataclass
+class RunningDashboard:
+    pid: int
+    port: int
+    url: str
+
+
+def state_file() -> Path:
+    return user_dir() / STATE_NAME
+
+
+def alive(pid: int) -> bool:
+    if pid <= 1:
+        return False
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", port), handler(repo))
-    except OSError as e:
-        raise Refused(f"port {port} can't be used ({e.strerror}). Pick another with --port.") from e
-    url = f"http://127.0.0.1:{server.server_address[1]}/"
-    say(f"mfactory dashboard: {url}  (read-only, this machine only; Ctrl C stops it)")
-    if open_browser:
-        webbrowser.open(url)
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def running() -> RunningDashboard | None:
+    path: Path = state_file()
+    if not path.is_file():
+        return None
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        say("")
+        raw: object = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    pid: object = raw.get("pid")
+    port: object = raw.get("port")
+    url: object = raw.get("url")
+    if not isinstance(pid, int) or not isinstance(port, int) or not isinstance(url, str) or not alive(pid):
+        path.unlink(missing_ok=True)
+        return None
+    return RunningDashboard(pid, port, url)
+
+
+def claim(port: int, url: str) -> None:
+    other: RunningDashboard | None = running()
+    if other is not None and other.pid != os.getpid():
+        raise Refused(f"dashboard already running at {other.url}. Stop it with `mfactory stop`.")
+    path: Path = state_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, int | str] = {"pid": os.getpid(), "port": port, "url": url}
+    path.write_text(json.dumps(payload) + "\n")
+
+
+def release() -> None:
+    path: Path = state_file()
+    if not path.is_file():
+        return
+    try:
+        raw: object = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return
+    if isinstance(raw, dict) and raw.get("pid") == os.getpid():
+        path.unlink(missing_ok=True)
+
+
+def serve(repo: Path, port: int = 4747, open_browser: bool = True, say: Callable[[str], None] = print) -> None:
+    try:
+        server: ThreadingHTTPServer = ThreadingHTTPServer(("127.0.0.1", port), handler(repo))
+    except OSError as error:
+        raise Refused(f"port {port} can't be used ({error.strerror}). Pick another with --port.") from error
+    bound: int = server.server_address[1]
+    url: str = f"http://127.0.0.1:{bound}/"
+    try:
+        claim(bound, url)
+        say(f"mfactory dashboard: {url}  (read-only, this machine only; Ctrl C stops it)")
+        if open_browser:
+            webbrowser.open(url)
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            say("")
     finally:
+        release()
         server.server_close()

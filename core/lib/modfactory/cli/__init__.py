@@ -18,6 +18,7 @@ from ..util import ConfigError, FactoryError, Refused, find_repo, version
 from .fleet import fleet_command
 from .maintain import status, status_all, uninstall, upgrade_all, upgrade_self
 from .parser import parser
+from .service import start_dashboard, stop_dashboard
 
 
 def _stale_note(cfg) -> None:
@@ -43,6 +44,17 @@ def _inside_repo() -> bool:
     return True
 
 
+def _project_repo() -> Path | None:
+    """A checkout with factory.toml. A plain git repository is not a project."""
+    try:
+        repo: Path = find_repo()
+    except Refused:
+        return None
+    if not (repo / config.FILE).is_file():
+        return None
+    return repo
+
+
 def _subscribed(repo: Path) -> tuple[fleet_mod.Fleet, str] | None:
     """The fleet and this checkout's label, when the checkout is in the fleet file."""
     try:
@@ -63,6 +75,10 @@ def run(args: argparse.Namespace) -> int:
     if command == "version":
         print(version())
         return 0
+    if command == "start":
+        return start_dashboard(args)
+    if command == "stop":
+        return stop_dashboard()
     if command == "fleet":
         return fleet_command(args)
     if command == "hook":
@@ -78,7 +94,7 @@ def run(args: argparse.Namespace) -> int:
         return upgrade_all(args.ref, args.source)
     if command == "status" and (args.all or not _inside_repo()):
         return status_all()
-    if command == "dashboard" and (args.all or not _inside_repo()):
+    if command == "dashboard" and (args.all or _project_repo() is None):
         group: fleet_mod.Fleet = fleet_mod.Fleet.find()
         fleet_mod.serve(group.file, args.port, not args.no_open)
         return 0

@@ -33,6 +33,14 @@ def version():
     return (CORE / "VERSION").read_text().strip()
 
 
+def user_dir() -> Path:
+    """This user's factory directory. `FACTORY_HOME` overrides `~/.mfactory`."""
+    chosen: str | None = os.environ.get("FACTORY_HOME")
+    if chosen:
+        return Path(chosen).expanduser()
+    return Path.home() / ".mfactory"
+
+
 def is_generated(text: str) -> bool:
     """True when sync wrote this file, including files written before the mfactory rename."""
     return GENERATED in text or LEGACY_GENERATED in text

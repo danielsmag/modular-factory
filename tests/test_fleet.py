@@ -456,6 +456,33 @@ def test_dashboard_inside_a_subscribed_repo_opens_that_project(world, monkeypatc
     assert "single" not in seen
 
 
+def test_dashboard_in_a_plain_git_checkout_opens_the_fleet(world, monkeypatch, tmp_path):
+    (world.repo / "factory.toml").unlink()
+    monkeypatch.chdir(world.repo)
+    file: Path = tmp_path / "mfactory" / "fleet.toml"
+    file.parent.mkdir(parents=True)
+    group: Fleet = Fleet(file, [])
+    group.save()
+    seen: dict[str, object] = {}
+
+    def serve(
+        fleet_file: Path, port: int = 4747, open_browser: bool = True,
+        say: object = print, project: str | None = None,
+    ) -> None:
+        seen["file"] = fleet_file
+        seen["project"] = project
+
+    def single(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
+        seen["single"] = repo_arg
+
+    monkeypatch.setattr("modfactory.cli.fleet_mod.serve", serve)
+    monkeypatch.setattr("modfactory.cli.dash.serve", single)
+    assert main(["dashboard", "--no-open"]) == 0
+    assert seen["file"] == file
+    assert seen["project"] is None
+    assert "single" not in seen
+
+
 def test_dashboard_inside_an_unsubscribed_repo_stays_on_that_repo(world, monkeypatch):
     monkeypatch.chdir(world.repo)
     seen: dict[str, object] = {}

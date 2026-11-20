@@ -323,6 +323,34 @@ def test_the_dashboard_answers_only_to_its_own_address(served):
     assert error.value.code == 403
 
 
+def test_start_dashboard_serves_until_stop(world):
+    import socket
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    url = f"http://127.0.0.1:{port}/"
+    try:
+        started = world.cli("start", "dashboard", "--port", port, "--no-open")
+        assert started.returncode == 0, started.stderr
+        assert url in started.stdout
+        with urllib.request.urlopen(url + "jobs/index.json", timeout=5) as response:
+            body = json.loads(response.read().decode())
+        assert body["jobs"] == []
+        again = world.cli("start", "dashboard", "--no-open")
+        assert again.returncode == 1
+        assert "already running" in again.stderr
+        stopped = world.cli("stop", "dashboard")
+        assert stopped.returncode == 0, stopped.stderr
+        assert f"stopped {url}" in stopped.stdout
+        with pytest.raises(urllib.error.URLError):
+            urllib.request.urlopen(url, timeout=2)
+        quiet = world.cli("stop")
+        assert quiet.returncode == 0
+        assert "not running" in quiet.stdout
+    finally:
+        world.cli("stop")
+
+
 def test_the_dashboard_page_never_puts_job_text_into_html_unescaped():
     page = (ROOT / "core/dashboard.html").read_text()
     for unsafe in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval("):

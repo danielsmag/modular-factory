@@ -181,7 +181,7 @@ mfactory fleet dashboard
 mfactory install | upgrade | uninstall | doctor | status | sync
 mfactory config show | graph | models | skills     see the configuration
 mfactory queue | create | next | done | answer     run jobs (the /mfactory skill uses these)
-mfactory summary | checks | dashboard | version
+mfactory summary | checks | dashboard | start dashboard | stop | version
 mfactory fleet subscribe | unsubscribe | list | queue | dashboard
 ```
 

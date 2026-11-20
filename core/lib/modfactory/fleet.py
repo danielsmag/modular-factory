@@ -20,7 +20,8 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from urllib.parse import quote, unquote, urlsplit
 
-from .util import CORE, FactoryError, Refused, find_repo, first_line, run, write_atomic
+from .dashboard import claim, release
+from .util import CORE, FactoryError, Refused, find_repo, first_line, run, user_dir, write_atomic
 
 FILE = "fleet.toml"
 SCHEMA = 1
@@ -30,14 +31,6 @@ HEADER: str = (
     "# Checkouts where the factory is already installed. One job still belongs to one project.\n"
     "schema = 1\n"
 )
-
-
-def user_dir() -> Path:
-    """This user's factory directory. `FACTORY_HOME` overrides `~/.mfactory`."""
-    chosen: str | None = os.environ.get("FACTORY_HOME")
-    if chosen:
-        return Path(chosen).expanduser()
-    return Path.home() / ".mfactory"
 
 
 def user_file() -> Path:
@@ -522,12 +515,15 @@ def serve(
     url: str = f"http://127.0.0.1:{server.server_address[1]}/"
     if project:
         url = f"{url}?project={quote(project, safe='')}"
-    say(f"mfactory fleet: {url}  (read-only, this machine only; Ctrl C stops it)")
-    if open_browser:
-        webbrowser.open(url)
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        say("")
+        claim(server.server_address[1], url)
+        say(f"mfactory fleet: {url}  (read-only, this machine only; Ctrl C stops it)")
+        if open_browser:
+            webbrowser.open(url)
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            say("")
     finally:
+        release()
         server.server_close()

@@ -6,6 +6,7 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- `mfactory start dashboard` serves the dashboard in the background. `mfactory stop` ends it. `mfactory dashboard` still stays in the foreground until Ctrl C.
 - The command is `mfactory`. Generated agents are `mfactory-*`, and the skill
   command is `/mfactory`. A `/factory` comment on an issue or pull request still
   counts. `core/bin/factory` remains so an upgrade from 0.1.0 can sync, and

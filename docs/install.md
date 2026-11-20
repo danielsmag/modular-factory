@@ -162,7 +162,11 @@ To watch the jobs:
 
 ```bash
 .factory/bin/mfactory dashboard
+mfactory start dashboard
+mfactory stop
 ```
+
+`dashboard` stays in the foreground until Ctrl C. `start dashboard` serves the same page and returns. `stop` ends that process.
 
 ## Several projects
 
@@ -179,7 +183,7 @@ mfactory fleet dashboard
 mfactory fleet unsubscribe
 ```
 
-`subscribe` and `unsubscribe` take a path when you are not standing in the repository. `mfactory dashboard` and `mfactory status` outside a repository use this same list. `mfactory upgrade --all` upgrades every subscribed project. A project that fails does not stop the others, and each repository still needs its own commit.
+`subscribe` and `unsubscribe` take a path when you are not standing in the repository. `mfactory dashboard` outside a repository, or in a checkout with no `factory.toml`, uses this same list. `mfactory status` outside a repository does too. `mfactory upgrade --all` upgrades every subscribed project. A project that fails does not stop the others, and each repository still needs its own commit.
 
 A `fleet.toml` in the current directory or a parent still wins, and so does `FACTORY_FLEET`. `mfactory fleet init` writes that local file. `fleet add` accepts a checkout only after the factory is installed there.
 

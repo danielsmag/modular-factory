@@ -14,7 +14,7 @@ see the configuration
 run jobs (the orchestrator skill uses these)
   queue | create <issue> | next <job> | done <job> | answer <job> <outcome> | summary
 other
-  checks | dashboard | version
+  checks | dashboard | start dashboard | stop | version
 several projects
   fleet subscribe [path] | unsubscribe [path] | list | queue | dashboard
 
@@ -83,10 +83,21 @@ def parser() -> argparse.ArgumentParser:
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
     sub.add_parser("hook")  # no help text: argparse then leaves it out of the list
+    def dashboard_flags(target: argparse.ArgumentParser) -> None:
+        target.add_argument("--port", type=int, default=4747)
+        target.add_argument("--no-open", action="store_true", help="don't open a browser")
+        target.add_argument("--all", action="store_true", help="one board for every subscribed project")
+
     board: argparse.ArgumentParser = sub.add_parser("dashboard", help="serve the read-only dashboard on this machine")
-    board.add_argument("--port", type=int, default=4747)
-    board.add_argument("--no-open", action="store_true", help="don't open a browser")
-    board.add_argument("--all", action="store_true", help="one board for every subscribed project")
+    dashboard_flags(board)
+    start: argparse.ArgumentParser = sub.add_parser("start", help="start a service in the background")
+    start_sub: argparse._SubParsersAction[argparse.ArgumentParser] = start.add_subparsers(
+        dest="service", required=True, metavar="<service>")
+    start_board: argparse.ArgumentParser = start_sub.add_parser(
+        "dashboard", help="serve the dashboard and return")
+    dashboard_flags(start_board)
+    stop: argparse.ArgumentParser = sub.add_parser("stop", help="stop the background dashboard")
+    stop.add_argument("service", nargs="?", choices=["dashboard"], default="dashboard")
     fleet: argparse.ArgumentParser = sub.add_parser(
         "fleet", help="open the fleet dashboard; add a command to manage the list")
     fleet.add_argument("--port", type=int, default=4747)
