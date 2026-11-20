@@ -11,7 +11,7 @@ from ..util import find_repo
 
 
 def fleet_command(args: argparse.Namespace) -> int:
-    command: str = args.fleet_command
+    command: str = args.fleet_command or "dashboard"
     if command == "init":
         file: Path = fleet_mod.Fleet.init(Path.cwd())
         print(f"ok    {file}")

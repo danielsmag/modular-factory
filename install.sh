@@ -86,20 +86,24 @@ fi
 [ -f "$SOURCE/core/bin/mfactory" ] || fail "$SOURCE is not a copy of the factory"
 
 if [ "$GLOBAL" = 1 ]; then
-  if [ -n "${FACTORY_HOME:-}" ]; then
-    HOME_DIR="$FACTORY_HOME"
-  elif [ -n "${XDG_DATA_HOME:-}" ]; then
-    HOME_DIR="$XDG_DATA_HOME/modular-factory"
-  else
-    HOME_DIR="$HOME/.local/share/modular-factory"
-  fi
+  HOME_DIR="${FACTORY_HOME:-$HOME/.mfactory}"
   BIN_DIR="${FACTORY_BIN_DIR:-$HOME/.local/bin}"
+  saved=""
+  if [ -f "$HOME_DIR/fleet.toml" ]; then
+    saved="$(mktemp)"
+    cp "$HOME_DIR/fleet.toml" "$saved"
+  fi
   rm -rf "$HOME_DIR"
   mkdir -p "$HOME_DIR" "$BIN_DIR"
   cp -a "$SOURCE"/. "$HOME_DIR"/
+  if [ -n "$saved" ]; then
+    cp "$saved" "$HOME_DIR/fleet.toml"
+    rm -f "$saved"
+  fi
   printf '%s\n' "$HOME_DIR" > "$HOME_DIR/.global"
   ln -sfn "$HOME_DIR/core/bin/mfactory" "$BIN_DIR/mfactory"
-  echo "ok    mfactory installed at $BIN_DIR/mfactory"
+  echo "ok    ~/.mfactory is $HOME_DIR"
+  echo "ok    command $BIN_DIR/mfactory"
   case ":$PATH:" in
     *":$BIN_DIR:"*) ;;
     *) echo "note: add $BIN_DIR to PATH: export PATH=\"$BIN_DIR:\$PATH\"" ;;

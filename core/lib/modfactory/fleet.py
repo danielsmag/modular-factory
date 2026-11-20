@@ -32,11 +32,17 @@ HEADER = (
 )
 
 
+def user_dir() -> Path:
+    """This user's factory directory. `FACTORY_HOME` overrides `~/.mfactory`."""
+    chosen: str | None = os.environ.get("FACTORY_HOME")
+    if chosen:
+        return Path(chosen).expanduser()
+    return Path.home() / ".mfactory"
+
+
 def user_file() -> Path:
-    """The fleet file for this user. `subscribe` creates it."""
-    config_home: str | None = os.environ.get("XDG_CONFIG_HOME")
-    base: Path = Path(config_home).expanduser() if config_home else Path.home() / ".config"
-    return base / "modular-factory" / FILE
+    """The fleet file for this user. `subscribe` creates it, and the directory with it."""
+    return user_dir() / FILE
 
 
 def toml_string(value: str) -> str:

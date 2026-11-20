@@ -165,7 +165,7 @@ approvals and feedback go through `/mfactory` or an issue comment.
 
 ## Several projects
 
-Install the factory in each project, then subscribe that checkout. The list lives in `~/.config/modular-factory/fleet.toml`. No extra directory is required.
+Install the factory in each project, then subscribe that checkout. The list lives in `~/.mfactory/fleet.toml`.
 
 ```bash
 cd /path/to/project-a && mfactory fleet subscribe

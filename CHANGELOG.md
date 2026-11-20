@@ -13,7 +13,8 @@ changes when it does, and this file says what to change.
 - `install.sh --global` installs `mfactory` for your user. `mfactory install`,
   `upgrade`, `uninstall`, `doctor`, `status` and `sync` manage a project.
   `mfactory upgrade --self` updates that user install.
-- The fleet file for a user is `~/.config/modular-factory/fleet.toml`.
+- The fleet file for a user is `~/.mfactory/fleet.toml`. `install.sh --global`
+  installs the command into `~/.mfactory`.
   `mfactory fleet subscribe` adds a checkout. Outside a repository, `mfactory
   dashboard` and `mfactory status` show every subscribed project. `mfactory
   upgrade --all` upgrades each one.

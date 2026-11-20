@@ -167,9 +167,24 @@ const FALLBACK = [
   ["needs-you", ["spec-approval", "escalated"]],
   ["done", ["done", "rejected", "failed"]],
 ];
+const CHOICE_KEY = "mfactory.fleet.selected";
+function readChoice() {
+  try {
+    if (typeof localStorage === "undefined") return "all";
+    return localStorage.getItem(CHOICE_KEY) || "all";
+  } catch (error) {
+    return "all";
+  }
+}
+function writeChoice(id) {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(CHOICE_KEY, id);
+  } catch (error) {}
+}
 const state = {
   projects: [], queueRows: [], queueErrors: [], projectsDown: false, queueStale: false,
-  selected: "all", query: "", drawer: null,
+  selected: readChoice(), query: "", drawer: null,
 };
 
 function el(tag, props, ...kids) {
@@ -628,7 +643,7 @@ function visibleProjects() {
 function filterButton(id, text) {
   return el("button", {
     type: "button", text: text, "aria-pressed": state.selected === id ? "true" : "false",
-    onclick: () => { state.selected = id; render(); },
+    onclick: () => { state.selected = id; writeChoice(id); render(); },
   });
 }
 function renderFilters() {
@@ -643,7 +658,10 @@ function markLive() {
   live.replaceChildren(el("span", { text: label }));
 }
 function render() {
-  if (state.selected !== "all" && !state.projects.some((project) => project.id === state.selected)) state.selected = "all";
+  if (state.projects.length && state.selected !== "all" && !state.projects.some((project) => project.id === state.selected)) {
+    state.selected = "all";
+    writeChoice("all");
+  }
   renderFilters();
   markLive();
   const projects = visibleProjects();

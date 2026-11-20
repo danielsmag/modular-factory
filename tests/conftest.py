@@ -22,7 +22,7 @@ CLI = ROOT / "core" / "bin" / "mfactory"
 @pytest.fixture(autouse=True)
 def isolated_user_config(tmp_path, monkeypatch):
     """Fleet commands must not read or write the developer's real fleet file."""
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.setenv("FACTORY_HOME", str(tmp_path / "mfactory"))
 
 
 BASE_CONFIG = """\

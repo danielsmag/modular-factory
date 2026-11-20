@@ -88,9 +88,11 @@ def parser() -> argparse.ArgumentParser:
     board.add_argument("--no-open", action="store_true", help="don't open a browser")
     board.add_argument("--all", action="store_true", help="one board for every subscribed project")
     fleet: argparse.ArgumentParser = sub.add_parser(
-        "fleet", help="one queue and one dashboard for several installed projects")
+        "fleet", help="open the fleet dashboard; add a command to manage the list")
+    fleet.add_argument("--port", type=int, default=4747)
+    fleet.add_argument("--no-open", action="store_true", help="don't open a browser")
     fleet_sub: argparse._SubParsersAction[argparse.ArgumentParser] = fleet.add_subparsers(
-        dest="fleet_command", required=True, metavar="<command>")
+        dest="fleet_command", required=False, metavar="<command>")
     fleet_sub.add_parser("init", help="write fleet.toml in the current directory")
     subscribe: argparse.ArgumentParser = fleet_sub.add_parser(
         "subscribe", help="add this repository, or a path, to the user fleet")

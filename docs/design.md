@@ -187,7 +187,8 @@ each tool allows.
   each request instead of relying on a file written at each change, so it
   cannot show an out-of-date list.
 - **A fleet is a list of checkouts.** The default file is
-  `~/.config/modular-factory/fleet.toml`. `mfactory fleet subscribe` creates it.
+  `~/.mfactory/fleet.toml`. `install.sh --global` creates `~/.mfactory`.
+  `mfactory fleet subscribe` creates the fleet file.
   A `fleet.toml` in the current directory or a parent, or `FACTORY_FLEET`, wins.
   The fleet runs each project's own `mfactory queue` and reads that project's
   job files. It does not merge pipelines or move a job between repositories.

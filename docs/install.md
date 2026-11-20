@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/ins
 | `--version v0.1.0` | Install that release. Default: the latest release, or the `main` branch before the first release. |
 | `--source DIR` | Install from a local copy of this repository instead of downloading. |
 
-This puts the files in `~/.local/share/modular-factory` (`XDG_DATA_HOME` or `FACTORY_HOME` when set) and links `~/.local/bin/mfactory`. Then, in each repository:
+This creates `~/.mfactory` (`FACTORY_HOME` when set) and links `~/.local/bin/mfactory`. The fleet list is `~/.mfactory/fleet.toml`. Then, in each repository:
 
 ```bash
 mfactory install --tool claude
@@ -166,7 +166,7 @@ To watch the jobs:
 
 ## Several projects
 
-The factory in a project only sees that project. Your fleet file is `~/.config/modular-factory/fleet.toml` (`XDG_CONFIG_HOME` when that is set). Subscribe from inside a project that already has the factory:
+The factory in a project only sees that project. Your fleet file is `~/.mfactory/fleet.toml`. Subscribe from inside a project that already has the factory:
 
 ```bash
 cd /path/to/project-a

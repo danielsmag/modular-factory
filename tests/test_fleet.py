@@ -411,6 +411,24 @@ if (JSON.stringify(cards) !== JSON.stringify(["9", "10"])) throw new Error(JSON.
     assert result.returncode == 0, result.stderr
 
 
+def test_fleet_alone_opens_the_dashboard(tmp_path, monkeypatch):
+    repo: Path = checkout(tmp_path, "alpha")
+    monkeypatch.chdir(repo)
+    assert main(["fleet", "subscribe"]) == 0
+    seen: dict[str, object] = {}
+
+    def serve(file: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
+        seen["file"] = file
+        seen["port"] = port
+        seen["open"] = open_browser
+
+    monkeypatch.setattr("modfactory.cli.fleet.fleet_mod.serve", serve)
+    assert main(["fleet", "--port", "4751", "--no-open"]) == 0
+    assert seen["port"] == 4751
+    assert seen["open"] is False
+    assert seen["file"] is not None
+
+
 def test_subscribe_writes_the_user_fleet_and_a_local_file_wins(tmp_path, monkeypatch, capsys):
     repo: Path = checkout(tmp_path, "alpha")
     monkeypatch.chdir(repo)

@@ -268,6 +268,9 @@ def upgrade_self(ref: str = "latest", source: str | None = None, say: Callable[[
             if src.is_file():
                 shutil.copy2(src, tree / name)
         (tree / ".global").write_text(f"{home}\n")
+        fleet_list: Path = home / "fleet.toml"
+        if fleet_list.is_file():
+            shutil.copy2(fleet_list, tree / "fleet.toml")
         previous: Path = home.with_name(home.name + ".previous")
         if previous.exists():
             shutil.rmtree(previous)

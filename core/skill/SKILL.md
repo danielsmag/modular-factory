@@ -184,7 +184,7 @@ feedback or asking for something new, ask.
 
 - **The dashboard**: `.factory/bin/mfactory dashboard` serves a read-only view
   of every job on this machine and prints its address.
-- **Several projects**: `mfactory fleet` reads `~/.config/modular-factory/fleet.toml`.
+- **Several projects**: `mfactory fleet` reads `~/.mfactory/fleet.toml`.
   `mfactory fleet subscribe` adds the repository you are in. It does not build.
   `[run].concurrency` caps one project. `[fleet].concurrency` caps `new` and
   `resume` rows across every project. `fleet.toml` or `fleet queue --concurrency N`
