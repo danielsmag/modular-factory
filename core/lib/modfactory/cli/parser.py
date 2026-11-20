@@ -110,7 +110,7 @@ def parser() -> argparse.ArgumentParser:
     queue.add_argument("--concurrency", type=int, metavar="N",
                        help="fleet-wide cap for new and resume rows (default: [fleet].concurrency)")
     fleet_board: argparse.ArgumentParser = fleet_sub.add_parser(
-        "dashboard", help="serve one read-only board for every project")
+        "dashboard", help="serve the dashboard for every subscribed project")
     fleet_board.add_argument("--port", type=int, default=4747)
     fleet_board.add_argument("--no-open", action="store_true", help="don't open a browser")
     sub.add_parser("version", help="print the factory's version")

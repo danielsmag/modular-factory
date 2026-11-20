@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 from .. import checks, config, graph, install
 from .. import dashboard as dash
@@ -40,6 +41,21 @@ def _inside_repo() -> bool:
     except Refused:
         return False
     return True
+
+
+def _subscribed(repo: Path) -> tuple[fleet_mod.Fleet, str] | None:
+    """The fleet and this checkout's label, when the checkout is in the fleet file."""
+    try:
+        group: fleet_mod.Fleet = fleet_mod.Fleet.find()
+    except Refused as error:
+        if not str(error).startswith("no fleet"):
+            raise
+        return None
+    resolved: Path = repo.resolve()
+    for project in group.projects:
+        if project.path == resolved:
+            return group, group.label(project)
+    return None
 
 
 def run(args: argparse.Namespace) -> int:
@@ -105,7 +121,13 @@ def run(args: argparse.Namespace) -> int:
     elif command == "checks":
         return checks.run_here(cfg)
     elif command == "dashboard":
-        dash.serve(repo, args.port, not args.no_open)
+        subscribed: tuple[fleet_mod.Fleet, str] | None = _subscribed(repo)
+        if subscribed is None:
+            dash.serve(repo, args.port, not args.no_open)
+        else:
+            group: fleet_mod.Fleet = subscribed[0]
+            label: str = subscribed[1]
+            fleet_mod.serve(group.file, args.port, not args.no_open, project=label)
     else:
         factory: Factory = Factory(cfg)
         if command == "queue":

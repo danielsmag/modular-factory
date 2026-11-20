@@ -18,15 +18,15 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from subprocess import CompletedProcess
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from .util import CORE, FactoryError, Refused, find_repo, first_line, run, write_atomic
 
 FILE = "fleet.toml"
 SCHEMA = 1
-QUEUE_TTL_SECONDS = 15.0
-SERVED = {".md": "text/plain", ".log": "text/plain"}
-HEADER = (
+QUEUE_TTL_SECONDS: float = 15.0
+SERVED: dict[str, str] = {".md": "text/plain", ".log": "text/plain"}
+HEADER: str = (
     "# Checkouts where the factory is already installed. One job still belongs to one project.\n"
     "schema = 1\n"
 )
@@ -285,6 +285,25 @@ class Fleet:
             if isinstance(info, dict) and isinstance(info.get("description"), str):
                 description = info["description"]
             jobs: object = body.get("jobs")
+            version: str = body.get("version") if isinstance(body.get("version"), str) else ""
+            generated_at: str = body.get("generated_at") if isinstance(body.get("generated_at"), str) else ""
+            tools: list[str] = []
+            tools_raw: object = body.get("tools")
+            if isinstance(tools_raw, list):
+                for tool in tools_raw:
+                    if isinstance(tool, str):
+                        tools.append(tool)
+            labels: dict[str, str] = {}
+            labels_raw: object = body.get("labels")
+            if isinstance(labels_raw, dict):
+                for key, value in labels_raw.items():
+                    if isinstance(key, str) and isinstance(value, str):
+                        labels[key] = value
+            config_rows: list[dict[str, object]] | None
+            config_error: str | None
+            config_rows, config_error = read_config(project)
+            if config_error:
+                error = f"{error}; {config_error}" if isinstance(error, str) and error else config_error
             item: dict[str, object] = {
                 "id": label,
                 "name": project.path.name,
@@ -292,6 +311,11 @@ class Fleet:
                 "description": description,
                 "error": error,
                 "jobs": jobs if isinstance(jobs, list) else [],
+                "version": version,
+                "generated_at": generated_at,
+                "tools": tools,
+                "labels": labels,
+                "config": config_rows,
             }
             graph: dict[str, object] | None = read_graph(project)
             if graph is not None:
@@ -339,6 +363,31 @@ def read_graph(project: Project) -> dict[str, object] | None:
         if not isinstance(name, str) or not name or not isinstance(edges, list):
             return None
     return loaded
+
+
+def read_config(project: Project) -> tuple[list[dict[str, object]] | None, str | None]:
+    """Rows from ``config.json``. A missing file is ``(None, None)``. A bad file is ``(None, error)``."""
+    path: Path = project.jobs_dir / "config.json"
+    if not path.is_file():
+        return None, None
+    try:
+        text: str = path.read_text()
+    except OSError as error:
+        return None, f"config.json: {error.strerror or 'could not be read'}"
+    try:
+        loaded: object = json.loads(text)
+    except json.JSONDecodeError as error:
+        return None, f"config.json: {error}"
+    if not isinstance(loaded, list):
+        return None, "config.json is not a list"
+    rows: list[dict[str, object]] = []
+    for row in loaded:
+        key: object = row.get("key") if isinstance(row, dict) else None
+        source: object = row.get("source") if isinstance(row, dict) else None
+        if not isinstance(row, dict) or not isinstance(key, str) or not isinstance(source, str) or "value" not in row:
+            return None, "config.json is not a list of settings"
+        rows.append({"key": key, "value": row["value"], "source": source})
+    return rows, None
 
 
 def read_jobs(project: Project) -> dict[str, object]:
@@ -403,7 +452,7 @@ class QueueCache:
 
 
 def handler(file: Path) -> type[BaseHTTPRequestHandler]:
-    page: bytes = (CORE / "fleet.html").read_bytes()
+    page: bytes = (CORE / "dashboard.html").read_bytes()
     cache: QueueCache = QueueCache(file)
 
     class Handler(BaseHTTPRequestHandler):
@@ -460,12 +509,17 @@ def handler(file: Path) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
-def serve(file: Path, port: int = 4747, open_browser: bool = True, say: Callable[[str], None] = print) -> None:
+def serve(
+    file: Path, port: int = 4747, open_browser: bool = True,
+    say: Callable[[str], None] = print, project: str | None = None,
+) -> None:
     try:
         server: ThreadingHTTPServer = ThreadingHTTPServer(("127.0.0.1", port), handler(file))
     except OSError as error:
         raise Refused(f"port {port} can't be used ({error.strerror}). Pick another with --port.") from error
     url: str = f"http://127.0.0.1:{server.server_address[1]}/"
+    if project:
+        url = f"{url}?project={quote(project, safe='')}"
     say(f"mfactory fleet: {url}  (read-only, this machine only; Ctrl C stops it)")
     if open_browser:
         webbrowser.open(url)

@@ -57,8 +57,7 @@ core/lib/modfactory/      the factory's code
 core/roles/*.md           one prompt per agent step and reviewer
 core/skill/SKILL.md       the orchestrator
 core/defaults.toml        the default pipeline and settings
-core/dashboard.html       the dashboard
-core/fleet.html           the dashboard for several projects
+core/dashboard.html       the dashboard: one project, or every subscribed project with a filter
 adapters/*.toml           per tool: folders, agent file format, default models
 install.sh
 tests/
@@ -192,6 +191,8 @@ each tool allows.
   A `fleet.toml` in the current directory or a parent, or `FACTORY_FLEET`, wins.
   The fleet runs each project's own `mfactory queue` and reads that project's
   job files. It does not merge pipelines or move a job between repositories.
+  The dashboard is one page for every subscribed project, with a filter for
+  all of them or one. Each project's pipeline stays its own.
   Each project applies its own `[run].concurrency` first. The fleet then
   applies `[fleet].concurrency` from this factory's `defaults.toml`.
   `concurrency` in `fleet.toml`, or `--concurrency` on `fleet queue`, overrides

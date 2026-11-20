@@ -173,7 +173,7 @@ cd /path/to/project-b && mfactory fleet subscribe
 mfactory fleet dashboard
 ```
 
-`mfactory status` and `mfactory dashboard` outside a repository show every subscribed project. `mfactory upgrade --all` upgrades each one. Each job stays in its own checkout. Open that project and run `/mfactory run` there. The [install guide](docs/install.md#several-projects) has the rest.
+`mfactory dashboard` and `mfactory fleet dashboard` open the same page. It lists every subscribed project, and a filter can show one of them. Inside a subscribed checkout, `mfactory dashboard` opens with that project selected. Outside a repository, or with `--all`, it opens on every project. A checkout that is not subscribed still has its own page. `mfactory status` outside a repository shows every subscribed project. `mfactory upgrade --all` upgrades each one. Each job stays in its own checkout. Open that project and run `/mfactory run` there. The [install guide](docs/install.md#several-projects) has the rest.
 
 ## Commands
 

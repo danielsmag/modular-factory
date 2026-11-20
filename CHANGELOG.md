@@ -23,6 +23,9 @@ changes when it does, and this file says what to change.
   caps one project. `[fleet].concurrency` in `defaults.toml` caps `new` and
   `resume` rows across projects. `fleet.toml` or `--concurrency` overrides
   the fleet cap.
+- One dashboard for every subscribed project. Board, pipeline, jobs and config
+  are the same page, with a filter for All or one project. `mfactory dashboard`
+  inside a subscribed checkout opens that project selected. `fleet.html` is gone.
 
 ## 0.1.0
 

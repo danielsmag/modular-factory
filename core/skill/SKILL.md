@@ -183,7 +183,9 @@ feedback or asking for something new, ask.
   ```
 
 - **The dashboard**: `.factory/bin/mfactory dashboard` serves a read-only view
-  of every job on this machine and prints its address.
+  of every job on this machine and prints its address. When this checkout is
+  in the fleet, that page includes the other subscribed projects and can
+  filter to one of them.
 - **Several projects**: `mfactory fleet` reads `~/.mfactory/fleet.toml`.
   `mfactory fleet subscribe` adds the repository you are in. It does not build.
   `[run].concurrency` caps one project. `[fleet].concurrency` caps `new` and

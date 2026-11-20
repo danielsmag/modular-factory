@@ -176,12 +176,18 @@ def fetch(url, host=None):
 
 
 def test_the_fleet_dashboard_serves_both_projects(served):
-    _one, base = served
+    one, base = served
+    rows: list[dict[str, object]] = [{"key": "run.concurrency", "value": 3, "source": "default"}]
+    (one / ".factory" / "jobs" / "config.json").write_text(json.dumps(rows))
     page, headers = fetch(base + "/")
-    assert page == (ROOT / "core/fleet.html").read_text()
+    assert page == (ROOT / "core/dashboard.html").read_text()
+    assert 'aria-label="Projects"' in page
+    assert 'data-view="pipeline"' in page
     assert "default-src 'none'" in headers["Content-Security-Policy"]
     body: dict = json.loads(fetch(base + "/projects.json")[0])
     by_name: dict = {item["name"]: item for item in body["projects"]}
+    assert by_name["one"]["config"] == rows
+    assert by_name["two"]["config"] is None
     assert by_name["one"]["jobs"][0]["title"] == "Alpha"
     assert by_name["one"]["description"] == "A test project"
     assert by_name["two"]["jobs"][0]["title"] == "Beta"
@@ -242,20 +248,20 @@ def test_the_fleet_dashboard_serves_the_queue_and_caches_it(tmp_path):
 
 
 def test_the_fleet_page_never_puts_job_text_into_html_unescaped():
-    page: str = (ROOT / "core/fleet.html").read_text()
+    page: str = (ROOT / "core/dashboard.html").read_text()
     for unsafe in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval("):
         assert unsafe not in page, unsafe
 
 
 def test_the_fleet_page_loads_nothing_from_elsewhere():
-    page: str = (ROOT / "core/fleet.html").read_text()
+    page: str = (ROOT / "core/dashboard.html").read_text()
     for remote in ("<script src", "<link", "@import", "url(http", 'src="http', "<iframe", "<img"):
         assert remote not in page, remote
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="needs node to parse the page's script")
 def test_the_fleet_script_parses(tmp_path):
-    page: str = (ROOT / "core/fleet.html").read_text()
+    page: str = (ROOT / "core/dashboard.html").read_text()
     script: str = page[page.index("<script>") + len("<script>"):page.rindex("</script>")]
     (tmp_path / "page.js").write_text(script)
     result: subprocess.CompletedProcess[str] = subprocess.run(
@@ -363,9 +369,13 @@ def test_snapshot_attaches_only_a_real_graph(tmp_path: Path) -> None:
     good_jobs: Path = good / ".factory" / "jobs"
     good_jobs.mkdir(parents=True)
     (good_jobs / "graph.json").write_text(json.dumps(graph))
+    (good_jobs / "config.json").write_text(json.dumps([
+        {"key": "run.concurrency", "value": 3, "source": "default"},
+    ]))
     broken_jobs: Path = broken / ".factory" / "jobs"
     broken_jobs.mkdir(parents=True)
     (broken_jobs / "graph.json").write_text("{")
+    (broken_jobs / "config.json").write_text("{")
     partial_jobs: Path = partial / ".factory" / "jobs"
     partial_jobs.mkdir(parents=True)
     (partial_jobs / "graph.json").write_text('{"steps": [{"name": "intake"}], "end_states": []}')
@@ -382,6 +392,10 @@ def test_snapshot_attaches_only_a_real_graph(tmp_path: Path) -> None:
     good_graph: object = found["good"]["graph"]
     assert isinstance(good_graph, dict)
     assert good_graph["start"] == "intake"
+    assert found["good"]["config"] == [{"key": "run.concurrency", "value": 3, "source": "default"}]
+    assert found["broken"]["config"] is None
+    assert "config.json" in str(found["broken"]["error"])
+    assert found["missing"]["config"] is None
     assert "graph" not in found["broken"]
     assert "graph" not in found["partial"]
     assert "graph" not in found["missing"]
@@ -389,7 +403,7 @@ def test_snapshot_attaches_only_a_real_graph(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(not shutil.which("node"), reason="needs node to run the page's script")
 def test_a_queue_row_for_an_existing_job_is_not_a_second_card(tmp_path: Path) -> None:
-    page: str = (ROOT / "core/fleet.html").read_text()
+    page: str = (ROOT / "core/dashboard.html").read_text()
     script: str = page.split("<script>", 1)[1].rsplit("</script>", 1)[0].split("/* boot */", 1)[0]
     script += """
 const rows = [
@@ -400,8 +414,8 @@ const rows = [
   { action: "resume", issue: "3", job: "001-c", note: "resume" },
   { action: "hold", issue: "4", job: "001-d", note: "capped resume" },
 ];
-const jobs = [{ id: "001-a", issue: 1 }, { id: "001-d", issue: 4 }];
-const cards = queueCards(rows, jobs).map((row) => row.issue);
+const listed = [{ id: "001-a", issue: 1 }, { id: "001-d", issue: 4 }];
+const cards = queueCards(rows, listed).map((row) => row.issue);
 if (JSON.stringify(cards) !== JSON.stringify(["9", "10"])) throw new Error(JSON.stringify(cards));
 """
     (tmp_path / "queue.js").write_text(script)
@@ -409,6 +423,59 @@ if (JSON.stringify(cards) !== JSON.stringify(["9", "10"])) throw new Error(JSON.
         ["node", str(tmp_path / "queue.js")], capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_dashboard_inside_a_subscribed_repo_opens_that_project(world, monkeypatch):
+    real_factory(world.repo)
+    monkeypatch.chdir(world.repo)
+    assert main(["fleet", "subscribe"]) == 0
+    seen: dict[str, object] = {}
+
+    def serve(
+        file: Path, port: int = 4747, open_browser: bool = True,
+        say: object = print, project: str | None = None,
+    ) -> None:
+        seen["file"] = file
+        seen["project"] = project
+        seen["open"] = open_browser
+
+    def single(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
+        seen["single"] = repo_arg
+
+    monkeypatch.setattr("modfactory.cli.fleet_mod.serve", serve)
+    monkeypatch.setattr("modfactory.cli.dash.serve", single)
+    assert main(["dashboard", "--no-open"]) == 0
+    assert seen["project"] == "repo"
+    assert seen["open"] is False
+    assert seen["file"] is not None
+    assert "single" not in seen
+
+    seen.clear()
+    assert main(["dashboard", "--all", "--no-open"]) == 0
+    assert seen["project"] is None
+    assert "single" not in seen
+
+
+def test_dashboard_inside_an_unsubscribed_repo_stays_on_that_repo(world, monkeypatch):
+    monkeypatch.chdir(world.repo)
+    seen: dict[str, object] = {}
+
+    def serve(
+        file: Path, port: int = 4747, open_browser: bool = True,
+        say: object = print, project: str | None = None,
+    ) -> None:
+        seen["fleet"] = True
+
+    def single(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
+        seen["repo"] = repo_arg
+        seen["open"] = open_browser
+
+    monkeypatch.setattr("modfactory.cli.fleet_mod.serve", serve)
+    monkeypatch.setattr("modfactory.cli.dash.serve", single)
+    assert main(["dashboard", "--no-open"]) == 0
+    assert seen["repo"] == world.repo.resolve()
+    assert seen["open"] is False
+    assert "fleet" not in seen
 
 
 def test_fleet_alone_opens_the_dashboard(tmp_path, monkeypatch):

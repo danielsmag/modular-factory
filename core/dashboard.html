@@ -47,6 +47,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .nav a::after { content: "]"; }
 .nav a:hover { color: var(--accent); }
 .nav a[aria-current="page"] { background: var(--text); color: var(--bg); }
+.top .filters { margin-bottom: 0; flex: 1; min-width: 0; }
+.top .filters:empty { display: none; }
 .tools { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-2); padding: 6px 10px; min-width: 210px; background: var(--bg); }
 .search:focus-within { border-color: var(--accent); }
@@ -259,6 +261,8 @@ pre.file { margin: 0; background: var(--bg); border: 1px solid var(--line); padd
 
 .notice { border: 1px solid var(--line-2); padding: 14px 16px; border-radius: 4px; color: var(--muted); font-size: 13px; }
 .notice code { font-family: var(--mono); color: var(--text); }
+.error { color: var(--bad); font: 12px var(--mono); margin: 0 0 12px; }
+.block-title { margin: 20px 0 8px; font: 500 16px var(--sans); }
 footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--muted); font: 11px var(--mono); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 
 @media (max-width: 1180px) {
@@ -286,7 +290,7 @@ footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--m
 }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 @media (prefers-reduced-motion: no-preference) {
-  .nav a, .tabs button { transition: background .12s, color .12s; }
+  .nav a, .tabs button, .filters button { transition: background .12s, color .12s; }
   .pulse, .kchip.wait { animation: pulse 1.6s ease-in-out infinite; }
 }
 </style>
@@ -303,6 +307,7 @@ footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--m
     <a href="#/jobs" data-view="jobs">Jobs</a>
     <a href="#/config" data-view="config">Config</a>
   </nav>
+  <div id="filters" class="filters" role="group" aria-label="Projects"></div>
   <div class="tools">
     <label class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -323,9 +328,48 @@ footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--m
 // from strings: nodes are created one by one and text goes in as text.
 const SVG = "http://www.w3.org/2000/svg";
 const REFRESH_MS = 5000;
+const QUEUE_MS = 15000;
 const RUNNING = new Set(["agent", "checks", "review", "merge", "verify"]);
-const state = { index: null, graph: null, config: null, error: null, query: "", file: null, source: "all", drawer: null };
+const CHOICE_KEY = "mfactory.fleet.selected";
 const FOOT_NOTE = "read-only · approvals and feedback go through /mfactory or an issue comment";
+const FALLBACK = [
+  ["intake", ["intake", "ask-author"]],
+  ["spec", ["spec"]],
+  ["build", ["build", "gate", "debug"]],
+  ["review", ["review"]],
+  ["approve", ["approve", "merge", "verify"]],
+  ["needs-you", ["spec-approval", "escalated"]],
+  ["done", ["done", "rejected", "failed"]],
+];
+function queryProject() {
+  try {
+    if (typeof location === "undefined") return "";
+    return new URLSearchParams(location.search).get("project") || "";
+  } catch (error) {
+    return "";
+  }
+}
+function readChoice() {
+  const chosen = queryProject();
+  if (chosen) return chosen;
+  try {
+    if (typeof localStorage === "undefined") return "all";
+    return localStorage.getItem(CHOICE_KEY) || "all";
+  } catch (error) {
+    return "all";
+  }
+}
+function writeChoice(id) {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(CHOICE_KEY, id);
+  } catch (error) {}
+}
+const state = {
+  index: null, graph: null, config: null, error: null, query: "", file: null, source: "all", drawer: null,
+  fleet: false, projects: [], selected: readChoice(), queueRows: [], queueErrors: [], queueStale: false,
+};
+if (queryProject()) writeChoice(state.selected);
 
 function el(tag, props, ...kids) {
   const node = document.createElement(tag);
@@ -372,8 +416,19 @@ function span(seconds) {
   return Math.round(seconds / 86400) + "d";
 }
 const money = (n) => "$" + Number(n).toFixed(2);
-const stepOf = (name) => (state.graph ? state.graph.steps.find((s) => s.name === name) : null);
-const isEnd = (name) => !!state.graph && state.graph.end_states.includes(name);
+function graphOf(job) {
+  if (job && job.graph) return job.graph;
+  return state.graph;
+}
+function stepOf(name, job) {
+  const graph = graphOf(job);
+  if (!graph || !Array.isArray(graph.steps)) return null;
+  return graph.steps.find((s) => s.name === name) || null;
+}
+function isEnd(name, job) {
+  const graph = graphOf(job);
+  return !!(graph && Array.isArray(graph.end_states) && graph.end_states.includes(name));
+}
 function kindOf(job) {
   if (job.step === "done") return "done";
   if (job.step === "rejected" || job.step === "failed") return "bad";
@@ -386,21 +441,70 @@ function chip(job) {
 function matches(job) {
   const q = state.query.trim().toLowerCase();
   if (!q) return true;
-  return [job.id, job.title, "#" + job.issue, job.step, job.author, job.pr ? "#" + job.pr : ""].some((v) => String(v || "").toLowerCase().includes(q));
+  return [job.project, job.projectName, job.id, job.title, "#" + job.issue, job.step, job.author, job.pr ? "#" + job.pr : ""].some((v) => String(v || "").toLowerCase().includes(q));
+}
+function visibleProjects() {
+  if (!state.fleet) return [];
+  return state.projects.filter((project) => state.selected === "all" || state.selected === project.id);
+}
+function projectLabel(project) {
+  const name = project.name || project.id;
+  const shared = state.projects.filter((item) => (item.name || item.id) === name).length > 1;
+  return shared ? project.id : name;
+}
+function taggedJob(project, job) {
+  const copy = Object.assign({}, job);
+  copy.project = project.id;
+  copy.projectName = projectLabel(project);
+  copy.graph = project.graph || null;
+  return copy;
 }
 function jobs() {
+  if (state.fleet) {
+    const list = [];
+    visibleProjects().forEach((project) => {
+      (project.jobs || []).forEach((job) => list.push(taggedJob(project, job)));
+    });
+    list.sort((a, b) => {
+      const name = String(a.projectName || "").localeCompare(String(b.projectName || ""));
+      if (name) return name;
+      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+    });
+    return list;
+  }
   return state.index ? state.index.jobs.slice().sort((a, b) => (a.id < b.id ? 1 : -1)) : [];
 }
+function queueMatches(row) {
+  const q = state.query.trim().toLowerCase();
+  if (!q) return true;
+  return [row.project, row.projectName, row.note, "#" + row.issue, row.action, row.job, row.step].some((value) => String(value || "").toLowerCase().includes(q));
+}
+function queueCards(rows, jobList) {
+  const ids = new Set(jobList.map((job) => job.id));
+  const issues = new Set(jobList.map((job) => String(job.issue)));
+  const seen = new Set();
+  const out = [];
+  for (const row of rows) {
+    if (row.action !== "new" && row.action !== "hold") continue;
+    if (row.job && row.job !== "-" && ids.has(row.job)) continue;
+    if (issues.has(String(row.issue))) continue;
+    const key = String(row.issue);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
 function commands(job) {
-  const step = stepOf(job.step);
+  const step = stepOf(job.step, job);
   if (!step || !job.waiting) return [];
   const hint = { REJECT: " <why>", ANSWER: " <your answer>", APPROVE: "" };
-  return step.edges.map((e) => "/mfactory " + e.outcome.toLowerCase() + " " + job.issue + (e.outcome in hint ? hint[e.outcome] : " <what to change>"));
+  return (step.edges || []).map((e) => "/mfactory " + e.outcome.toLowerCase() + " " + job.issue + (e.outcome in hint ? hint[e.outcome] : " <what to change>"));
 }
 
 // ---- board ----
 function boardTotals(all) {
-  const running = all.filter((j) => { const s = stepOf(j.step); return s && RUNNING.has(s.type) && !j.waiting; }).length;
+  const running = all.filter((j) => { const s = stepOf(j.step, j); return s && RUNNING.has(s.type) && !j.waiting; }).length;
   const cost = all.reduce((sum, j) => sum + (Number(j.cost_usd) || 0), 0);
   return { running, cost };
 }
@@ -447,7 +551,98 @@ function columnsFor(graph, allJobs) {
   if ((graph.end_states || []).length) ordered.push({ id: "done", label: "Done", cls: "done", steps: graph.end_states.slice() });
   return ordered;
 }
+function fallbackColumns(jobList) {
+  const present = new Set(jobList.map((job) => job.step).filter((name) => name));
+  const known = new Set(FALLBACK.flatMap((row) => row[1]));
+  const cols = [];
+  FALLBACK.forEach((row) => {
+    const mine = row[1].filter((name) => present.has(name));
+    if (!mine.length) return;
+    const id = row[0];
+    cols.push({
+      id,
+      label: id === "needs-you" ? "Needs you" : id === "done" ? "Done" : id,
+      cls: id === "needs-you" ? "human" : id === "done" ? "done" : "",
+      steps: mine,
+    });
+  });
+  const stray = [...present].filter((name) => !known.has(name));
+  if (stray.length) {
+    const other = { id: "other", label: "Other", cls: "", steps: stray };
+    const doneAt = cols.findIndex((col) => col.id === "done");
+    if (doneAt >= 0) cols.splice(doneAt, 0, other);
+    else cols.push(other);
+  }
+  return cols;
+}
+function columnsOf(project) {
+  const list = project.jobs || [];
+  const graph = project.graph;
+  if (graph && Array.isArray(graph.steps) && Array.isArray(graph.end_states)) {
+    try { return columnsFor(graph, list); } catch (error) { /* a broken graph still shows the jobs */ }
+  }
+  return fallbackColumns(list);
+}
+function unionColumns(projects, allJobs) {
+  const merged = [];
+  const claimed = new Set();
+  function add(col) {
+    const steps = [];
+    (col.steps || []).forEach((name) => {
+      if (!name || claimed.has(name)) return;
+      claimed.add(name);
+      steps.push(name);
+    });
+    if (!steps.length) return;
+    const existing = merged.find((item) => item.id === col.id);
+    if (existing) {
+      existing.steps.push(...steps);
+      return;
+    }
+    const entry = { id: col.id, label: col.label, cls: col.cls || "", steps };
+    const needsAt = merged.findIndex((item) => item.id === "needs-you");
+    const doneAt = merged.findIndex((item) => item.id === "done");
+    let at = merged.length;
+    if (col.id !== "done" && col.id !== "needs-you") {
+      if (needsAt >= 0) at = Math.min(at, needsAt);
+      if (doneAt >= 0) at = Math.min(at, doneAt);
+    } else if (col.id === "needs-you" && doneAt >= 0) {
+      at = doneAt;
+    }
+    merged.splice(at, 0, entry);
+  }
+  projects.forEach((project) => columnsOf(project).forEach(add));
+  const stray = [];
+  allJobs.forEach((job) => {
+    if (job.step && !claimed.has(job.step) && stray.indexOf(job.step) < 0) stray.push(job.step);
+  });
+  if (stray.length) add({ id: "other", label: "Other", cls: "", steps: stray });
+  return merged;
+}
+function queueFor(projects) {
+  const rows = [];
+  projects.forEach((project) => {
+    const mine = state.queueRows.filter((row) => row.project === project.id);
+    queueCards(mine, project.jobs || []).forEach((row) => {
+      const copy = Object.assign({}, row);
+      copy.projectName = projectLabel(project);
+      rows.push(copy);
+    });
+  });
+  return rows;
+}
+function boardColumns(all) {
+  if (!state.fleet) return columnsFor(state.graph, all);
+  const projects = visibleProjects();
+  const cols = projects.length === 1
+    ? columnsOf(projects[0]).map((col) => Object.assign({}, col, { steps: col.steps.slice() }))
+    : unionColumns(projects, all);
+  const queued = queueFor(projects);
+  if (queued.length) cols.unshift({ id: "queue", label: "Queue", cls: "", steps: [], queue: queued });
+  return cols;
+}
 function columnWho(col) {
+  if (col.id === "queue") return "not a job yet";
   if (col.id === "needs-you" || col.id === "other" || col.id === "done") return col.steps.join(" · ");
   return col.steps.slice(1).join(" · ");
 }
@@ -518,12 +713,22 @@ function cardHint(job) {
   const lines = commands(job);
   return lines.length ? lines[0] : "";
 }
+function sameDrawer(job) {
+  if (!state.drawer || state.drawer.id !== job.id) return false;
+  if (!state.fleet) return true;
+  return state.drawer.project === (job.project || null);
+}
+function cardNum(job) {
+  const num = jobNum(job.id);
+  if (state.fleet && state.selected === "all" && job.projectName) return job.projectName + " · " + num;
+  return num;
+}
 function cardClass(job) {
   const parts = ["kcard"];
-  if (state.drawer && state.drawer.id === job.id) parts.push("on");
+  if (sameDrawer(job)) parts.push("on");
   if (job.step === "rejected") parts.push("rejected");
-  const step = stepOf(job.step);
-  if (isEnd(job.step)) parts.push("done");
+  const step = stepOf(job.step, job);
+  if (isEnd(job.step, job)) parts.push("done");
   else if (job.waiting) parts.push("human");
   else if (step && RUNNING.has(step.type)) parts.push("live");
   return parts.join(" ");
@@ -532,8 +737,9 @@ function jobCard(job) {
   const flag = flagOf(job);
   const hint = cardHint(job);
   const rounds = roundRows(job);
+  const label = (job.title || job.id) + (state.fleet && state.selected === "all" && job.projectName ? ", " + job.projectName : "");
   return el("article", {
-    class: cardClass(job), tabindex: 0, role: "button", "aria-label": job.title || job.id,
+    class: cardClass(job), tabindex: 0, role: "button", "aria-label": label,
     onclick: (event) => { if (event.target.closest("a")) return; openDrawer(job); },
     onkeydown: (event) => {
       if (event.target.closest("a")) return;
@@ -542,7 +748,7 @@ function jobCard(job) {
   },
     el("div", { class: "card-top" },
       cardClass(job).includes("live") ? el("span", { class: "pulse", "aria-hidden": "true" }) : null,
-      el("span", { class: "num", text: jobNum(job.id) }),
+      el("span", { class: "num", text: cardNum(job) }),
       flag ? el("span", { class: "flag", text: flag }) : null),
     el("p", { class: "feature", text: job.title || job.id }),
     el("div", { class: "links" },
@@ -606,16 +812,23 @@ function closeDrawer() {
   state.drawer = null;
   render();
 }
+function fileUrl(job, path) {
+  const tail = String(path).split("/").map(encodeURIComponent).join("/");
+  if (state.fleet && job.project) {
+    return "/projects/" + encodeURIComponent(job.project) + "/jobs/" + encodeURIComponent(job.id) + "/" + tail;
+  }
+  return "jobs/" + encodeURIComponent(job.id) + "/" + tail;
+}
 function openDrawer(job) {
-  if (state.drawer && state.drawer.id === job.id) return;
+  if (sameDrawer(job)) return;
   const files = sortedFiles(job.files || []);
   const path = files.length ? files[0].path : null;
-  state.drawer = { id: job.id, path, text: path ? "Loading..." : "No files yet.", focus: true };
+  state.drawer = { project: job.project || null, id: job.id, path, text: path ? "Loading..." : "No files yet.", focus: true };
   render();
   if (path) fetchDrawer(job, path);
 }
 function pickFile(job, path) {
-  if (!state.drawer || state.drawer.id !== job.id) return;
+  if (!sameDrawer(job)) return;
   state.drawer.path = path;
   state.drawer.text = "Loading...";
   state.drawer.focus = false;
@@ -623,15 +836,14 @@ function pickFile(job, path) {
   fetchDrawer(job, path);
 }
 async function fetchDrawer(job, path) {
-  const url = "jobs/" + encodeURIComponent(job.id) + "/" + path.split("/").map(encodeURIComponent).join("/");
   let text;
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(fileUrl(job, path), { cache: "no-store" });
     text = res.ok ? await res.text() : "Could not load " + path + " (" + res.status + ").";
   } catch (error) {
     text = "Could not load " + path + ".";
   }
-  if (!state.drawer || state.drawer.id !== job.id || state.drawer.path !== path) return;
+  if (!sameDrawer(job) || !state.drawer || state.drawer.path !== path) return;
   state.drawer.text = text;
   render();
 }
@@ -656,7 +868,7 @@ function fileList(job, files) {
 }
 function drawer() {
   if (!state.drawer) return null;
-  const job = jobs().find((item) => item.id === state.drawer.id);
+  const job = jobs().find((item) => sameDrawer(item));
   const close = el("button", { type: "button", class: "close", "data-close": "true", text: "close", onclick: closeDrawer });
   if (!job) {
     return el("div", { class: "overlay" }, el("div", { class: "scrim", onclick: closeDrawer }),
@@ -668,7 +880,7 @@ function drawer() {
     el("div", { class: "scrim", onclick: closeDrawer }),
     el("aside", { class: "drawer", role: "dialog", "aria-modal": "true", "aria-labelledby": "d-title" },
       el("div", { class: "d-head" },
-        el("div", { class: "num", text: job.id + " · " + (job.step || "") + (job.round ? " · round " + job.round : "") }),
+        el("div", { class: "num", text: (state.fleet && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id + " · " + (job.step || "") + (job.round ? " · round " + job.round : "") }),
         el("h3", { id: "d-title", text: job.title || job.id }),
         el("div", { class: "links" },
           link(job.issue_url, "issue #" + (job.issue == null ? "" : job.issue)),
@@ -676,25 +888,53 @@ function drawer() {
         close),
       el("div", { class: "d-body" }, fileList(job, files), el("pre", { class: "file d-doc", tabindex: 0, text: state.drawer.text || "" }))));
 }
+function queueCard(row) {
+  const who = state.fleet && state.selected === "all" && row.projectName ? row.projectName + " · " : "";
+  return el("article", { class: "kcard" },
+    el("div", { class: "card-top" },
+      el("span", { class: "num", text: who + (row.action || "new") }),
+      el("span", { class: "flag", text: "#" + (row.issue || "") })),
+    el("p", { class: "feature", text: row.note || ("issue #" + (row.issue || "")) }));
+}
 function column(col, shown) {
-  const mine = shown.filter((job) => col.steps.includes(job.step));
+  const queued = col.queue ? col.queue.filter(queueMatches) : null;
+  const mine = queued || shown.filter((job) => col.steps.includes(job.step));
   const who = columnWho(col);
   return el("section", { class: "kcol" + (col.cls ? " " + col.cls : ""), "aria-label": col.label },
     el("div", { class: "kcol-head" },
       el("h3", { text: col.label }),
       who ? el("span", { class: "who", text: who }) : null,
       el("span", { class: "count", text: String(mine.length) })),
-    mine.length ? mine.map((job) => jobCard(job)) : el("p", { class: "kempty", text: "—" }));
+    mine.length ? mine.map((item) => col.queue ? queueCard(item) : jobCard(item)) : el("p", { class: "kempty", text: "—" }));
+}
+function boardSub() {
+  if (!state.fleet) return (state.index.project && state.index.project.description) || "Jobs by step";
+  const projects = visibleProjects();
+  if (projects.length === 1) return projects[0].description || projects[0].path || "Jobs by step";
+  return projects.length + " projects";
+}
+function problemLines() {
+  if (!state.fleet) return [];
+  const lines = [];
+  visibleProjects().forEach((project) => {
+    if (project.error) lines.push((state.selected === "all" ? (project.name || project.id) + ": " : "") + String(project.error));
+  });
+  state.queueErrors.forEach((item) => {
+    const text = String(item);
+    if (state.selected === "all" || text.indexOf(state.selected + ": ") === 0) lines.push(text);
+  });
+  return lines.map((text) => el("p", { class: "error", text }));
 }
 function board() {
   const all = jobs();
   const shown = all.filter(matches);
-  const description = state.index.project && state.index.project.description;
+  const cols = boardColumns(all);
   const nodes = [
     el("div", { class: "head" },
-      el("div", {}, el("h1", { text: "Board" }), el("p", { class: "sub", text: description || "Jobs by step" })),
+      el("div", {}, el("h1", { text: "Board" }), el("p", { class: "sub", text: boardSub() })),
       el("span", { class: "src", text: shown.length + " of " + all.length })),
-    el("div", { class: "kanban" }, columnsFor(state.graph, all).map((col) => column(col, shown))),
+    ...problemLines(),
+    cols.length ? el("div", { class: "kanban" }, cols.map((col) => column(col, shown))) : el("p", { class: "kempty", text: state.fleet && !state.projects.length ? "no projects yet" : "no jobs" }),
   ];
   const panel = drawer();
   if (panel) nodes.push(panel);
@@ -749,7 +989,7 @@ function pipelineGraph(graph, count) {
   const nodes = new Map();
   let y = PAD;
   for (const name of names) {
-    const step = stepOf(name);
+    const step = (graph.steps || []).find((item) => item.name === name) || null;
     const edges = step ? step.edges.filter((e) => index.has(e.to)) : [];
     const fwd = edges.filter((e) => index.get(e.to) > index.get(name)), back = edges.filter((e) => index.get(e.to) <= index.get(name));
     const h = Math.max(42, 26 + PORT * (Math.max(fwd.length, back.length, 1) - 1) + 12);
@@ -815,47 +1055,85 @@ function pipelineGraph(graph, count) {
   root.append(labels);
   return root;
 }
-function pipeline() {
-  const graph = state.graph, all = jobs();
-  const count = (name) => all.filter((j) => j.step === name).length;
-  const off = (step) => step.enabled === false;
-  const stepRows = graph.steps.map((step) => el("tr", {},
-    el("td", { class: "mono", text: step.name }),
-    el("td", {}, el("span", { class: "chip" + (off(step) ? " off" : ""), text: step.type + (off(step) ? " · off" : "") }),
-      step.who ? el("div", { class: "dim", style: "font-size:11px;margin-top:4px", text: step.who }) : null),
-    el("td", { class: "mono wrap" }, step.edges.map((e) => el("div", { class: off(step) && e.outcome !== step.skip ? "dim" : "" },
-      e.outcome, el("span", { class: "dim", text: " → " }), e.to, e.max !== null && e.max !== undefined ? el("span", { class: "dim", text: `  max ${e.max}` }) : null))),
-    el("td", { class: "mono dim", text: count(step.name) || "-" })));
-  return [
-    el("h1", { text: "Pipeline" }),
-    el("p", { class: "sub", text: `Starts at ${graph.start}. When an edge's max is used up, the job goes to ${graph.escalate_to}.` }),
-    el("div", { class: "pipe" },
+function pipelineDiagram(graph, jobList) {
+  if (!graph || !Array.isArray(graph.steps) || !Array.isArray(graph.end_states)) {
+    return [el("div", { class: "notice", text: "No pipeline for this project yet." })];
+  }
+  let drawn;
+  try {
+    const count = (name) => jobList.filter((j) => j.step === name).length;
+    const off = (step) => step.enabled === false;
+    const stepRows = graph.steps.map((step) => el("tr", {},
+      el("td", { class: "mono", text: step.name }),
+      el("td", {}, el("span", { class: "chip" + (off(step) ? " off" : ""), text: step.type + (off(step) ? " · off" : "") }),
+        step.who ? el("div", { class: "dim", style: "font-size:11px;margin-top:4px", text: step.who }) : null),
+      el("td", { class: "mono wrap" }, (step.edges || []).map((e) => el("div", { class: off(step) && e.outcome !== step.skip ? "dim" : "" },
+        e.outcome, el("span", { class: "dim", text: " → " }), e.to, e.max !== null && e.max !== undefined ? el("span", { class: "dim", text: `  max ${e.max}` }) : null))),
+      el("td", { class: "mono dim", text: count(step.name) || "-" })));
+    drawn = [el("div", { class: "pipe" },
       el("div", { class: "panel" }, el("div", { class: "scroll" }, pipelineGraph(graph, count)),
         el("div", { class: "legend" }, el("span", {}, el("i"), "on to a later step"), el("span", {}, el("i", { class: "back" }), "back to an earlier step"),
           el("span", {}, el("i", { class: "box" }), "waiting for a person"), el("span", {}, el("i", { class: "box off" }), "step is off"))),
       el("div", { class: "panel" }, el("h2", { text: "Steps" }), el("p", { class: "sub", text: "As set in factory.toml over the defaults" }),
-        el("div", { class: "scroll" }, el("table", {}, el("thead", {}, el("tr", {}, ["Step", "Type", "Outcomes", "Jobs"].map((t) => el("th", { scope: "col", text: t })))), el("tbody", {}, stepRows))))),
+        el("div", { class: "scroll" }, el("table", {}, el("thead", {}, el("tr", {}, ["Step", "Type", "Outcomes", "Jobs"].map((t) => el("th", { scope: "col", text: t })))), el("tbody", {}, stepRows)))))];
+  } catch (error) {
+    drawn = [el("div", { class: "notice", text: "This pipeline could not be drawn." })];
+  }
+  return drawn;
+}
+function pipelineIntro(graph) {
+  return el("p", { class: "sub", text: `Starts at ${graph.start}. When an edge's max is used up, the job goes to ${graph.escalate_to}.` });
+}
+function pipeline() {
+  if (!state.fleet) {
+    return [el("h1", { text: "Pipeline" }), pipelineIntro(state.graph), ...pipelineDiagram(state.graph, jobs())];
+  }
+  const projects = visibleProjects();
+  if (projects.length <= 1) {
+    const project = projects[0];
+    const nodes = [el("h1", { text: "Pipeline" })];
+    if (!project) return nodes.concat([el("p", { class: "kempty", text: "no projects yet" })]);
+    if (project.error) nodes.push(el("p", { class: "error", text: String(project.error) }));
+    if (project.graph) nodes.push(pipelineIntro(project.graph));
+    nodes.push(...pipelineDiagram(project.graph, jobs()));
+    return nodes;
+  }
+  const nodes = [
+    el("h1", { text: "Pipeline" }),
+    el("p", { class: "sub", text: "One pipeline per project. Each factory.toml can differ." }),
   ];
+  projects.forEach((project) => {
+    const mine = jobs().filter((job) => job.project === project.id);
+    nodes.push(el("h2", { class: "block-title", text: project.name || project.id }));
+    if (project.path) nodes.push(el("p", { class: "sub", text: project.path }));
+    if (project.error) nodes.push(el("p", { class: "error", text: String(project.error) }));
+    if (project.graph) nodes.push(pipelineIntro(project.graph));
+    nodes.push(...pipelineDiagram(project.graph, mine));
+  });
+  return nodes;
 }
 
 // ---- jobs ----
+function sameFile(job) {
+  return !!(state.file && state.file.job === job.id && (state.file.project || null) === (job.project || null));
+}
 async function showFile(job, path) {
-  state.file = { job: job.id, path, text: "Loading..." };
+  state.file = { job: job.id, project: job.project || null, path, text: "Loading..." };
   render();
   let text;
   try {
-    const res = await fetch("jobs/" + encodeURIComponent(job.id) + "/" + path.split("/").map(encodeURIComponent).join("/"), { cache: "no-store" });
+    const res = await fetch(fileUrl(job, path), { cache: "no-store" });
     text = res.ok ? await res.text() : `Could not load ${path} (${res.status}).`;
   } catch (e) {
     text = `Could not load ${path}.`;
   }
-  if (state.file && state.file.job === job.id && state.file.path === path) { state.file.text = text; render(); }
+  if (sameFile(job) && state.file.path === path) { state.file.text = text; render(); }
 }
 function jobDetail(job) {
-  const step = stepOf(job.step);
+  const step = stepOf(job.step, job);
   const parts = [];
   parts.push(el("div", { class: "panel" },
-    el("div", { class: "head" }, el("div", { style: "min-width:0" }, el("h2", { style: "font-size:17px;overflow-wrap:anywhere", text: job.title }), el("div", { class: "mono dim", style: "margin-top:3px", text: job.id })), chip(job)),
+    el("div", { class: "head" }, el("div", { style: "min-width:0" }, el("h2", { style: "font-size:17px;overflow-wrap:anywhere", text: job.title }), el("div", { class: "mono dim", style: "margin-top:3px", text: (state.fleet && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id })), chip(job)),
     el("div", { class: "facts" },
       el("span", {}, "Issue ", link(job.issue_url, "#" + job.issue)),
       job.pr ? el("span", {}, "PR ", link(job.pr_url, "#" + job.pr)) : null,
@@ -876,7 +1154,7 @@ function jobDetail(job) {
           try { await navigator.clipboard.writeText(literal); e.target.textContent = "Copied"; } catch (_) { e.target.textContent = "Select it"; }
           setTimeout(() => { e.target.textContent = "Copy"; }, 1500);
         } })))));
-  } else if (job.reason && isEnd(job.step) && job.step !== "done") {
+  } else if (job.reason && isEnd(job.step, job) && job.step !== "done") {
     parts.push(el("div", { class: "notice", style: "white-space:pre-wrap;overflow-wrap:anywhere", text: job.reason }));
   }
 
@@ -888,7 +1166,7 @@ function jobDetail(job) {
         h.reason ? el("div", { class: "dim", style: "font-size:12px", text: h.reason.split("\n")[0].slice(0, 200) }) : null),
       el("span", { class: "when", text: span((time(h.at) - time(h.entered_at)) / 1000) + " · " + ago(h.at) }));
   });
-  if (!isEnd(job.step)) {
+  if (!isEnd(job.step, job)) {
     items.push(el("li", { class: "now" }, el("span", { class: "mark" }), el("span", { class: "mono", text: job.step }),
       el("span", { class: "what dim", text: job.waiting ? "waiting for a person" : step ? `${step.type} step, in progress` : "this step is no longer in factory.toml" }),
       el("span", { class: "when", text: "since " + ago(job.entered_at) })));
@@ -896,7 +1174,7 @@ function jobDetail(job) {
   parts.push(el("div", { class: "panel" }, el("h2", { text: "Steps" }), el("p", { class: "sub", text: "In the order the job took them" }), el("ol", { class: "steps" }, items)));
 
   const files = job.files || [];
-  const open = state.file && state.file.job === job.id ? state.file : null;
+  const open = sameFile(job) ? state.file : null;
   parts.push(el("div", { class: "panel" }, el("h2", { text: "Files" }), el("p", { class: "sub", text: "What each step wrote, with its first line" }),
     files.length ? el("div", { class: "files" },
       el("div", { class: "filelist" }, files.map((f) => el("button", { type: "button", "aria-pressed": String(!!open && open.path === f.path), onclick: () => showFile(job, f.path) },
@@ -905,60 +1183,173 @@ function jobDetail(job) {
       : el("div", { class: "empty", text: "No files yet." })));
   return el("div", { class: "detail" }, parts);
 }
-function jobsView(id) {
+function jobHref(job) {
+  if (state.fleet) return "#/jobs/" + encodeURIComponent(job.project) + "/" + encodeURIComponent(job.id);
+  return "#/jobs/" + encodeURIComponent(job.id);
+}
+function sameJob(job, projectId, id) {
+  if (!job || !id || job.id !== id) return false;
+  if (!state.fleet || !projectId) return true;
+  return job.project === projectId;
+}
+function queueLabel() {
+  if (state.index && state.index.labels && state.index.labels.queue) return state.index.labels.queue;
+  for (const project of visibleProjects()) {
+    if (project.labels && project.labels.queue) return project.labels.queue;
+  }
+  return "factory";
+}
+function jobsView(id, projectId) {
   const all = jobs(), shown = all.filter(matches);
-  const current = all.find((j) => j.id === id) || shown[0] || null;
-  if (!all.length) return [el("h1", { text: "Jobs" }), el("p", { class: "sub", text: "One job per labeled issue" }), el("div", { class: "notice" }, "No jobs yet. Label an issue ", el("code", { text: state.index.labels.queue }), " and run ", el("code", { text: "/mfactory run" }), " in your coding tool.")];
+  const current = all.find((job) => sameJob(job, projectId, id)) || shown[0] || null;
+  if (!all.length) return [el("h1", { text: "Jobs" }), el("p", { class: "sub", text: "One job per labeled issue" }), el("div", { class: "notice" }, "No jobs yet. Label an issue ", el("code", { text: queueLabel() }), " and run ", el("code", { text: "/mfactory run" }), " in your coding tool.")];
   return [
     el("h1", { text: "Jobs" }),
     el("p", { class: "sub", text: `${shown.length} of ${all.length}` + (state.query ? " match the search" : "") }),
     el("div", { class: "jobview" },
-      el("nav", { class: "panel joblist", "aria-label": "Jobs" }, shown.length ? shown.map((job) => el("a", { href: "#/jobs/" + encodeURIComponent(job.id), "aria-current": String(!!current && job.id === current.id) },
-        el("div", { class: "id", text: job.id }), el("div", { class: "meta" }, el("span", { text: "#" + job.issue + " · " + ago(job.updated_at) }), chip(job)))) : el("div", { class: "empty", text: "No job matches." })),
+      el("nav", { class: "panel joblist", "aria-label": "Jobs" }, shown.length ? shown.map((job) => el("a", { href: jobHref(job), "aria-current": !!current && sameJob(job, current.project || null, current.id) ? "true" : null },
+        el("div", { class: "id", text: state.fleet && state.selected === "all" ? (job.projectName || job.project) + " · " + job.id : job.id }),
+        el("div", { class: "meta" }, el("span", { text: "#" + job.issue + " · " + ago(job.updated_at) }), chip(job)))) : el("div", { class: "empty", text: "No job matches." })),
       current ? jobDetail(current) : el("div", { class: "notice", text: "Pick a job." })),
   ];
 }
 
 // ---- config ----
-function configView() {
-  if (!state.config) return [el("h1", { text: "Config" }), el("p", { class: "sub", text: "Loading..." })];
-  const sources = ["all", ...new Set(state.config.map((r) => r.source))];
+function configRows(rows) {
   const q = state.query.trim().toLowerCase();
-  const rows = state.config.filter((r) => (state.source === "all" || r.source === state.source) && (!q || r.key.toLowerCase().includes(q) || JSON.stringify(r.value).toLowerCase().includes(q)));
-  return [
+  return rows.filter((r) => (state.source === "all" || r.source === state.source) && (!q || String(r.key).toLowerCase().includes(q) || JSON.stringify(r.value).toLowerCase().includes(q)));
+}
+function configTable(rows) {
+  if (!rows) return el("div", { class: "empty", text: "No config has been written for this project yet." });
+  const shown = configRows(rows);
+  if (!shown.length) return el("div", { class: "empty", text: "No setting matches." });
+  return el("div", { class: "scroll" }, el("table", {},
+    el("thead", {}, el("tr", {}, ["Key", "Value", "Source"].map((t) => el("th", { scope: "col", text: t })))),
+    el("tbody", {}, shown.map((r) => el("tr", {}, el("td", { class: "mono", text: r.key }), el("td", { class: "mono wrap", text: JSON.stringify(r.value) }),
+      el("td", {}, el("span", { class: "src" + (r.source === "factory.toml" ? " mine" : ""), text: r.source })))))));
+}
+function sourceFilters(rows) {
+  const sources = ["all", ...new Set((rows || []).map((r) => r.source).filter((source) => source))];
+  return el("div", { class: "filters", role: "group", "aria-label": "Source" }, sources.map((s) => el("button", {
+    type: "button", "aria-pressed": String(state.source === s), text: s, onclick: () => { state.source = s; render(); },
+  })));
+}
+function configView() {
+  const intro = [
     el("h1", { text: "Config" }),
     el("p", { class: "sub", text: "factory.toml merged over the defaults, and where each value comes from" }),
-    el("div", { class: "filters", role: "group", "aria-label": "Source" }, sources.map((s) => el("button", { type: "button", "aria-pressed": String(state.source === s), text: s, onclick: () => { state.source = s; render(); } }))),
-    el("div", { class: "panel" }, rows.length ? el("div", { class: "scroll" }, el("table", {},
-      el("thead", {}, el("tr", {}, ["Key", "Value", "Source"].map((t) => el("th", { scope: "col", text: t })))),
-      el("tbody", {}, rows.map((r) => el("tr", {}, el("td", { class: "mono", text: r.key }), el("td", { class: "mono wrap", text: JSON.stringify(r.value) }),
-        el("td", {}, el("span", { class: "src" + (r.source === "factory.toml" ? " mine" : ""), text: r.source }))))))) : el("div", { class: "empty", text: "No setting matches." })),
   ];
+  if (!state.fleet) {
+    if (!state.config) return [el("h1", { text: "Config" }), el("p", { class: "sub", text: "Loading..." })];
+    return intro.concat([sourceFilters(state.config), el("div", { class: "panel" }, configTable(state.config))]);
+  }
+  const projects = visibleProjects();
+  if (!projects.length) return intro.concat([el("p", { class: "kempty", text: "no projects yet" })]);
+  const allRows = projects.flatMap((project) => project.config || []);
+  intro.push(sourceFilters(allRows));
+  projects.forEach((project) => {
+    if (projects.length > 1) intro.push(el("h2", { class: "block-title", text: project.name || project.id }));
+    if (project.error) intro.push(el("p", { class: "error", text: String(project.error) }));
+    intro.push(el("div", { class: "panel" }, configTable(project.config)));
+  });
+  return intro;
 }
 
 // ---- shell ----
 function route() {
-  const parts = location.hash.replace(/^#\/?/, "").split("/");
-  return { view: ["board", "pipeline", "jobs", "config"].includes(parts[0]) ? parts[0] : "board", id: parts[1] ? decodeURIComponent(parts[1]) : null };
+  const parts = location.hash.replace(/^#\/?/, "").split("/").filter((part) => part.length);
+  const view = ["board", "pipeline", "jobs", "config"].includes(parts[0]) ? parts[0] : "board";
+  if (view === "jobs" && state.fleet && parts.length >= 3) {
+    return { view, project: decodeURIComponent(parts[1]), id: decodeURIComponent(parts[2]) };
+  }
+  return { view, project: null, id: view === "jobs" && parts[1] ? decodeURIComponent(parts[1]) : null };
+}
+function normalizeSelection() {
+  if (!state.fleet || !state.projects.length) return;
+  if (state.selected !== "all" && !state.projects.some((project) => project.id === state.selected)) {
+    state.selected = "all";
+    writeChoice("all");
+  }
+}
+function filterButton(id, text) {
+  return el("button", {
+    type: "button", text, "aria-pressed": state.selected === id ? "true" : "false",
+    onclick: () => { state.selected = id; writeChoice(id); render(); },
+  });
+}
+function renderFilters() {
+  const box = document.getElementById("filters");
+  if (!box) return;
+  if (!state.fleet || state.projects.length < 2) {
+    box.replaceChildren();
+    return;
+  }
+  const buttons = [filterButton("all", "all")];
+  state.projects.forEach((project) => buttons.push(filterButton(project.id, projectLabel(project))));
+  box.replaceChildren(...buttons);
+}
+function latestStamp() {
+  let latest = 0;
+  visibleProjects().forEach((project) => {
+    const at = project.generated_at ? new Date(project.generated_at).getTime() : 0;
+    if (at > latest) latest = at;
+  });
+  return latest ? new Date(latest).toLocaleTimeString() : "";
+}
+function liveLabel() {
+  if (!state.fleet) {
+    if (state.error) return "not connected";
+    if (!state.index) return "connecting";
+    return "live · " + new Date(state.index.generated_at).toLocaleTimeString();
+  }
+  if (state.error) return "not connected";
+  if (state.queueStale) return "queue stale";
+  const stamp = latestStamp();
+  return stamp ? "live · " + stamp : (state.projects.length ? "live" : "connecting");
+}
+function fleetTitle() {
+  const projects = visibleProjects();
+  if (state.selected !== "all" && projects[0]) return projects[0].name || projects[0].id;
+  return "all";
+}
+function fleetFoot() {
+  const projects = visibleProjects();
+  const versions = [...new Set(projects.map((project) => project.version).filter((version) => version))];
+  const tools = [...new Set(projects.flatMap((project) => project.tools || []))];
+  const bits = ["factory" + (versions.length ? " " + versions.join(", ") : "")];
+  if (tools.length) bits.push(tools.join(", "));
+  return bits.join(" · ");
 }
 function render() {
-  const { view, id } = route();
+  normalizeSelection();
+  renderFilters();
+  const { view, id, project } = route();
   document.querySelectorAll("[data-view]").forEach((a) => {
     if (a.dataset.view === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   });
   const live = document.getElementById("live");
-  live.className = "live" + (state.error ? " stale" : "");
-  live.replaceChildren(el("span", { text: state.error ? "not connected" : state.index ? "live · " + new Date(state.index.generated_at).toLocaleTimeString() : "connecting" }));
+  live.className = "live" + (state.error || (state.fleet && state.queueStale) ? " stale" : "");
+  live.replaceChildren(el("span", { text: liveLabel() }));
   const target = document.getElementById("view");
   const keep = document.activeElement && target.contains(document.activeElement) ? null : document.activeElement;
   const scrollers = ".joblist, pre.file, .d-doc, .d-files";
   const scroll = [...target.querySelectorAll(scrollers)].map((n) => n.scrollTop);
   let content;
-  if (!state.index || !state.graph) {
+  const ready = state.fleet ? !state.error || state.projects.length : !!(state.index && state.graph);
+  if (!ready) {
     content = [el("h1", { text: "factory" }), el("div", { class: "notice" }, state.error
       ? el("span", {}, "The dashboard's data could not be loaded: ", el("code", { text: state.error }), ". Start it with ", el("code", { text: ".factory/bin/mfactory dashboard" }), ".")
       : "Loading...")];
     document.getElementById("foot-left").textContent = FOOT_NOTE;
+    document.getElementById("foot-right").textContent = "";
+  } else if (state.fleet) {
+    const totals = boardTotals(jobs());
+    document.getElementById("foot-left").textContent = view === "board"
+      ? totals.running + " running · " + money(totals.cost) + " · " + FOOT_NOTE
+      : FOOT_NOTE;
+    document.getElementById("foot-right").textContent = fleetFoot();
+    document.title = "factory · " + fleetTitle();
+    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id, project) : view === "config" ? configView() : board();
   } else {
     const totals = boardTotals(jobs());
     document.getElementById("foot-left").textContent = view === "board"
@@ -966,7 +1357,7 @@ function render() {
       : FOOT_NOTE;
     document.getElementById("foot-right").textContent = `factory ${state.index.version} · ${state.index.tools.join(", ")}`;
     document.title = `factory · ${state.index.repo}`;
-    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id) : view === "config" ? configView() : board();
+    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id, project) : view === "config" ? configView() : board();
   }
   target.replaceChildren(...content);
   [...target.querySelectorAll(scrollers)].forEach((n, i) => { if (scroll[i]) n.scrollTop = scroll[i]; });
@@ -982,26 +1373,102 @@ async function load(path) {
   if (!res.ok) throw new Error(data.error || res.status);
   return data;
 }
+function openJob() {
+  if (!state.drawer || !state.drawer.path || route().view !== "board") return null;
+  return jobs().find((job) => sameDrawer(job)) || null;
+}
+function refetchDrawer() {
+  const open = openJob();
+  if (open) fetchDrawer(open, state.drawer.path);
+}
+let probed = false;
+let queueTimer = null;
+async function refreshQueue() {
+  if (!state.fleet) return;
+  try {
+    const body = await load("/queue.json");
+    const rows = body.rows || [];
+    const errors = body.errors || [];
+    const changed = JSON.stringify([rows, errors]) !== JSON.stringify([state.queueRows, state.queueErrors]);
+    state.queueRows = rows;
+    state.queueErrors = errors;
+    state.queueStale = false;
+    if (changed) render();
+    else document.getElementById("live").replaceChildren(el("span", { text: liveLabel() }));
+  } catch (error) {
+    state.queueStale = true;
+    render();
+  }
+}
+async function refreshFleet() {
+  const body = await load("/projects.json");
+  const next = body.projects || [];
+  const changed = JSON.stringify(next) !== JSON.stringify(state.projects);
+  state.projects = next;
+  const hadError = state.error;
+  state.error = null;
+  if (changed || hadError || route().view === "config") {
+    render();
+    refetchDrawer();
+  } else {
+    document.getElementById("live").className = "live" + (state.queueStale ? " stale" : "");
+    document.getElementById("live").replaceChildren(el("span", { text: liveLabel() }));
+  }
+}
+async function refreshSingle() {
+  const [index, graph] = await Promise.all([load("jobs/index.json"), load("jobs/graph.json")]);
+  const changed = JSON.stringify([index.jobs, graph]) !== JSON.stringify([state.index && state.index.jobs, state.graph]);
+  state.index = index; state.graph = graph;
+  const hadError = state.error; state.error = null;
+  if (route().view === "config" || !state.config) state.config = await load("jobs/config.json");
+  // Re-drawing only on change keeps selections and scroll positions while you read.
+  if (changed || hadError || route().view === "config") {
+    render();
+    refetchDrawer();
+  } else document.getElementById("live").replaceChildren(el("span", { text: "live · " + new Date(index.generated_at).toLocaleTimeString() }));
+}
+async function tryProjects() {
+  // false: this server has no fleet. null: try again next tick. object: the fleet.
+  try {
+    const res = await fetch("/projects.json", { cache: "no-store" });
+    if (res.status === 404) return false;
+    if (!res.ok) return null;
+    const body = await res.json();
+    if (!body || !Array.isArray(body.projects)) return false;
+    return body;
+  } catch (error) {
+    return null;
+  }
+}
 async function refresh() {
   try {
-    const [index, graph] = await Promise.all([load("jobs/index.json"), load("jobs/graph.json")]);
-    const changed = JSON.stringify([index.jobs, graph]) !== JSON.stringify([state.index && state.index.jobs, state.graph]);
-    state.index = index; state.graph = graph;
-    const hadError = state.error; state.error = null;
-    if (route().view === "config" || !state.config) state.config = await load("jobs/config.json");
-    // Re-drawing only on change keeps selections and scroll positions while you read.
-    if (changed || hadError || route().view === "config") {
-      render();
-      if (state.drawer && state.drawer.path && route().view === "board") {
-        const open = (state.index.jobs || []).find((job) => job.id === state.drawer.id);
-        if (open) fetchDrawer(open, state.drawer.path);
+    if (!state.fleet && !probed) {
+      const found = await tryProjects();
+      if (found === null) return;
+      if (found) {
+        probed = true;
+        state.fleet = true;
+        state.projects = found.projects;
+        state.error = null;
+        render();
+        refetchDrawer();
+        refreshQueue();
+        if (!queueTimer) queueTimer = setInterval(refreshQueue, QUEUE_MS);
+        return;
       }
-    } else document.getElementById("live").replaceChildren(el("span", { text: "live · " + new Date(index.generated_at).toLocaleTimeString() }));
+      probed = true;
+    }
+    if (state.fleet) {
+      await refreshFleet();
+      return;
+    }
+    await refreshSingle();
   } catch (e) {
     state.error = String(e.message || e);
     render();
   }
 }
+/* boot */
 const search = document.getElementById("search");
 if (/Mac|iPhone|iPad/.test(navigator.platform)) document.getElementById("hotkey").textContent = "⌘ K";
 search.addEventListener("input", () => {

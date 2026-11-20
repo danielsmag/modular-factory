@@ -14,7 +14,7 @@ from . import checks, config, graph
 from . import sync as syncer
 from .util import CORE, SOURCE_REPO, ConfigError, FactoryError, Refused, run, tail, version
 
-ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "dashboard.html", "fleet.html", "VERSION"]
+ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "dashboard.html", "VERSION"]
 LABELS = {
     "queue": ("ff4a26", "The software factory builds this issue"),
     "needs_info": ("d4a72c", "The factory is waiting for the issue's author"),

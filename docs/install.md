@@ -183,11 +183,11 @@ mfactory fleet unsubscribe
 
 A `fleet.toml` in the current directory or a parent still wins, and so does `FACTORY_FLEET`. `mfactory fleet init` writes that local file. `fleet add` accepts a checkout only after the factory is installed there.
 
-`fleet queue` runs each project's own `.factory/bin/mfactory queue`. A project that fails is reported, and the others still print. `fleet dashboard` serves one read-only page on this machine, grouped by project.
+`fleet queue` runs each project's own `.factory/bin/mfactory queue`. A project that fails is reported, and the others still print. `fleet dashboard` serves the same read-only dashboard as `mfactory dashboard`, with a filter for each project. Choose All for one board, one pipeline per project, one job list, and one config table per project. Choose one project for that project's board, pipeline, jobs, and config. Queue rows that are not jobs yet stay on the board.
 
 Each project caps its own jobs with `[run].concurrency` (default 3). The fleet has a second cap, `[fleet].concurrency` in `defaults.toml` (also 3): that many `new` and `resume` rows across every project. `concurrency` in `fleet.toml`, or `mfactory fleet queue --concurrency N`, overrides the fleet cap. Later rows print as `hold`. Projects earlier in the file get the slots. `wait`, `skip` and `hold` do not take a slot. A project's `factory.toml` cannot set the fleet cap.
 
-Building stays in the project. Open that project and run `/mfactory run`, or `/mfactory run 12` for one issue. The per-project `mfactory dashboard` still shows that project's pipeline.
+Building stays in the project. Open that project and run `/mfactory run`, or `/mfactory run 12` for one issue. Inside a subscribed project, `mfactory dashboard` opens this same page with that project selected. A project that is not in the fleet still opens only its own page.
 
 Two clones of one GitHub repository both appear if you add both paths. They do not share job files.
 
