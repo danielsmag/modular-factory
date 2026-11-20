@@ -145,25 +145,29 @@ h2 { font: 500 14px var(--sans); margin: 0; }
 .kchip.wait { border-style: solid; border-color: var(--accent); color: var(--accent); }
 .overlay { position: fixed; inset: 0; z-index: 30; }
 .scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .55); }
-.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(920px, 100%); background: #0e0e0e; border-left: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(1120px, 100%); background: #0e0e0e; border-left: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .d-head { position: relative; padding: 16px 84px 14px 16px; border-bottom: 1px solid var(--line); }
 .d-head h3 { margin: 4px 0; font: 600 16px var(--sans); overflow-wrap: anywhere; }
 .d-head .num { font: 12px var(--mono); color: var(--muted); }
 .d-head .links { display: flex; flex-wrap: wrap; gap: 8px 10px; margin-top: 6px; }
 .close { position: absolute; top: 14px; right: 14px; font: 12px var(--mono); border: 1px solid var(--line-2); padding: 4px 8px; }
 .close:hover { border-color: var(--text); }
-.d-body { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 0; }
-.d-files { border-right: 1px solid var(--line); overflow: auto; padding: 10px 8px 20px; }
+.d-body { display: grid; grid-template-columns: var(--split, 220px) 12px minmax(0, 1fr); min-height: 0; }
+.d-files { overflow: auto; padding: 10px 4px 20px 8px; }
 .d-group { font: 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 12px 8px 4px; }
 .d-group:first-child { margin-top: 0; }
-.d-file { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 5px 8px; border-radius: 3px; font: 12px var(--mono); color: var(--muted); }
+.d-file { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; text-align: left; padding: 7px 8px; border-radius: 3px; font: 13px var(--mono); color: var(--muted); }
+.d-file span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .d-file:hover, .d-file.on { background: var(--panel-2); color: var(--text); }
 .d-file.on { box-shadow: inset 2px 0 var(--accent); }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); flex: none; display: block; }
 .dot.good { background: var(--good); }
 .dot.warn { background: var(--warn); }
 .dot.stop { background: var(--bad); }
-.drawer pre.file { max-height: none; border: 0; background: transparent; }
+.drawer pre.file { max-height: none; border: 0; background: transparent; padding: 22px 28px 48px; }
+.grip { position: relative; cursor: col-resize; touch-action: none; }
+.grip::before { content: ""; position: absolute; top: 0; bottom: 0; left: 5px; width: 1px; background: var(--line-2); }
+.grip:hover::before, .grip.on::before, .grip:focus-visible::before { background: var(--accent); width: 2px; }
 
 /* ---- tables ---- */
 .scroll { overflow-x: auto; }
@@ -245,12 +249,14 @@ td.wrap { overflow-wrap: anywhere; }
 .steps .ko .mark { background: var(--bad); }
 .steps .what { overflow-wrap: anywhere; }
 .steps .when { font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
-.files { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 12px; }
-.filelist button { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; padding: 6px 8px; border-radius: 3px; font: 12px var(--mono); }
+.files { display: grid; grid-template-columns: var(--split, 220px) 12px minmax(0, 1fr); align-items: stretch; min-height: 320px; }
+.filelist { min-width: 0; overflow: auto; max-height: min(72vh, 780px); }
+.filelist button { display: flex; flex-direction: column; align-items: stretch; gap: 2px; width: 100%; min-width: 0; text-align: left; padding: 8px 10px; border-radius: 3px; font: 13px var(--mono); }
 .filelist button:hover { background: var(--panel-2); }
 .filelist button[aria-pressed="true"] { background: var(--panel-2); box-shadow: inset 2px 0 var(--accent); }
-.filelist .verdict { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
-pre.file { margin: 0; background: var(--bg); border: 1px solid var(--line); padding: 12px; font: 12px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 520px; overflow: auto; min-height: 120px; }
+.filelist .path, .filelist .verdict { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filelist .verdict { color: var(--muted); font-size: 11px; }
+pre.file { margin: 0; background: var(--bg); border: 1px solid var(--line); padding: 20px 24px; font: 14px/1.7 var(--mono); white-space: pre-wrap; overflow-wrap: break-word; max-height: min(72vh, 780px); overflow: auto; min-height: 320px; }
 
 /* ---- config ---- */
 .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -275,6 +281,7 @@ footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--m
   .page { padding: 16px 14px 28px; }
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .split, .jobview, .files { grid-template-columns: minmax(0, 1fr); }
+  .grip { display: none; }
   .joblist { max-height: 220px; }
   .scroll table { min-width: 620px; }
   .steps li { grid-template-columns: 16px minmax(0, 1fr) auto; }
@@ -365,9 +372,24 @@ function writeChoice(id) {
     localStorage.setItem(CHOICE_KEY, id);
   } catch (error) {}
 }
+const SPLIT_KEY = "factory-split";
+const SPLIT_MIN = 140;
+const SPLIT_DEFAULT = 220;
+function readSplit() {
+  try {
+    const n = Number(localStorage.getItem(SPLIT_KEY));
+    if (n >= SPLIT_MIN && n <= 720) return n;
+  } catch (error) {}
+  return SPLIT_DEFAULT;
+}
+function writeSplit(px) {
+  state.split = px;
+  try { localStorage.setItem(SPLIT_KEY, String(px)); } catch (error) {}
+}
 const state = {
   index: null, graph: null, config: null, error: null, query: "", file: null, source: "all", drawer: null,
   fleet: false, projects: [], selected: readChoice(), queueRows: [], queueErrors: [], queueStale: false,
+  split: readSplit(),
 };
 if (queryProject()) writeChoice(state.selected);
 
@@ -847,6 +869,72 @@ async function fetchDrawer(job, path) {
   state.drawer.text = text;
   render();
 }
+function clampSplit(px, box) {
+  const max = Math.max(SPLIT_MIN, box.clientWidth - 280);
+  return Math.min(max, Math.max(SPLIT_MIN, Math.round(px)));
+}
+function applySplit(box, px) {
+  const width = clampSplit(px, box);
+  state.split = width;
+  box.style.setProperty("--split", width + "px");
+  const bar = box.querySelector(".grip");
+  if (bar) bar.setAttribute("aria-valuenow", String(width));
+  return width;
+}
+function startSplit(event) {
+  if (event.button !== 0) return;
+  const bar = event.currentTarget;
+  const box = bar.parentElement;
+  if (!box) return;
+  event.preventDefault();
+  const origin = event.clientX;
+  const start = state.split;
+  bar.classList.add("on");
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  function move(ev) {
+    applySplit(box, start + (ev.clientX - origin));
+  }
+  function end() {
+    bar.classList.remove("on");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", end);
+    document.removeEventListener("pointercancel", end);
+    writeSplit(state.split);
+  }
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", end);
+}
+function keySplit(event) {
+  const box = event.currentTarget.parentElement;
+  if (!box) return;
+  let next = state.split;
+  if (event.key === "ArrowLeft") next -= 20;
+  else if (event.key === "ArrowRight") next += 20;
+  else if (event.key === "Home") next = SPLIT_MIN;
+  else if (event.key === "End") next = box.clientWidth - 280;
+  else return;
+  event.preventDefault();
+  writeSplit(applySplit(box, next));
+}
+function resetSplit(event) {
+  const box = event.currentTarget.parentElement;
+  if (box) writeSplit(applySplit(box, SPLIT_DEFAULT));
+}
+function grip() {
+  return el("div", {
+    class: "grip", role: "separator", title: "Drag to resize", tabindex: "0",
+    "aria-orientation": "vertical", "aria-label": "Resize the file list",
+    "aria-valuemin": String(SPLIT_MIN), "aria-valuenow": String(state.split),
+    onpointerdown: startSplit, onkeydown: keySplit, ondblclick: resetSplit,
+  });
+}
+function splitStyle() {
+  return "--split:" + state.split + "px";
+}
 function fileList(job, files) {
   const box = el("div", { class: "d-files" });
   let group = "";
@@ -886,7 +974,7 @@ function drawer() {
           link(job.issue_url, "issue #" + (job.issue == null ? "" : job.issue)),
           job.pr ? link(job.pr_url, "PR #" + job.pr) : null),
         close),
-      el("div", { class: "d-body" }, fileList(job, files), el("pre", { class: "file d-doc", tabindex: 0, text: state.drawer.text || "" }))));
+      el("div", { class: "d-body", style: splitStyle() }, fileList(job, files), grip(), el("pre", { class: "file d-doc", tabindex: 0, text: state.drawer.text || "" }))));
 }
 function queueCard(row) {
   const who = state.fleet && state.selected === "all" && row.projectName ? row.projectName + " · " : "";
@@ -1176,9 +1264,10 @@ function jobDetail(job) {
   const files = job.files || [];
   const open = sameFile(job) ? state.file : null;
   parts.push(el("div", { class: "panel" }, el("h2", { text: "Files" }), el("p", { class: "sub", text: "What each step wrote, with its first line" }),
-    files.length ? el("div", { class: "files" },
+    files.length ? el("div", { class: "files", style: splitStyle() },
       el("div", { class: "filelist" }, files.map((f) => el("button", { type: "button", "aria-pressed": String(!!open && open.path === f.path), onclick: () => showFile(job, f.path) },
-        el("span", { text: f.path }), el("span", { class: "verdict", text: f.first_line || "" })))),
+        el("span", { class: "path", text: f.path }), el("span", { class: "verdict", text: f.first_line || "" })))),
+      grip(),
       el("pre", { class: "file", tabindex: 0, text: open ? open.text : "Pick a file to read it." }))
       : el("div", { class: "empty", text: "No files yet." })));
   return el("div", { class: "detail" }, parts);
@@ -1332,7 +1421,7 @@ function render() {
   live.replaceChildren(el("span", { text: liveLabel() }));
   const target = document.getElementById("view");
   const keep = document.activeElement && target.contains(document.activeElement) ? null : document.activeElement;
-  const scrollers = ".joblist, pre.file, .d-doc, .d-files";
+  const scrollers = ".joblist, pre.file, .d-doc, .d-files, .filelist";
   const scroll = [...target.querySelectorAll(scrollers)].map((n) => n.scrollTop);
   let content;
   const ready = state.fleet ? !state.error || state.projects.length : !!(state.index && state.graph);
