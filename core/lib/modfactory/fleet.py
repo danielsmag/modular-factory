@@ -285,8 +285,10 @@ class Fleet:
             if isinstance(info, dict) and isinstance(info.get("description"), str):
                 description = info["description"]
             jobs: object = body.get("jobs")
-            version: str = body.get("version") if isinstance(body.get("version"), str) else ""
-            generated_at: str = body.get("generated_at") if isinstance(body.get("generated_at"), str) else ""
+            version_raw: object = body.get("version")
+            version: str = version_raw if isinstance(version_raw, str) else ""
+            generated_raw: object = body.get("generated_at")
+            generated_at: str = generated_raw if isinstance(generated_raw, str) else ""
             tools: list[str] = []
             tools_raw: object = body.get("tools")
             if isinstance(tools_raw, list):
