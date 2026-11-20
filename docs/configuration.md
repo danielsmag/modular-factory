@@ -15,23 +15,23 @@ on = { CHANGES = { max = 3 } }     # the other edge of review, and its target, s
 After a change:
 
 ```bash
-.factory/bin/factory sync          # rewrite the generated agent files
-.factory/bin/factory doctor        # check the result
+.factory/bin/mfactory sync          # rewrite the generated agent files
+.factory/bin/mfactory doctor        # check the result
 ```
 
 To see what is in effect:
 
 ```bash
-.factory/bin/factory config show   # every setting and which file set it
-.factory/bin/factory graph         # the pipeline
-.factory/bin/factory models        # the model and effort of every agent, per tool
-.factory/bin/factory skills        # the project's skills and who reads them
+.factory/bin/mfactory config show   # every setting and which file set it
+.factory/bin/mfactory graph         # the pipeline
+.factory/bin/mfactory models        # the model and effort of every agent, per tool
+.factory/bin/mfactory skills        # the project's skills and who reads them
 ```
 
 A mistake is reported with the key to fix, and nothing runs until it is fixed:
 
 ```text
-factory: factory.toml has 2 problem(s):
+mfactory: factory.toml has 2 problem(s):
   - [steps.review].on.CHANGES points at unknown step "biuld". Steps: intake, ask-author, spec, ...; end states: done, failed, rejected
   - [models.claude].build.effort = "extreme" is not an effort level claude documents. Known: low, medium, high, xhigh, max
 ```
@@ -70,7 +70,7 @@ concurrency = 3
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `schema` | `1` | The version of this file's format. `factory upgrade` refuses a release that needs another. |
+| `schema` | `1` | The version of this file's format. `mfactory upgrade` refuses a release that needs another. |
 | `[project] description` | `""` | What the project is for and what does not belong in it. Intake judges issues against it. |
 | `[project] base_branch` | `"master"` | Jobs branch from `origin/<base_branch>` and merge into it. |
 | `[project] merge_method` | `"squash"` | `merge`, `squash` or `rebase`. |
@@ -101,7 +101,7 @@ A command must not rewrite files: use `prettier --check`, not
 The checks also fail any branch that touches a protected path, whatever the
 commands say. See [Labels, paths and ports](#labels-paths-and-ports).
 
-Run them yourself in any checkout with `.factory/bin/factory checks`.
+Run them yourself in any checkout with `.factory/bin/mfactory checks`.
 
 ## The pipeline: steps
 
@@ -145,7 +145,7 @@ Keys every step takes:
 | `enabled` | `false` switches the step off. Jobs pass through it as if it had returned `skip`. |
 | `skip` | The outcome a switched-off step counts as. |
 
-`factory doctor` and every other command refuse a pipeline in which an edge
+`mfactory doctor` and every other command refuse a pipeline in which an edge
 points at a step that does not exist, an outcome has no edge, a step cannot be
 reached from the start, or a loop has no `max` on any of its edges and no
 human step in it.
@@ -222,7 +222,7 @@ on = { DONE = "gate" }
 on = { READY = "docs" }
 ```
 
-`factory sync` writes a `factory-docs` agent. It works in the job's worktree,
+`mfactory sync` writes a `mfactory-docs` agent. It works in the job's worktree,
 commits what it changes to the job's branch, and writes `docs.md`, whose first
 line is `STATUS: DONE`. The outcomes of your step are the names you give in
 `on`:
@@ -282,20 +282,20 @@ on = { APPROVE = "release-approval" }
 The person replies in their coding tool:
 
 ```text
-/factory approve 12
-/factory changes 12 Use the existing Money type instead of a new one.
-/factory reject 12 Out of scope for this quarter.
+/mfactory approve 12
+/mfactory changes 12 Use the existing Money type instead of a new one.
+/mfactory reject 12 Out of scope for this quarter.
 ```
 
 or with a comment on the issue or pull request, without the number:
 
 ```text
-/factory changes Use the existing Money type instead of a new one.
+/mfactory changes Use the existing Money type instead of a new one.
 ```
 
-The word after `/factory` is the outcome's name in lower case, so a step with
-`on = { SHIP = "merge", HOLD = "build" }` takes `/factory ship` and
-`/factory hold <what to change>`.
+The word after `/mfactory` is the outcome's name in lower case, so a step with
+`on = { SHIP = "merge", HOLD = "build" }` takes `/mfactory ship` and
+`/mfactory hold <what to change>`.
 
 - Words given with a reply are saved as `feedback-<k>.md` in the job folder,
   and the next agent is told to act on them.
@@ -419,8 +419,8 @@ default = { model = "gpt-5.6-sol" }
   own. A step's entry sits on top of it, key by key.
 - `low`, `medium` and `high` inside an entry apply to jobs of that risk, which
   intake decides. The factory writes one extra agent file per variant, such as
-  `factory-reviewer-code-low`, and starts the right one.
-- `model = "inherit"` uses the model of the session that runs `/factory run`.
+  `mfactory-reviewer-code-low`, and starts the right one.
+- `model = "inherit"` uses the model of the session that runs `/mfactory run`.
 
 Defaults:
 
@@ -432,15 +432,15 @@ Defaults:
 
 Cursor and Codex default to `inherit` because the model names you can use
 depend on your plan. Cursor takes an effort only together with a named model;
-`factory sync` says so when an effort would be ignored.
+`mfactory sync` says so when an effort would be ignored.
 
-`.factory/bin/factory models` prints the result:
+`.factory/bin/mfactory models` prints the result:
 
 ```text
 agent                      claude           cursor                  codex
-factory-intake             fable / high     gpt-5.6-sol / medium    gpt-5.6-sol / high
-factory-spec               opus / high      gpt-5.6-sol / medium    gpt-5.6-sol / medium
-factory-build              opus / high      claude-opus-5-5 / high  gpt-5.6-sol / high
+mfactory-intake             fable / high     gpt-5.6-sol / medium    gpt-5.6-sol / high
+mfactory-spec               opus / high      gpt-5.6-sol / medium    gpt-5.6-sol / medium
+mfactory-build              opus / high      claude-opus-5-5 / high  gpt-5.6-sol / high
 ...
 ```
 
@@ -452,7 +452,7 @@ agent starts.
 ## Project skills
 
 The factory finds skills in `.claude/skills`, `.cursor/skills`,
-`.agents/skills` and `.codex/skills`. `.factory/bin/factory skills` lists them.
+`.agents/skills` and `.codex/skills`. `.factory/bin/mfactory skills` lists them.
 Nothing is read unless you list it:
 
 ```toml
@@ -471,7 +471,7 @@ This works the same in every tool, whether or not the tool would load the
 skill by itself. In Claude Code, a skill that lives in `.claude/skills` is also
 loaded into the agent up front.
 
-`factory sync` refuses a name that matches no skill and says where it looked.
+`mfactory sync` refuses a name that matches no skill and says where it looked.
 
 ## Labels, paths and ports
 
@@ -500,6 +500,6 @@ step = 10
 | `[ports] base`, `step` | Job number `n` gets ports from `base + step * (n % 100)`, so dev servers of parallel jobs do not collide. |
 
 No job may add, change or delete `factory.toml`, anything under `.factory/`, or
-a generated `factory-*` agent or skill file, whatever `protected` says. This
+a generated `mfactory-*` agent or skill file, whatever `protected` says. This
 stops a job from rewriting the pipeline, the checks, or the agents that judge
 it.

@@ -5,7 +5,7 @@ addopts = "-q"
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-extend-include = ["core/bin/factory"]
+extend-include = ["core/bin/factory", "core/bin/mfactory"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM"]

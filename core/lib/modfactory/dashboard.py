@@ -17,7 +17,7 @@ def handler(repo):
     page = (CORE / "dashboard.html").read_bytes()
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "factory-dashboard"
+        server_version = "mfactory-dashboard"
 
         def log_message(self, *args):
             pass
@@ -73,7 +73,7 @@ def serve(repo, port=4747, open_browser=True, say=print):
     except OSError as e:
         raise Refused(f"port {port} can't be used ({e.strerror}). Pick another with --port.") from e
     url = f"http://127.0.0.1:{server.server_address[1]}/"
-    say(f"factory dashboard: {url}  (read-only, this machine only; Ctrl C stops it)")
+    say(f"mfactory dashboard: {url}  (read-only, this machine only; Ctrl C stops it)")
     if open_browser:
         webbrowser.open(url)
     try:

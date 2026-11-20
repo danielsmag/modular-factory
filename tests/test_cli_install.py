@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -25,7 +26,7 @@ def bare(world):
 
 
 def installed(world):
-    return subprocess.run([str(world.repo / ".factory/bin/factory"), "version"], capture_output=True, text=True)
+    return subprocess.run([str(world.repo / ".factory/bin/mfactory"), "version"], capture_output=True, text=True)
 
 
 # ---- init ------------------------------------------------------------------
@@ -35,8 +36,9 @@ def test_init_installs_everything_a_project_needs(bare):
     res = bare.cli("init", "--tool", "claude", "--tool", "codex")
     assert res.returncode == 0, res.stderr
     repo = bare.repo
-    for item in ("bin/factory", "lib/modfactory/cli.py", "roles/build.md", "skill/SKILL.md", "defaults.toml",
-                 "adapters/claude.toml", "dashboard.html", "fleet.html", "VERSION", "LICENSE", "NOTICE"):
+    for item in ("bin/mfactory", "bin/factory", "lib/modfactory/cli/__init__.py", "roles/build.md", "skill/SKILL.md",
+                 "defaults.toml", "adapters/claude.toml", "dashboard.html", "fleet.html", "VERSION", "LICENSE",
+                 "NOTICE"):
         assert (repo / ".factory" / item).exists(), item
     assert not list((repo / ".factory").rglob("__pycache__"))
     assert installed(bare).stdout.strip() == (ROOT / "core/VERSION").read_text().strip()
@@ -45,11 +47,11 @@ def test_init_installs_everything_a_project_needs(bare):
     assert 'enabled = ["claude", "codex"]' in toml and 'base_branch = "main"' in toml
     assert (repo / ".gitignore").read_text() == (
         "node_modules/\n\n# software factory runtime state\n/.factory/jobs/\n/.worktrees/\n")
-    assert (repo / ".claude/agents/factory-build.md").exists()
-    assert (repo / ".codex/agents/factory-build.toml").exists()
+    assert (repo / ".claude/agents/mfactory-build.md").exists()
+    assert (repo / ".codex/agents/mfactory-build.toml").exists()
     assert not (repo / ".cursor").exists()
     assert bare.gh["labels"] == ["factory", "factory:needs-human", "factory:needs-info"]
-    assert "Next:" in res.stdout and "/factory setup" in res.stdout
+    assert "Next:" in res.stdout and "/mfactory setup" in res.stdout
 
 
 def test_init_again_keeps_factory_toml_and_changes_nothing_else(bare):
@@ -90,7 +92,7 @@ def test_the_installed_cli_works_from_a_worktree_of_a_job(bare):
     bare.cli("init")
     tree = bare.tmp / "tree"
     git("worktree", "add", "-q", "--detach", str(tree), cwd=bare.repo)
-    res = subprocess.run([str(bare.repo / ".factory/bin/factory"), "graph"], cwd=tree, capture_output=True, text=True)
+    res = subprocess.run([str(bare.repo / ".factory/bin/mfactory"), "graph"], cwd=tree, capture_output=True, text=True)
     assert res.returncode == 0 and res.stdout.startswith("intake ")
 
 
@@ -99,19 +101,19 @@ def test_the_installed_cli_works_from_a_worktree_of_a_job(bare):
 
 def test_errors_are_one_line_and_exit_1(world):
     res = world.cli("next", "999")
-    assert (res.returncode, res.stdout, res.stderr) == (1, "", "factory: no job matches '999'. Jobs: none\n")
+    assert (res.returncode, res.stdout, res.stderr) == (1, "", "mfactory: no job matches '999'. Jobs: none\n")
 
 
 def test_config_problems_are_listed_with_their_keys(world):
     world.configure("[run]\nconcurrency = 0\n")
     res = world.cli("graph")
     assert res.returncode == 1
-    assert res.stderr == ("factory: factory.toml has 1 problem(s):\n"
+    assert res.stderr == ("mfactory: factory.toml has 1 problem(s):\n"
                           "  - [run].concurrency must be a whole number of at least 1 (got 0)\n")
 
 
 def test_outside_a_repository(tmp_path):
-    res = subprocess.run([str(ROOT / "core/bin/factory"), "queue"], cwd=tmp_path, capture_output=True, text=True,
+    res = subprocess.run([str(ROOT / "core/bin/mfactory"), "queue"], cwd=tmp_path, capture_output=True, text=True,
                          env=dict(os.environ, GIT_CEILING_DIRECTORIES=str(tmp_path.parent)))
     assert res.returncode == 1 and "is not inside a git repository" in res.stderr
 
@@ -121,11 +123,11 @@ def test_a_job_runs_from_the_command_line(world):
     assert world.cli("queue").stdout.splitlines()[-1] == f"new  {number}  -  -  Add search"
     assert world.cli("create", number).stdout == "created 001-add-search for #1 at intake\n"
     out = world.cli("next", "001").stdout.splitlines()
-    assert out[0] == "start-agent factory-intake" and out[-1] == "stdin: the agent's whole reply"
+    assert out[0] == "start-agent mfactory-intake" and out[-1] == "stdin: the agent's whole reply"
     reply = "DECISION: ACCEPT\nRISK: low\nSURFACES: none\nRESCOPED: no\n\n## Scope\nSearch.\n"
     assert world.cli("done", "#1", "--reply", input=reply).stdout == "001-add-search #1: intake ACCEPT -> spec\n"
     assert world.cli("route", "1").stdout.strip() == json.dumps(
-        {"reviewers": {"code": "factory-reviewer-code-low"}}, indent=1)
+        {"reviewers": {"code": "mfactory-reviewer-code-low"}}, indent=1)
     assert "001-add-search  #1     spec" in world.cli("summary").stdout
 
 
@@ -143,7 +145,7 @@ def test_queue_says_when_the_generated_files_are_out_of_date(world):
     world.configure("[steps.debug]\nenabled = true\n")
     assert world.cli("queue").stdout.startswith("note: 1 generated file(s) are out of date with factory.toml.")
     assert world.cli("sync", "--check").returncode == 1
-    assert world.cli("sync").stdout == "create  .claude/agents/factory-debug.md\n"
+    assert world.cli("sync").stdout == "create  .claude/agents/mfactory-debug.md\n"
     assert world.cli("sync", "--check").returncode == 0
 
 
@@ -151,7 +153,7 @@ def test_models_and_graph_describe_the_setup(world):
     world.configure('[tools]\nenabled = ["claude", "codex"]\n[steps.debug]\nenabled = true\n')
     models = world.cli("models").stdout.splitlines()
     assert models[0].split() == ["agent", "claude", "codex"]
-    assert "factory-debug              opus / high      inherit / high" in models
+    assert "mfactory-debug              opus / high      inherit / high" in models
     graph = world.cli("graph").stdout
     assert "gate           checks  PASS -> review | FAIL -> debug (max 2)" in graph
     assert "spec-approval  human   off, continues as APPROVE -> build" in graph
@@ -167,11 +169,11 @@ def ready(world):
     git("add", "-A", cwd=world.repo)
     git("commit", "-qm", "factory", cwd=world.repo)
     git("push", "-q", "origin", "main", cwd=world.repo)
-    return world.repo / ".factory/bin/factory"
+    return world.repo / ".factory/bin/mfactory"
 
 
 def doctor(world, *args):
-    return subprocess.run([str(world.repo / ".factory/bin/factory"), "doctor", *args], cwd=world.repo,
+    return subprocess.run([str(world.repo / ".factory/bin/mfactory"), "doctor", *args], cwd=world.repo,
                           capture_output=True, text=True)
 
 
@@ -190,7 +192,7 @@ def test_doctor_passes_on_a_ready_project(world):
 
 def test_doctor_finds_hand_edits_missing_labels_and_failing_checks(world):
     ready(world)
-    (world.repo / ".claude/agents/factory-build.md").write_text("mine\n")
+    (world.repo / ".claude/agents/mfactory-build.md").write_text("mine\n")
     world.set_gh(lambda s: s.update(labels=["factory"]))
     (world.repo / "FAIL").write_text("x\n")
     git("add", "FAIL", cwd=world.repo)
@@ -199,7 +201,7 @@ def test_doctor_finds_hand_edits_missing_labels_and_failing_checks(world):
 
     res = doctor(world, "--skip-checks")
     assert res.returncode == 1
-    assert ("FAIL  .claude/agents/factory-build.md differs from what factory.toml generates "
+    assert ("FAIL  .claude/agents/mfactory-build.md differs from what factory.toml generates "
             "(edited by hand, or not synced)") in res.stdout
     assert "FAIL  GitHub labels missing: factory:needs-info, factory:needs-human." in res.stdout
     assert "2 problem(s) to fix." in res.stdout
@@ -340,3 +342,96 @@ def test_the_dashboard_script_parses(tmp_path):
     (tmp_path / "page.js").write_text(script)
     result = subprocess.run(["node", "--check", str(tmp_path / "page.js")], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_install_is_another_name_for_init(bare):
+    res = bare.cli("install", "--tool", "cursor")
+    assert res.returncode == 0, res.stderr
+    assert 'enabled = ["cursor"]' in (bare.repo / "factory.toml").read_text()
+    assert (bare.repo / ".factory/bin/mfactory").is_file()
+
+
+def test_status_reports_version_tools_and_stale_files(world):
+    world.cli("init")
+    fresh = world.cli("status")
+    assert fresh.returncode == 0, fresh.stderr
+    assert "project 0.1.0" in fresh.stdout
+    assert "sync    up to date" in fresh.stdout
+    (world.repo / ".claude/agents/mfactory-build.md").write_text("hand edit\n")
+    stale = world.cli("status")
+    assert "sync    1 file(s) out of date" in stale.stdout
+
+
+def test_uninstall_keeps_factory_toml_unless_asked(world):
+    world.cli("init")
+    assert world.cli("fleet", "subscribe").returncode == 0
+    removed = world.cli("uninstall")
+    assert removed.returncode == 0, removed.stderr
+    assert "remove  .factory/" in removed.stdout
+    assert not (world.repo / ".factory").exists()
+    assert (world.repo / "factory.toml").is_file()
+    assert "removed from" in removed.stdout
+    world.cli("init")
+    labelled = world.cli("uninstall", "--config", "--labels")
+    assert labelled.returncode == 0, labelled.stderr
+    assert not (world.repo / "factory.toml").exists()
+    assert world.gh["labels"] == []
+
+
+def test_install_sh_global_links_a_command_that_can_install(bare, tmp_path):
+    home = tmp_path / "home"
+    data = tmp_path / "data"
+    bindir = tmp_path / "bin"
+    env = dict(os.environ, HOME=str(home), FACTORY_HOME=str(data), FACTORY_BIN_DIR=str(bindir))
+    res = subprocess.run(["bash", str(ROOT / "install.sh"), "--global", "--source", str(ROOT)],
+                         cwd=tmp_path, capture_output=True, text=True, env=env)
+    assert res.returncode == 0, res.stderr
+    assert (data / ".global").is_file()
+    assert (bindir / "mfactory").is_symlink()
+    refused = subprocess.run(["bash", str(ROOT / "install.sh"), "--global", "--tool", "claude", "--source", str(ROOT)],
+                             cwd=tmp_path, capture_output=True, text=True, env=env)
+    assert refused.returncode == 1 and "--global" in refused.stderr
+    installed = subprocess.run([sys.executable, str(data / "core/bin/mfactory"), "install", "--tool", "cursor"],
+                               cwd=bare.repo, capture_output=True, text=True)
+    assert installed.returncode == 0, installed.stderr
+    assert 'enabled = ["cursor"]' in (bare.repo / "factory.toml").read_text()
+
+
+def test_upgrade_self_refuses_a_project_and_replaces_a_global_tree(world, tmp_path):
+    refused = subprocess.run([sys.executable, str(ROOT / "core/bin/mfactory"), "upgrade", "--self"],
+                             capture_output=True, text=True)
+    assert refused.returncode == 1 and "not the global install" in refused.stderr
+    world.cli("init")
+    project = subprocess.run([sys.executable, str(world.repo / ".factory/bin/mfactory"), "upgrade", "--self"],
+                             cwd=world.repo, capture_output=True, text=True)
+    assert project.returncode == 1 and "not the global install" in project.stderr
+
+    home = tmp_path / "global"
+    shutil.copytree(ROOT / "core", home / "core", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(ROOT / "adapters", home / "adapters")
+    for name in ("LICENSE", "NOTICE"):
+        shutil.copy(ROOT / name, home / name)
+    (home / ".global").write_text(f"{home}\n")
+    res = subprocess.run([sys.executable, str(home / "core/bin/mfactory"), "upgrade", "--self",
+                          "--source", str(newer(world))], capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    assert "0.1.0 -> 9.9.9" in res.stdout
+    assert (home / "core/VERSION").read_text().strip() == "9.9.9"
+    assert (home / ".global").is_file()
+
+
+def test_upgrade_all_reports_a_failure_and_still_upgrades_the_rest(world, tmp_path):
+    world.cli("init")
+    missing = tmp_path / "missing"
+    missing.mkdir()
+    from modfactory.fleet import Fleet, Project, user_file
+    file = user_file()
+    file.parent.mkdir(parents=True, exist_ok=True)
+    group = Fleet(file, [])
+    group.projects = [Project(world.repo.resolve()), Project(missing.resolve())]
+    group.save()
+    res = world.cli("upgrade", "--all", "--source", str(newer(world, version="8.8.8")))
+    assert res.returncode == 1, res.stderr
+    assert "0.1.0 -> 8.8.8" in res.stdout
+    assert "FAIL" in res.stdout
+    assert (world.repo / ".factory/VERSION").read_text().strip() == "8.8.8"

@@ -54,7 +54,7 @@ def test_init_add_list_and_remove(tmp_path, monkeypatch, capsys):
     bare.mkdir()
     git("init", "-q", "-b", "main", cwd=bare)
     assert main(["fleet", "add", str(bare)]) == 1
-    assert "no .factory/bin/factory" in capsys.readouterr().err
+    assert "no .factory/bin/mfactory" in capsys.readouterr().err
 
     repo: Path = checkout(tmp_path, "alpha")
     assert main(["fleet", "add", str(repo)]) == 0
@@ -84,7 +84,7 @@ def test_two_checkouts_with_the_same_folder_name_get_distinct_labels(tmp_path):
 def test_queue_keeps_the_projects_that_succeed(world, tmp_path, monkeypatch, capsys):
     real_factory(world.repo)
     number: int = world.issue(title="Add a widget")
-    failed: Path = checkout(tmp_path, "beta", "#!/bin/sh\necho 'factory: queue broke' >&2\nexit 1\n")
+    failed: Path = checkout(tmp_path, "beta", "#!/bin/sh\necho 'mfactory: queue broke' >&2\nexit 1\n")
     fleet_dir: Path = tmp_path / "fleet"
     fleet_dir.mkdir()
     monkeypatch.chdir(fleet_dir)
@@ -219,7 +219,7 @@ def test_the_fleet_dashboard_serves_the_queue_and_caches_it(tmp_path):
         "exit 0\n"
     )
     good: Path = checkout(tmp_path, "alpha", good_script)
-    bad: Path = checkout(tmp_path, "beta", "#!/bin/sh\necho 'factory: queue broke' >&2\nexit 1\n")
+    bad: Path = checkout(tmp_path, "beta", "#!/bin/sh\necho 'mfactory: queue broke' >&2\nexit 1\n")
     file: Path = tmp_path / "fleet.toml"
     group: Fleet = Fleet(file, [Project(good), Project(bad)])
     group.save()
@@ -409,3 +409,25 @@ if (JSON.stringify(cards) !== JSON.stringify(["9", "10"])) throw new Error(JSON.
         ["node", str(tmp_path / "queue.js")], capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_subscribe_writes_the_user_fleet_and_a_local_file_wins(tmp_path, monkeypatch, capsys):
+    repo: Path = checkout(tmp_path, "alpha")
+    monkeypatch.chdir(repo)
+    assert main(["fleet", "subscribe"]) == 0
+    from modfactory.fleet import Fleet, user_file
+    assert user_file().is_file()
+    assert repo.resolve().as_posix() in user_file().read_text()
+    monkeypatch.chdir(tmp_path)
+    assert main(["fleet", "list"]) == 0
+    assert "alpha" in capsys.readouterr().out
+    assert main(["fleet", "unsubscribe", str(repo)]) == 0
+
+    local: Path = tmp_path / "group"
+    local.mkdir()
+    other: Path = checkout(local, "beta")
+    Fleet.init(local)
+    monkeypatch.chdir(other)
+    assert main(["fleet", "subscribe"]) == 0
+    assert "beta" in (local / "fleet.toml").read_text()
+    assert "beta" not in user_file().read_text()

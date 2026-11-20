@@ -6,6 +6,17 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- The command is `mfactory`. Generated agents are `mfactory-*`, and the skill
+  command is `/mfactory`. A `/factory` comment on an issue or pull request still
+  counts. `core/bin/factory` remains so an upgrade from 0.1.0 can sync, and
+  `mfactory sync` removes generated files that still use the old names.
+- `install.sh --global` installs `mfactory` for your user. `mfactory install`,
+  `upgrade`, `uninstall`, `doctor`, `status` and `sync` manage a project.
+  `mfactory upgrade --self` updates that user install.
+- The fleet file for a user is `~/.config/modular-factory/fleet.toml`.
+  `mfactory fleet subscribe` adds a checkout. Outside a repository, `mfactory
+  dashboard` and `mfactory status` show every subscribed project. `mfactory
+  upgrade --all` upgrades each one.
 - `factory fleet`: one local queue and one read-only dashboard for several
   installed projects. Each job stays in its own checkout. `[run].concurrency`
   caps one project. `[fleet].concurrency` in `defaults.toml` caps `new` and

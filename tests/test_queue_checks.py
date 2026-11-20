@@ -34,7 +34,7 @@ def test_a_waiting_job_frees_its_slot_and_queues_behind_the_others_when_it_retur
     assert world.queue() == [("resume", 2, second, "intake", "round 0"),
                              ("wait", 1, first, "spec-approval", "waiting for a maintainer")]
 
-    world.comment(1, "/factory approve", "maintainer")
+    world.comment(1, "/mfactory approve", "maintainer")
     rows = world.queue()
     assert ("hold", 1, first, "spec-approval", "concurrency 1 reached") in rows
 
@@ -42,7 +42,7 @@ def test_a_waiting_job_frees_its_slot_and_queues_behind_the_others_when_it_retur
     assert world.next(first) == [f"hold {first} #1: waiting for a free slot (concurrency 1; running: {second})"]
     world.play(second)                                     # until it, too, waits for approval
     assert world.job(second)["step"] == "spec-approval"
-    assert world.next(first)[0] == "start-agent factory-build"
+    assert world.next(first)[0] == "start-agent mfactory-build"
 
 
 def test_queue_explains_jobs_that_need_nothing(world):
@@ -114,8 +114,8 @@ def test_no_commands_means_nothing_passes(world):
 
 
 @pytest.mark.parametrize("path", [
-    "factory.toml", ".factory/roles/build.md", ".claude/agents/factory-approve.md",
-    ".cursor/agents/factory-build.md", ".codex/agents/factory-build.toml", ".agents/skills/factory/SKILL.md"])
+    "factory.toml", ".factory/roles/build.md", ".claude/agents/mfactory-approve.md",
+    ".cursor/agents/mfactory-build.md", ".codex/agents/mfactory-build.toml", ".agents/skills/mfactory/SKILL.md"])
 def test_a_job_cannot_change_the_factory_that_judges_it(world, path):
     job = world.start(until="build")
     verdict, report = gate(world, job, {path: "mine now\n"})

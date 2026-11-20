@@ -107,7 +107,7 @@ def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=Fals
         "merge_sha": "9f2c1ab" if stop in ("done", "failed") else None,
         "intake": {"decision": "ACCEPT", "risk": rng.choice(["low", "low", "medium", "high"]),
                    "surfaces": rng.choice([[], ["ui"], ["ui"], ["security"]]), "rescoped": False} if history else None,
-        "agents": {"reviewers": {"code": "factory-reviewer-code"}}, "gate": None, "reviews": {},
+        "agents": {"reviewers": {"code": "mfactory-reviewer-code"}}, "gate": None, "reviews": {},
         "waiting": {"step": step, "who": waiting, "label": "factory:needs-human", "since": stamp(t),
                     "asked_on": "pr" if pr else "issue"} if waiting else None,
         "consumed": [], "reason": history[-1]["reason"] if finished and history else (

@@ -33,7 +33,7 @@ Job: <id>. Step: <step>. Job folder: <path>/. Main checkout: <repo>. Worktree: <
   and follow it. When your instructions list project skills, read each
   `SKILL.md` named there and apply it.
 - Never change `factory.toml`, anything under `.factory/`, or a generated
-  `factory-*` agent or skill file. The checks fail any branch that does.
+  `mfactory-*` agent or skill file. The checks fail any branch that does.
 - Never mark a pull request ready, merge one, or deploy. The factory's script
   does the first two and nobody's agent does the third.
 

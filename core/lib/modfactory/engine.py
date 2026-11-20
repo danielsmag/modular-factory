@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 from . import checks, cost, graph
-from .config import RISKS
+from .config import RISKS, shown_agent
 from .gh import GitHub
 from .human import Humans
 from .queue import Queue
@@ -18,7 +18,7 @@ from .scripted import Scripted
 from .store import Store
 from .util import MARKER, Refused, body, first_line, header, now, quote, run
 
-CLI = ".factory/bin/factory"
+CLI = ".factory/bin/mfactory"
 # Files the built-in agent roles write, relative to the job folder.
 ROLE_FILES = {"intake": "intake.md", "spec": "spec.md", "build": "build.md",
               "debug": "round-{round}/debug-{attempt}.md", "approve": "decision.md"}
@@ -271,7 +271,7 @@ class Factory(Humans, Scripted, Queue):
 
     def _say_agents(self, job, agents, reply=False):
         for agent, prompt in agents:
-            self.say(f"start-agent {agent}")
+            self.say(f"start-agent {shown_agent(agent)}")
             self.say(f"prompt: {prompt}")
         if len(agents) > 1:
             self.say(f"parallel: start these {len(agents)} agents together and wait for all of them")

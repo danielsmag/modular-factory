@@ -31,12 +31,12 @@ def test_happy_path_merges_and_cleans_up(world):
 def test_next_prints_the_agent_and_a_prompt_with_the_job_header(world):
     job = world.start(until="spec")
     lines = world.next(job)
-    assert lines[0] == "start-agent factory-spec"
+    assert lines[0] == "start-agent mfactory-spec"
     assert lines[1].startswith(f"prompt: Job: {job}. Step: spec. Job folder: {world.dir(job)}/. "
                                f"Main checkout: {world.repo}. Worktree: {world.repo}/.worktrees/{job}. "
                                f"Branch: factory/{job}. Base: origin/main. Issue: #1.")
     assert lines[1].endswith(f"Write: {world.dir(job)}/spec.md.")
-    assert lines[2] == f"then: .factory/bin/factory done {job}"
+    assert lines[2] == f"then: .factory/bin/mfactory done {job}"
 
 
 def test_issue_text_never_reaches_a_prompt(world):
@@ -98,8 +98,8 @@ def test_agents_that_only_write_a_file_may_not_move_the_branch(world):
 def test_intake_reply_is_saved_as_the_file(world):
     job = world.create(world.issue())
     lines = world.next(job)
-    assert lines[0] == "start-agent factory-intake"
-    assert lines[-2:] == [f"then: .factory/bin/factory done {job} --reply", "stdin: the agent's whole reply"]
+    assert lines[0] == "start-agent mfactory-intake"
+    assert lines[-2:] == [f"then: .factory/bin/mfactory done {job} --reply", "stdin: the agent's whole reply"]
     decision = "DECISION: ACCEPT\nRISK: high\nSURFACES: ui\nRESCOPED: no\n\n## Scope\nIt.\n"
     reply = f"Here is my decision:\n```markdown\n{decision}```\n"
     assert world.done(job, reply=reply) == [f"{job} #1: intake ACCEPT -> spec"]
@@ -142,7 +142,7 @@ def test_intake_reject_ends_the_job_and_tells_the_author(world):
 
 def test_review_waits_for_every_reviewer(world):
     job = world.start(until="review")
-    assert world.next(job)[0] == "start-agent factory-reviewer-code-low"  # the job's risk is low
+    assert world.next(job)[0] == "start-agent mfactory-reviewer-code-low"  # the job's risk is low
     with pytest.raises(Refused, match="missing reviews from: code"):
         world.done(job)
 
@@ -155,15 +155,15 @@ def test_surfaces_add_reviewers_and_they_start_in_parallel(world):
     world.play(job, until="review")
     lines = world.next(job)
     agents = [line.split()[1] for line in lines if line.startswith("start-agent")]
-    assert agents == ["factory-reviewer-code", "factory-reviewer-ux", "factory-reviewer-ui",
-                      "factory-reviewer-security"]
+    assert agents == ["mfactory-reviewer-code", "mfactory-reviewer-ux", "mfactory-reviewer-ui",
+                      "mfactory-reviewer-security"]
     assert "parallel: start these 4 agents together and wait for all of them" in lines
     ports = [line.split("Port: ")[1].split(".")[0] for line in lines if "Port: " in line]
     assert ports == ["5111", "5112"]  # job 1: the builder has 5110
 
     world.write(job, "round-1/review-code.md", "VERDICT: PASS\n")
     again = [line.split()[1] for line in world.next(job) if line.startswith("start-agent")]
-    assert again == ["factory-reviewer-ux", "factory-reviewer-ui", "factory-reviewer-security"]
+    assert again == ["mfactory-reviewer-ux", "mfactory-reviewer-ui", "mfactory-reviewer-security"]
 
 
 def test_review_changes_start_a_new_round_with_a_note_for_the_builder(world):

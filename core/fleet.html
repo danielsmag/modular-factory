@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>factory fleet</title>
+<title>mfactory fleet</title>
 <style>
 :root {
   --bg: #0b0b0b;
@@ -136,7 +136,7 @@ footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--m
 <header class="top">
   <a class="brand" href="#top">
     <svg viewBox="0 0 24 24" fill="none" stroke="#ff4a26" stroke-width="2" aria-hidden="true"><path d="M3 21V10l6 4V10l6 4V4h6v17z"/></svg>
-    factory fleet
+    mfactory fleet
   </a>
   <div id="filters" class="filters" role="group" aria-label="Projects"></div>
   <div class="tools">
@@ -407,7 +407,7 @@ function commands(job, graph) {
   const step = stepOf(graph, job.step);
   if (!step || !job.waiting) return [];
   const hint = { REJECT: " <why>", ANSWER: " <your answer>", APPROVE: "" };
-  return (step.edges || []).map((edge) => "/factory " + String(edge.outcome || "").toLowerCase() + " " + job.issue + (edge.outcome in hint ? hint[edge.outcome] : " <what to change>"));
+  return (step.edges || []).map((edge) => "/mfactory " + String(edge.outcome || "").toLowerCase() + " " + job.issue + (edge.outcome in hint ? hint[edge.outcome] : " <what to change>"));
 }
 function cardHint(job, graph) {
   if (!job.waiting) return "";

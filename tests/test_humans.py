@@ -13,11 +13,11 @@ def test_spec_approval_parks_the_job_and_shows_the_spec(world):
     asked = world.comments(1)[-1]
     assert asked.startswith(f"{MARKER}\n### Factory: approve the spec before it is built")
     assert "**spec.md**" in asked and "1. It exists." in asked
-    assert "- `/factory approve`" in asked and "- `/factory changes <what to change>`" in asked
+    assert "- `/mfactory approve`" in asked and "- `/mfactory changes <what to change>`" in asked
     assert "factory:needs-human" in world.labels(1)
     assert world.next(job) == [
         f"wait {job} #1: spec-approval is waiting for a maintainer. Reply with: "
-        "/factory approve 1 | /factory changes 1 <what to change> | /factory reject 1 <why>"]
+        "/mfactory approve 1 | /mfactory changes 1 <what to change> | /mfactory reject 1 <why>"]
 
 
 def test_approve_from_the_cli_continues_and_removes_the_label(world):
@@ -49,22 +49,28 @@ def test_an_outcome_the_step_lacks_is_refused(world):
 
 def test_a_maintainer_can_approve_with_a_comment(world):
     job = world.start(until="spec-approval", config_text=SPEC_APPROVAL)
-    world.comment(1, "/factory approve", "maintainer")
+    world.comment(1, "/mfactory approve", "maintainer")
     assert world.queue()[0] == ("resume", 1, job, "spec-approval", "a reply is waiting")
+    assert world.next(job)[0] == f"{job} #1: spec-approval APPROVE -> build"
+
+
+def test_a_factory_comment_from_before_the_rename_still_counts(world):
+    job = world.start(until="spec-approval", config_text=SPEC_APPROVAL)
+    world.comment(1, "/factory approve", "maintainer")
     assert world.next(job)[0] == f"{job} #1: spec-approval APPROVE -> build"
 
 
 def test_comments_from_people_without_write_access_are_ignored(world):
     job = world.start(until="spec-approval", config_text=SPEC_APPROVAL)
-    world.comment(1, "/factory approve", "alice")       # the author, but not a maintainer
-    world.comment(1, "/factory approve", "stranger")
+    world.comment(1, "/mfactory approve", "alice")       # the author, but not a maintainer
+    world.comment(1, "/mfactory approve", "stranger")
     assert world.next(job)[0].startswith("wait ")
 
 
 def test_a_comment_from_before_the_question_does_not_answer_it(world):
     world.configure(SPEC_APPROVAL)
     number = world.issue()
-    world.comment(number, "/factory approve", "maintainer")
+    world.comment(number, "/mfactory approve", "maintainer")
     job = world.create(number)
     world.play(job, until="spec-approval")
     assert world.next(job)[0].startswith("wait ")
@@ -72,7 +78,7 @@ def test_a_comment_from_before_the_question_does_not_answer_it(world):
 
 def test_changes_by_comment_carry_the_words_and_are_used_once(world):
     job = world.start(until="spec-approval", config_text=SPEC_APPROVAL)
-    world.comment(1, "/factory changes #1 Make it smaller.\nAnd faster.", "maintainer")
+    world.comment(1, "/mfactory changes #1 Make it smaller.\nAnd faster.", "maintainer")
     assert world.next(job)[0] == f"{job} #1: spec-approval CHANGES -> spec"
     assert "Make it smaller.\nAnd faster." in (world.dir(job) / "feedback-1.md").read_text()
     world.spec(job)
@@ -105,7 +111,7 @@ def test_needs_info_asks_the_author_and_their_plain_answer_resumes_intake(world)
     world.comment(number, "The second one.", "alice")
     lines = world.next(job)
     assert lines[0] == f"{job} #{number}: ask-author ANSWER -> intake"
-    assert lines[1] == "start-agent factory-intake"
+    assert lines[1] == "start-agent mfactory-intake"
     assert "@alice answered the questions" in lines[2]
     assert (world.dir(job) / "intake-1.md").exists() and not (world.dir(job) / "intake.md").exists()
     assert "> The second one." in (world.dir(job) / "issue.md").read_text()
@@ -129,7 +135,7 @@ def test_feedback_on_an_escalated_job_starts_a_new_round(world):
     world.approve(job, "ESCALATE")
     world.done(job)
     pr = world.job(job)["pr"]
-    world.comment(pr, "/factory feedback Rename the flag.", "maintainer", kind="prs")
+    world.comment(pr, "/mfactory feedback Rename the flag.", "maintainer", kind="prs")
     assert world.next(job)[0] == f"{job} #1: escalated FEEDBACK -> build"
     j = world.job(job)
     assert (j["round"], j["attempt"], j["taken"]) == (2, 1, {"escalated.FEEDBACK": 1})

@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
-# Install the software factory into the git repository you run this in.
+# Install the software factory.
 #
+#   curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --global
 #   curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --tool claude
 #
-# It copies the factory into .factory/, writes a starter factory.toml (never
-# overwriting one), generates the agent files for your tools, adds the runtime
-# folders to .gitignore and creates the GitHub labels.
+# --global installs the mfactory command for your user. Without it, the script
+# copies the factory into the git repository you run it in.
 set -euo pipefail
 
 REPO="${FACTORY_SOURCE_REPO:-danielsmag/modular-factory}"
 VERSION="latest"
 SOURCE=""
 TOOLS=()
+GLOBAL=0
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [--tool claude|cursor|codex]... [--version vX.Y.Z] [--source DIR]
+Usage: install.sh [--global] [--tool claude|cursor|codex]... [--version vX.Y.Z] [--source DIR]
 
+  --global    install the mfactory command for your user
   --tool      the coding tool to generate agents for; repeat it, or separate
-              names with commas, for several (default: claude)
+              names with commas, for several (default: claude). Not with --global.
   --version   a release tag to install (default: the latest release)
   --source    install from a local copy of the factory instead of downloading
 EOF
@@ -35,6 +37,7 @@ need_value() {
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --global) GLOBAL=1; shift ;;
     --tool) need_value "$@"; IFS=',' read -r -a more <<<"$2"; TOOLS+=("${more[@]}"); shift 2 ;;
     --tool=*) IFS=',' read -r -a more <<<"${1#*=}"; TOOLS+=("${more[@]}"); shift ;;
     --version) need_value "$@"; VERSION="$2"; shift 2 ;;
@@ -46,7 +49,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-git rev-parse --show-toplevel >/dev/null 2>&1 || fail "run this inside the git repository you want the factory in"
+if [ "$GLOBAL" = 1 ] && [ ${#TOOLS[@]} -gt 0 ]; then
+  fail "--global installs the CLI for your user; run mfactory install --tool inside a repository"
+fi
+if [ "$GLOBAL" != 1 ]; then
+  git rev-parse --show-toplevel >/dev/null 2>&1 || fail "run this inside the git repository you want the factory in"
+fi
 
 PYTHON=""
 for candidate in python3 python3.13 python3.12 python3.11; do
@@ -75,10 +83,33 @@ if [ -z "$SOURCE" ]; then
   curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$ref" | tar -xz -C "$SOURCE" --strip-components=1 ||
     fail "could not download $REPO at $ref"
 fi
-[ -f "$SOURCE/core/bin/factory" ] || fail "$SOURCE is not a copy of the factory"
+[ -f "$SOURCE/core/bin/mfactory" ] || fail "$SOURCE is not a copy of the factory"
+
+if [ "$GLOBAL" = 1 ]; then
+  if [ -n "${FACTORY_HOME:-}" ]; then
+    HOME_DIR="$FACTORY_HOME"
+  elif [ -n "${XDG_DATA_HOME:-}" ]; then
+    HOME_DIR="$XDG_DATA_HOME/modular-factory"
+  else
+    HOME_DIR="$HOME/.local/share/modular-factory"
+  fi
+  BIN_DIR="${FACTORY_BIN_DIR:-$HOME/.local/bin}"
+  rm -rf "$HOME_DIR"
+  mkdir -p "$HOME_DIR" "$BIN_DIR"
+  cp -a "$SOURCE"/. "$HOME_DIR"/
+  printf '%s\n' "$HOME_DIR" > "$HOME_DIR/.global"
+  ln -sfn "$HOME_DIR/core/bin/mfactory" "$BIN_DIR/mfactory"
+  echo "ok    mfactory installed at $BIN_DIR/mfactory"
+  case ":$PATH:" in
+    *":$BIN_DIR:"*) ;;
+    *) echo "note: add $BIN_DIR to PATH: export PATH=\"$BIN_DIR:\$PATH\"" ;;
+  esac
+  echo "Next: in a repository, run \`mfactory install --tool claude\`."
+  exit 0
+fi
 
 args=()
 for tool in ${TOOLS[@]+"${TOOLS[@]}"}; do
   args+=(--tool "$tool")
 done
-"$PYTHON" "$SOURCE/core/bin/factory" init ${args[@]+"${args[@]}"}
+"$PYTHON" "$SOURCE/core/bin/mfactory" init ${args[@]+"${args[@]}"}

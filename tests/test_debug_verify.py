@@ -23,7 +23,7 @@ def test_failed_checks_go_to_the_debugger_first(world):
     job = world.start(until="build", config_text=DEBUG)
     lines = failing_build(world, job)
     assert lines[0] == f"{job} #1: gate FAIL -> debug"
-    assert lines[1] == "start-agent factory-debug"
+    assert lines[1] == "start-agent mfactory-debug"
     assert "Round 1, attempt 1." in lines[2]
     assert lines[2].split("Write: ")[1].startswith(f"{world.dir(job)}/round-1/debug-1.md.")
 
@@ -144,7 +144,7 @@ def test_the_verifier_agent_checks_after_the_commands_pass(world):
     job = world.start(until="verify", config_text=verify(commands='["true"]', agent="true"))
     lines = world.next(job)
     j = world.job(job)
-    assert lines[0] == "start-agent factory-verify"
+    assert lines[0] == "start-agent mfactory-verify"
     assert f"Merge commit: {j['merge_sha']}. Checkout of that commit: {world.repo}/.worktrees/{job}-verify." in lines[1]
     with pytest.raises(Refused, match="verify.md wasn't written by the verifier agent"):
         world.done(job)
@@ -170,7 +170,7 @@ def test_a_verifying_job_holds_no_slot(world):
     job = world.start(until="verify", config_text=config)
     assert world.job(job)["running_since"] is None
     other = world.create(world.issue(title="Second"))
-    assert world.next(other)[0] == "start-agent factory-intake"
+    assert world.next(other)[0] == "start-agent mfactory-intake"
 
 
 def test_a_pull_request_merged_by_hand_is_verified_too(world):

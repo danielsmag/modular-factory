@@ -7,8 +7,8 @@ changed from the project it is derived from.
 
 | Part | What it is | What it decides |
 | --- | --- | --- |
-| The script, `.factory/bin/factory` | Python, standard library only | Everything about state: which step a job is in, where an outcome leads, whether a limit is reached, whether the checks pass, when to merge. |
-| The orchestrator, the `/factory` skill | A prompt your coding tool's main agent follows | Nothing. It asks the script what to do, starts the agents the script names, and reports back. |
+| The script, `.factory/bin/mfactory` | Python, standard library only | Everything about state: which step a job is in, where an outcome leads, whether a limit is reached, whether the checks pass, when to merge. |
+| The orchestrator, the `/mfactory` skill | A prompt your coding tool's main agent follows | Nothing. It asks the script what to do, starts the agents the script names, and reports back. |
 | The agents | One small generated file per step, pointing at a prompt in `.factory/roles/` | The content of their one step: a spec, a build, a review. |
 
 The pipeline is data in `factory.toml`, so no prompt describes it. Changing
@@ -18,12 +18,12 @@ graph.
 The orchestrator repeats two commands for each job:
 
 ```text
-$ .factory/bin/factory next 004
-start-agent factory-spec
+$ .factory/bin/mfactory next 004
+start-agent mfactory-spec
 prompt: Job: 004-dark-mode. Step: spec. Job folder: /repo/.factory/jobs/004-dark-mode/. ...
-then: .factory/bin/factory done 004-dark-mode
+then: .factory/bin/mfactory done 004-dark-mode
 
-$ .factory/bin/factory done 004-dark-mode
+$ .factory/bin/mfactory done 004-dark-mode
 004-dark-mode #12: spec DONE -> build
 ```
 
@@ -38,8 +38,10 @@ and follows the edge for that outcome.
 In this repository:
 
 ```text
-core/bin/factory          the CLI's entry point
-core/lib/modfactory/      the CLI's code
+core/bin/mfactory          the CLI's entry point
+core/bin/factory          the old name, kept so an upgrade from 0.1.0 can sync
+core/lib/modfactory/      the factory's code
+  cli/                    the command line: parser, fleet commands, install and status
   config.py               factory.toml over the defaults; validation; `config show`
   graph.py                steps, edges, outcomes; validation of the graph
   engine.py               next and done: entering steps, following edges, limits
@@ -48,7 +50,7 @@ core/lib/modfactory/      the CLI's code
   checks.py               [checks].commands and protected paths
   queue.py                queue, create, summary
   sync.py                 agent and skill files for each tool
-  install.py              init, upgrade, doctor
+  install.py              copy, init, upgrade, doctor
   dashboard.py            the local server for the dashboard
   fleet.py                several projects: fleet.toml, one queue, one dashboard
   store.py, gh.py, cost.py, util.py
@@ -134,7 +136,7 @@ def follow(job, step, outcome):
 | | Claude Code | Cursor | Codex |
 | --- | --- | --- | --- |
 | Agent files | `.claude/agents/*.md` | `.cursor/agents/*.md` | `.codex/agents/*.toml` |
-| Skill | `.claude/skills/factory` | reads Claude's, else `.agents/skills/factory` | `.agents/skills/factory` |
+| Skill | `.claude/skills/mfactory` | reads Claude's, else `.agents/skills/mfactory` | `.agents/skills/mfactory` |
 | Model per step | `model:` | `model:` | `model =`, left out for `inherit` |
 | Effort per step | `effort:` | `model: name[effort=x]`, only with a named model | `model_reasoning_effort =` |
 | Intake's guard | No shell tool; writes its file | `readonly: true`; hands in its file as its reply | `shell_tool = false`; hands in its file as its reply |
@@ -164,9 +166,9 @@ each tool allows.
 
 ## Decisions the plan left open
 
-- **A package, not one file.** The CLI is `core/bin/factory` plus the
-  `modfactory` package beside it, about 3,100 lines in 16 files, instead of
-  one script. It still installs as one folder with no dependencies.
+- **A package, not one file.** The CLI is `core/bin/mfactory` plus the
+  `modfactory` package beside it. The command line lives in `modfactory/cli/`.
+  It still installs as one folder with no dependencies.
 - **A shared role file.** `roles/common.md` holds what every agent must know
   (the prompt's format, the rules, the file format), so each role file holds
   only its own step.
@@ -176,7 +178,7 @@ each tool allows.
 - **`default` models.** `[models.<tool>].default` applies to every agent that
   names no value of its own, so one line gives Cursor or Codex a model for
   every step.
-- **Skill copies.** A tool gets its own copy of the `/factory` skill only when
+- **Skill copies.** A tool gets its own copy of the `/mfactory` skill only when
   no copy already sits in a folder it reads.
 - **`doctor` runs the checks** on a clean checkout of the base branch, unless
   told not to, because a base branch that fails its own checks fails every
@@ -184,8 +186,10 @@ each tool allows.
 - **The dashboard reads live state.** The server builds the list of jobs on
   each request instead of relying on a file written at each change, so it
   cannot show an out-of-date list.
-- **A fleet is a list of checkouts.** `fleet.toml` lives outside the projects.
-  The fleet runs each project's own `factory queue` and reads that project's
+- **A fleet is a list of checkouts.** The default file is
+  `~/.config/modular-factory/fleet.toml`. `mfactory fleet subscribe` creates it.
+  A `fleet.toml` in the current directory or a parent, or `FACTORY_FLEET`, wins.
+  The fleet runs each project's own `mfactory queue` and reads that project's
   job files. It does not merge pipelines or move a job between repositories.
   Each project applies its own `[run].concurrency` first. The fleet then
   applies `[fleet].concurrency` from this factory's `defaults.toml`.
@@ -217,7 +221,7 @@ They do not cover anything that needs a real tool or the real GitHub:
   prompts unchanged.
 - Handing in intake's file as a reply, on Cursor and Codex.
 - Whether a Codex agent with `shell_tool = false` can read files.
-- Whether Cursor lists the `/factory` skill twice when Claude Code, Cursor and
+- Whether Cursor lists the `/mfactory` skill twice when Claude Code, Cursor and
   Codex are all enabled. With only Claude Code and Cursor there is one copy.
 - Model names. The factory does not check them, and the defaults for Claude
   Code are the aliases the reference project used.
@@ -243,7 +247,7 @@ project's `factory/bin/job`, `factory/bin/gate`, `factory/bin/route` and
   is a versioned release that an installer puts into any repository, with
   `init`, `upgrade` and `doctor`.
 - **Three tools.** The reference runs in Claude Code. Prompts here have no
-  tool-specific wording, and `factory sync` writes each tool's agent files
+  tool-specific wording, and `mfactory sync` writes each tool's agent files
   from the same source.
 - **One configuration file.** `factory/config.json`, `factory/checks.sh` and
   settings held in agent files became `factory.toml`, merged over defaults and

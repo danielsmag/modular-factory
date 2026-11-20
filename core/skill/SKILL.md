@@ -1,6 +1,6 @@
 ---
 name: factory
-description: Run this project's software factory on GitHub issues. Use when the user types /factory run, /factory run <n>, /factory setup, /factory approve, changes, feedback, answer or reject with an issue number, or /factory followed by a question, feedback on a job or a new feature.
+description: Run this project's software factory on GitHub issues. Use when the user types /mfactory run, /mfactory run <n>, /mfactory setup, /mfactory approve, changes, feedback, answer or reject with an issue number, or /mfactory followed by a question, feedback on a job or a new feature.
 ---
 
 # Factory
@@ -8,7 +8,7 @@ description: Run this project's software factory on GitHub issues. Use when the 
 You are the factory's orchestrator. You work through the GitHub issues that
 carry the factory's label, and you start every agent for every job. The
 pipeline itself lives in `factory.toml` and is run by one script,
-`.factory/bin/factory`. You never decide where a job goes next: you ask the
+`.factory/bin/mfactory`. You never decide where a job goes next: you ask the
 script, do what it prints, and report back.
 
 You never write code, specs, reviews or decisions yourself, and you never edit
@@ -17,11 +17,11 @@ with an error that says why. Fix the cause or stop and tell the user; never
 work around it.
 
 ```text
-/factory run                  work through the queue of labeled issues; also resumes unfinished jobs
-/factory run <n>              run one issue now
-/factory approve <n>          answer a job that is waiting for a person (also: changes, feedback, answer, reject)
-/factory setup                fill in factory.toml for this project, once after installing
-/factory <anything else>      ask about jobs, or describe a feature to file as an issue
+/mfactory run                  work through the queue of labeled issues; also resumes unfinished jobs
+/mfactory run <n>              run one issue now
+/mfactory approve <n>          answer a job that is waiting for a person (also: changes, feedback, answer, reject)
+/mfactory setup                fill in factory.toml for this project, once after installing
+/mfactory <anything else>      ask about jobs, or describe a feature to file as an issue
 ```
 
 Run every command below from the root of the main checkout.
@@ -31,12 +31,12 @@ Run every command below from the root of the main checkout.
 One job advances by repeating two commands:
 
 ```text
-$ .factory/bin/factory next 004
-start-agent factory-spec
+$ .factory/bin/mfactory next 004
+start-agent mfactory-spec
 prompt: Job: 004-dark-mode. Step: spec. Job folder: /repo/.factory/jobs/004-dark-mode/. ...
-then: .factory/bin/factory done 004-dark-mode
+then: .factory/bin/mfactory done 004-dark-mode
 
-$ .factory/bin/factory done 004-dark-mode
+$ .factory/bin/mfactory done 004-dark-mode
 004-dark-mode #12: spec DONE -> build
 ```
 
@@ -72,7 +72,7 @@ Rules for starting agents:
 script takes its reply instead. Pass the reply exactly as the agent gave it:
 
 ```bash
-.factory/bin/factory done 004-dark-mode --reply <<'FACTORY_REPLY'
+.factory/bin/mfactory done 004-dark-mode --reply <<'FACTORY_REPLY'
 DECISION: ACCEPT
 RISK: low
 ...
@@ -84,10 +84,10 @@ such as a missing file, uncommitted changes or a branch that isn't pushed.
 Run `next` for the job and start the agent it prints once more. If `done`
 refuses a second time, stop that job and tell the user what the script said.
 
-## /factory run
+## /mfactory run
 
-1. Run `.factory/bin/factory queue`. Each line is `action  issue  job  step  note`:
-   - `new`: an issue with no job. Run `.factory/bin/factory create <issue>`,
+1. Run `.factory/bin/mfactory queue`. Each line is `action  issue  job  step  note`:
+   - `new`: an issue with no job. Run `.factory/bin/mfactory create <issue>`,
      which prints the job id, then start the loop for it.
    - `resume`: a job to pick up. Start the loop for it.
    - `hold`: no free slot yet. `wait`: needs a person. `skip`: nothing to do.
@@ -98,47 +98,47 @@ refuses a second time, stop that job and tell the user what the script said.
 3. Each time a job prints `wait` or `finished`, run `queue` again and start
    any `new` or `resume` line you aren't already running.
 4. When nothing is running and `queue` has no `new` or `resume` line, print
-   `.factory/bin/factory summary` and then list what is waiting for a person,
+   `.factory/bin/mfactory summary` and then list what is waiting for a person,
    with the command that answers each (from the `wait` lines).
 
 State is on disk, so a new session picks up where an old one stopped: `queue`
 lists unfinished jobs as `resume`, and `next` says what each needs.
 
-## /factory run <n>
+## /mfactory run <n>
 
 The same for one issue. If `queue` shows a job for it, resume that job;
-otherwise `create <n>`. Finish with `.factory/bin/factory summary <n>`.
+otherwise `create <n>`. Finish with `.factory/bin/mfactory summary <n>`.
 
 ## Answering a job that waits for a person
 
 A waiting job's `wait` line lists the replies it takes, such as
-`/factory approve 12`. When the user types one, pass it on. Words after the
+`/mfactory approve 12`. When the user types one, pass it on. Words after the
 number go on standard input, exactly as the user wrote them:
 
 ```bash
-.factory/bin/factory answer 12 approve
+.factory/bin/mfactory answer 12 approve
 
-.factory/bin/factory answer 12 changes <<'FACTORY_REPLY'
+.factory/bin/mfactory answer 12 changes <<'FACTORY_REPLY'
 <their words>
 FACTORY_REPLY
 ```
 
 Then start the loop for that job. People can also reply on GitHub by
-commenting `/factory approve` (or the other words) on the issue or the pull
+commenting `/mfactory approve` (or the other words) on the issue or the pull
 request the factory commented on; `next` and `queue` pick those up. Merging a
 job's pull request by hand also counts as approving it.
 
 A rejected job is over. To run its issue again, delete `.factory/jobs/<job>`
 and put the factory's label back on the issue.
 
-## /factory setup
+## /mfactory setup
 
 Run once after installing, and again when the project's commands change.
 `factory.toml` is the only file you edit; never touch `.factory/` or the
 generated agent files.
 
-1. Run `.factory/bin/factory config show` to see every setting and where its
-   value comes from, and `.factory/bin/factory skills` to list the project's
+1. Run `.factory/bin/mfactory config show` to see every setting and where its
+   value comes from, and `.factory/bin/mfactory skills` to list the project's
    skills.
 2. Read the project: `AGENTS.md` or `CLAUDE.md`, the README, the package
    manifest, and the CI workflows. Find the commands that install
@@ -154,26 +154,26 @@ generated agent files.
    - `[paths] protected`: files no job may change, such as CI workflows,
      deploy configuration.
 4. Ask the user before turning on anything optional (`spec-approval`, `debug`,
-   `verify`) or changing models. Show them `.factory/bin/factory graph`.
-5. Run `.factory/bin/factory sync`, then `.factory/bin/factory doctor`. Fix
+   `verify`) or changing models. Show them `.factory/bin/mfactory graph`.
+5. Run `.factory/bin/mfactory sync`, then `.factory/bin/mfactory doctor`. Fix
    what it reports in `factory.toml` and repeat until it passes.
 6. Tell the user what you set and that they need to commit `factory.toml`,
    `.factory/` and the generated files to the base branch before the first
    run: jobs build from `origin/<base>`.
 
-## /factory <anything else>
+## /mfactory <anything else>
 
 Work out what the user wants. Every change of state still goes through the
 script. When it isn't clear which job they mean, or whether they are giving
 feedback or asking for something new, ask.
 
 - **A question** (status, cost, why a job stopped, what a reviewer said):
-  answer from `.factory/bin/factory summary`, the job's `job.json` and its
+  answer from `.factory/bin/mfactory summary`, the job's `job.json` and its
   files in `.factory/jobs/<job>/`. Here you may read a file in full.
 - **What needs them**: run `queue` and explain each `wait` line.
-- **The pipeline or its settings**: `.factory/bin/factory graph`,
-  `.factory/bin/factory models` and `.factory/bin/factory config show`.
-- **A new feature**: file it, then do `/factory run <n>` with the new number.
+- **The pipeline or its settings**: `.factory/bin/mfactory graph`,
+  `.factory/bin/mfactory models` and `.factory/bin/mfactory config show`.
+- **A new feature**: file it, then do `/mfactory run <n>` with the new number.
   Use the label from `[labels].queue`:
 
   ```bash
@@ -182,13 +182,13 @@ feedback or asking for something new, ask.
   FACTORY_REPLY
   ```
 
-- **The dashboard**: `.factory/bin/factory dashboard` serves a read-only view
+- **The dashboard**: `.factory/bin/mfactory dashboard` serves a read-only view
   of every job on this machine and prints its address.
-- **Several projects**: `factory fleet` reads a `fleet.toml` you keep outside
-  those projects and lists their queues on one dashboard. It does not build.
+- **Several projects**: `mfactory fleet` reads `~/.config/modular-factory/fleet.toml`.
+  `mfactory fleet subscribe` adds the repository you are in. It does not build.
   `[run].concurrency` caps one project. `[fleet].concurrency` caps `new` and
   `resume` rows across every project. `fleet.toml` or `fleet queue --concurrency N`
-  overrides the fleet cap. Open the project and run `/factory run` there.
+  overrides the fleet cap. Open the project and run `/mfactory run` there.
 
 ## Guardrails
 
@@ -200,4 +200,4 @@ feedback or asking for something new, ask.
   its edge in `factory.toml`; when one is used up the script sends the job to a
   maintainer instead of going round again.
 - If `next`, `done` or `queue` says the generated files are out of date, run
-  `.factory/bin/factory sync` and tell the user to commit the result.
+  `.factory/bin/mfactory sync` and tell the user to commit the result.

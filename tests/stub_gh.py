@@ -112,6 +112,8 @@ def main(argv):
             state["labels"] = sorted(set(state["labels"]) | {pos[0]})
         elif action == "list":
             out = json.dumps([{"name": n} for n in state["labels"]])
+        elif action == "delete":
+            state["labels"] = [n for n in state["labels"] if n != pos[0]]
     elif group == "issue":
         if action == "view":
             issue = state["issues"].get(pos[0])

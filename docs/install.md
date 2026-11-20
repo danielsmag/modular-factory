@@ -13,7 +13,25 @@ Python files that use only the standard library.
 
 ## 1. Install
 
-Run this in the repository:
+Install the command once, for your user:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --global
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--global` | Install `mfactory` for your user. It must not be combined with `--tool`. |
+| `--version v0.1.0` | Install that release. Default: the latest release, or the `main` branch before the first release. |
+| `--source DIR` | Install from a local copy of this repository instead of downloading. |
+
+This puts the files in `~/.local/share/modular-factory` (`XDG_DATA_HOME` or `FACTORY_HOME` when set) and links `~/.local/bin/mfactory`. Then, in each repository:
+
+```bash
+mfactory install --tool claude
+```
+
+To install straight into the repository you are in, without a command on `PATH`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --tool claude
@@ -46,11 +64,11 @@ ok    GitHub labels: factory, factory:needs-info, factory:needs-human
 | Path | What it is | Commit it? |
 | --- | --- | --- |
 | `factory.toml` | Your configuration. The only file you edit. | Yes |
-| `.factory/` | The factory: its CLI, prompts and defaults. | Yes |
+| `.factory/` | The mfactory: its CLI, prompts and defaults. | Yes |
 | `.factory/jobs/` | The state and files of each job. | No (ignored) |
 | `.worktrees/` | One git worktree per running job. | No (ignored) |
-| `.claude/agents/factory-*.md`, `.cursor/agents/factory-*.md`, `.codex/agents/factory-*.toml` | One small agent file per step, generated from `factory.toml`. | Yes |
-| `.claude/skills/factory/` or `.agents/skills/factory/` | The `/factory` skill. | Yes |
+| `.claude/agents/mfactory-*.md`, `.cursor/agents/mfactory-*.md`, `.codex/agents/mfactory-*.toml` | One small agent file per step, generated from `factory.toml`. | Yes |
+| `.claude/skills/mfactory/` or `.agents/skills/mfactory/` | The `/mfactory` skill. | Yes |
 
 Running the installer again is safe: it never overwrites `factory.toml`.
 
@@ -59,7 +77,7 @@ Running the installer again is safe: it never overwrites `factory.toml`.
 In your coding tool, in the repository:
 
 ```text
-/factory setup
+/mfactory setup
 ```
 
 In Codex, mention the skill with `$factory setup`, or ask in words: "set up the
@@ -80,7 +98,7 @@ by hand; the [configuration reference](configuration.md) lists every key.
 After any change to `factory.toml`:
 
 ```bash
-.factory/bin/factory sync
+.factory/bin/mfactory sync
 ```
 
 This rewrites the generated agent files to match.
@@ -88,7 +106,7 @@ This rewrites the generated agent files to match.
 ## 3. Check
 
 ```bash
-.factory/bin/factory doctor
+.factory/bin/mfactory doctor
 ```
 
 ```text
@@ -115,12 +133,12 @@ as your CI. Pass `--skip-checks` to leave that out.
 
 | It reports | What to do |
 | --- | --- |
-| A problem in `factory.toml`, naming the key | Fix that key. `factory graph` shows the pipeline in effect. |
-| `[checks].commands is empty` | Run `/factory setup`, or list the commands yourself. |
-| Generated files differ from `factory.toml` | Run `.factory/bin/factory sync`. Edit `factory.toml`, never the generated files. |
+| A problem in `factory.toml`, naming the key | Fix that key. `mfactory graph` shows the pipeline in effect. |
+| `[checks].commands is empty` | Run `/mfactory setup`, or list the commands yourself. |
+| Generated files differ from `factory.toml` | Run `.factory/bin/mfactory sync`. Edit `factory.toml`, never the generated files. |
 | `factory.toml and .factory/ aren't on origin/<base> yet` | Commit and push them. Jobs build from that branch. |
 | The checks fail on the base branch | Fix the base branch first. Otherwise every job fails for a reason it did not cause. |
-| A label is missing | `factory init` creates them; it needs write access to the repository. |
+| A label is missing | `mfactory init` creates them; it needs write access to the repository. |
 | `<tool> isn't on PATH` | A warning only. It is fine if you run the tool as an app. |
 
 ## 4. Commit and run
@@ -134,7 +152,7 @@ git push
 Then label an issue `factory` and, in your tool:
 
 ```text
-/factory run
+/mfactory run
 ```
 
 Only people with triage or write access can add a label, so the label decides
@@ -143,41 +161,39 @@ whose issues the factory builds.
 To watch the jobs:
 
 ```bash
-.factory/bin/factory dashboard
+.factory/bin/mfactory dashboard
 ```
 
 ## Several projects
 
-The factory in a project only sees that project. To watch several, keep a fleet file in a directory of your own. That directory is not one of the projects, and you do not commit it into them.
+The factory in a project only sees that project. Your fleet file is `~/.config/modular-factory/fleet.toml` (`XDG_CONFIG_HOME` when that is set). Subscribe from inside a project that already has the factory:
 
 ```bash
-mkdir -p ~/work/fleet
-cd ~/work/fleet
-/path/to/modular-factory/core/bin/factory fleet init
-/path/to/modular-factory/core/bin/factory fleet add /path/to/project-a
-/path/to/modular-factory/core/bin/factory fleet add /path/to/project-b
-/path/to/modular-factory/core/bin/factory fleet queue
-/path/to/modular-factory/core/bin/factory fleet dashboard
+cd /path/to/project-a
+mfactory fleet subscribe
+cd /path/to/project-b
+mfactory fleet subscribe
+mfactory fleet list
+mfactory fleet queue
+mfactory fleet dashboard
+mfactory fleet unsubscribe
 ```
 
-`fleet add` accepts a checkout only after the factory is installed there. After you upgrade a project, that project's `.factory/bin/factory` is the same command. Run it from the fleet directory:
+`subscribe` and `unsubscribe` take a path when you are not standing in the repository. `mfactory dashboard` and `mfactory status` outside a repository use this same list. `mfactory upgrade --all` upgrades every subscribed project. A project that fails does not stop the others, and each repository still needs its own commit.
 
-```bash
-cd ~/work/fleet
-/path/to/project-a/.factory/bin/factory fleet queue
-```
+A `fleet.toml` in the current directory or a parent still wins, and so does `FACTORY_FLEET`. `mfactory fleet init` writes that local file. `fleet add` accepts a checkout only after the factory is installed there.
 
-`fleet queue` runs each project's own `.factory/bin/factory queue`. A project that fails is reported, and the others still print. `fleet dashboard` serves one read-only page on this machine, grouped by project. Set `FACTORY_FLEET` to the `fleet.toml` path when you are not inside the fleet directory.
+`fleet queue` runs each project's own `.factory/bin/mfactory queue`. A project that fails is reported, and the others still print. `fleet dashboard` serves one read-only page on this machine, grouped by project.
 
-Each project caps its own jobs with `[run].concurrency` (default 3). The fleet has a second cap, `[fleet].concurrency` in `defaults.toml` (also 3): that many `new` and `resume` rows across every project. `concurrency` in `fleet.toml`, or `factory fleet queue --concurrency N`, overrides the fleet cap. Later rows print as `hold`. Projects earlier in the file get the slots. `wait`, `skip` and `hold` do not take a slot. A project's `factory.toml` cannot set the fleet cap.
+Each project caps its own jobs with `[run].concurrency` (default 3). The fleet has a second cap, `[fleet].concurrency` in `defaults.toml` (also 3): that many `new` and `resume` rows across every project. `concurrency` in `fleet.toml`, or `mfactory fleet queue --concurrency N`, overrides the fleet cap. Later rows print as `hold`. Projects earlier in the file get the slots. `wait`, `skip` and `hold` do not take a slot. A project's `factory.toml` cannot set the fleet cap.
 
-Building stays in the project. Open that project and run `/factory run`, or `/factory run 12` for one issue. The per-project `factory dashboard` still shows that project's pipeline.
+Building stays in the project. Open that project and run `/mfactory run`, or `/mfactory run 12` for one issue. The per-project `mfactory dashboard` still shows that project's pipeline.
 
 Two clones of one GitHub repository both appear if you add both paths. They do not share job files.
 
 ## Permissions your tool will ask for
 
-The orchestrator runs `.factory/bin/factory`. The agents it starts run `git`,
+The orchestrator runs `.factory/bin/mfactory`. The agents it starts run `git`,
 `gh` and your project's check commands inside the job's worktree. If your tool
 asks before each command, allow these for the repository, or a run stops at
 every step waiting for you.
@@ -189,20 +205,20 @@ every step waiting for you.
 enabled = ["claude", "cursor"]
 ```
 
-`factory sync` then writes agent files for each. Any one of the tools can run
-`/factory run`; they share the same job state in `.factory/jobs/`, so do not
+`mfactory sync` then writes agent files for each. Any one of the tools can run
+`/mfactory run`; they share the same job state in `.factory/jobs/`, so do not
 run two orchestrators on the same checkout at the same time.
 
 Cursor also reads `.claude/skills`. With Claude Code and Cursor enabled, the
-factory writes the skill only to `.claude/skills/factory`, so Cursor lists it
-once. With all three tools enabled it also writes `.agents/skills/factory` for
+factory writes the skill only to `.claude/skills/mfactory`, so Cursor lists it
+once. With all three tools enabled it also writes `.agents/skills/mfactory` for
 Codex, and Cursor may list the skill twice; the copies are identical.
 
 ## Upgrade
 
 ```bash
-.factory/bin/factory upgrade                 # the latest release
-.factory/bin/factory upgrade --version v0.2.0
+.factory/bin/mfactory upgrade                 # the latest release
+.factory/bin/mfactory upgrade --version v0.2.0
 ```
 
 It replaces `.factory/` (not `.factory/jobs/`), runs `sync`, and leaves
@@ -214,8 +230,8 @@ that number moves. Commit the result.
 
 ```bash
 rm -rf .factory factory.toml .worktrees
-rm -rf .claude/agents/factory-*.md .cursor/agents/factory-*.md .codex/agents/factory-*.toml
-rm -rf .claude/skills/factory .agents/skills/factory
+rm -rf .claude/agents/mfactory-*.md .cursor/agents/mfactory-*.md .codex/agents/mfactory-*.toml
+rm -rf .claude/skills/mfactory .agents/skills/mfactory
 git worktree prune
 ```
 

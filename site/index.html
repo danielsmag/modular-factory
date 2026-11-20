@@ -297,7 +297,7 @@ footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--m
     </div>
   </main>
 </div>
-<footer><span id="foot-left">read-only · approvals and feedback go through /factory or an issue comment</span><span id="foot-right"></span></footer>
+<footer><span id="foot-left">read-only · approvals and feedback go through /mfactory or an issue comment</span><span id="foot-right"></span></footer>
 
 <script>
 "use strict";
@@ -390,7 +390,7 @@ function commands(job) {
   const step = stepOf(job.step);
   if (!step || !job.waiting) return [];
   const hint = { REJECT: " <why>", ANSWER: " <your answer>", APPROVE: "" };
-  return step.edges.map((e) => "/factory " + e.outcome.toLowerCase() + " " + job.issue + (e.outcome in hint ? hint[e.outcome] : " <what to change>"));
+  return step.edges.map((e) => "/mfactory " + e.outcome.toLowerCase() + " " + job.issue + (e.outcome in hint ? hint[e.outcome] : " <what to change>"));
 }
 
 // ---- wordmark: FACTORY in outlined pixel letters ----
@@ -482,7 +482,7 @@ function byStep(all) {
   return { priced, rows, sum };
 }
 function jobTable(list) {
-  if (!list.length) return el("div", { class: "empty", text: state.query ? "No job matches the search." : "No jobs yet. Label an issue and run /factory run." });
+  if (!list.length) return el("div", { class: "empty", text: state.query ? "No job matches the search." : "No jobs yet. Label an issue and run /mfactory run." });
   const body = el("tbody", {}, list.map((job) => {
     const row = el("tr", { class: "link", tabindex: 0, onclick: () => { location.hash = "#/jobs/" + encodeURIComponent(job.id); },
       onkeydown: (e) => { if (e.key === "Enter") location.hash = "#/jobs/" + encodeURIComponent(job.id); } },
@@ -750,7 +750,7 @@ function jobDetail(job) {
 function jobsView(id) {
   const all = jobs(), shown = all.filter(matches);
   const current = all.find((j) => j.id === id) || shown[0] || null;
-  if (!all.length) return [el("h1", { text: "Jobs" }), el("p", { class: "sub", text: "One job per labeled issue" }), el("div", { class: "notice" }, "No jobs yet. Label an issue ", el("code", { text: state.index.labels.queue }), " and run ", el("code", { text: "/factory run" }), " in your coding tool.")];
+  if (!all.length) return [el("h1", { text: "Jobs" }), el("p", { class: "sub", text: "One job per labeled issue" }), el("div", { class: "notice" }, "No jobs yet. Label an issue ", el("code", { text: state.index.labels.queue }), " and run ", el("code", { text: "/mfactory run" }), " in your coding tool.")];
   return [
     el("h1", { text: "Jobs" }),
     el("p", { class: "sub", text: `${shown.length} of ${all.length}` + (state.query ? " match the search" : "") }),
@@ -797,7 +797,7 @@ function render() {
   let content;
   if (!state.index || !state.graph) {
     content = [el("h1", { text: "factory" }), el("div", { class: "notice" }, state.error
-      ? el("span", {}, "The dashboard's data could not be loaded: ", el("code", { text: state.error }), ". Start it with ", el("code", { text: ".factory/bin/factory dashboard" }), ".")
+      ? el("span", {}, "The dashboard's data could not be loaded: ", el("code", { text: state.error }), ". Start it with ", el("code", { text: ".factory/bin/mfactory dashboard" }), ".")
       : "Loading...")];
   } else {
     document.getElementById("address").textContent = `${state.index.repo}/.factory/jobs`;

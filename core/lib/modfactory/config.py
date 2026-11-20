@@ -124,7 +124,7 @@ class Config:
         return [risk for risk in RISKS if risk in found]
 
     def agent_name(self, key, risk=None):
-        return f"factory-{key}-{risk}" if risk in self.variants(key) else f"factory-{key}"
+        return f"mfactory-{key}-{risk}" if risk in self.variants(key) else f"mfactory-{key}"
 
     def model_for(self, tool, key, risk=None):
         """The step's entry over the tool's `default`, key by key, then the entry for the job's risk."""
@@ -145,12 +145,19 @@ class Config:
         return chosen
 
 
+def shown_agent(name):
+    """The agent to start. Jobs saved before the rename stored `factory-` names."""
+    if isinstance(name, str) and name.startswith("factory-"):
+        return "m" + name
+    return name
+
+
 def load(repo, validate=True, text=None):
     """The effective config: defaults, then each adapter's model table, then factory.toml."""
     repo = Path(repo)
     path = repo / FILE
     if text is None and not path.exists():
-        raise Refused(f"no {FILE} in {repo}. Run `factory init` there first.")
+        raise Refused(f"no {FILE} in {repo}. Run `mfactory install` there first.")
     adapters = load_adapters()
     layers = [("default", read_toml(CORE / "defaults.toml"))]
     for name, adapter in adapters.items():
@@ -265,12 +272,12 @@ def check(cfg):
             out.append(f"[{key}] is not a section. Known: {', '.join(sorted(TOP))}")
     if d.get("schema") != SCHEMA:
         out.append(f"schema = {d.get('schema')!r}, but this factory reads schema {SCHEMA}. "
-                   "Run `factory upgrade`, or set schema to match.")
+                   "Run `mfactory upgrade`, or set schema to match.")
     for name, spec in TABLES.items():
         test_table(name, d.get(name, {}), spec)
     if cfg.sources.get(("fleet", "concurrency")) == FILE:
         out.append("[fleet].concurrency is the cap across projects. Set it in fleet.toml, "
-                   "or pass --concurrency to `factory fleet queue`.")
+                   "or pass --concurrency to `mfactory fleet queue`.")
 
     # tools
     tools = d.get("tools", {})

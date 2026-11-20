@@ -14,9 +14,11 @@ TAIL = 80
 
 # Paths the factory owns. A job branch may not add, change or delete anything
 # here, or it could rewrite the pipeline, the checks or the agents that judge it.
-OWNED = ["factory.toml", ".factory/*", ".claude/agents/factory-*", ".cursor/agents/factory-*",
-         ".codex/agents/factory-*", ".claude/skills/factory/*", ".cursor/skills/factory/*",
-         ".agents/skills/factory/*"]
+OWNED = ["factory.toml", ".factory/*",
+         ".claude/agents/mfactory-*", ".cursor/agents/mfactory-*", ".codex/agents/mfactory-*",
+         ".claude/skills/mfactory/*", ".cursor/skills/mfactory/*", ".agents/skills/mfactory/*",
+         ".claude/agents/factory-*", ".cursor/agents/factory-*", ".codex/agents/factory-*",
+         ".claude/skills/factory/*", ".cursor/skills/factory/*", ".agents/skills/factory/*"]
 
 
 def protected_changes(cfg, worktree):

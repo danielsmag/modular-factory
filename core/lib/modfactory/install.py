@@ -1,4 +1,4 @@
-"""`factory init`, `factory upgrade` and `factory doctor`."""
+"""`mfactory install`, `mfactory upgrade` and `mfactory doctor`."""
 
 import json
 import shutil
@@ -25,10 +25,10 @@ STARTER = """\
 # The software factory's configuration. This is the only file you edit.
 #
 # It holds what this project changes; everything else is a default.
-#   .factory/bin/factory config show   every setting and where its value comes from
-#   .factory/bin/factory graph         the pipeline in effect
-#   .factory/bin/factory models        the model and effort of each agent
-# After a change, run `.factory/bin/factory sync` and commit the result.
+#   .factory/bin/mfactory config show   every setting and where its value comes from
+#   .factory/bin/mfactory graph         the pipeline in effect
+#   .factory/bin/mfactory models        the model and effort of each agent
+# After a change, run `.factory/bin/mfactory sync` and commit the result.
 
 schema = 1
 
@@ -86,11 +86,11 @@ commands = []               # for example ["npm ci", "npm run lint", "npm test"]
 def layout(root):
     """(core, adapters, licence folder) for a source checkout or an installed `.factory/`."""
     root = Path(root)
-    if (root / "core" / "bin" / "factory").is_file():
+    if (root / "core" / "bin" / "mfactory").is_file() or (root / "core" / "bin" / "factory").is_file():
         return root / "core", root / "adapters", root
-    if (root / "bin" / "factory").is_file():
+    if (root / "bin" / "mfactory").is_file() or (root / "bin" / "factory").is_file():
         return root, root / "adapters", root
-    raise Refused(f"{root} is not a copy of the factory: it has no core/bin/factory")
+    raise Refused(f"{root} is not a copy of the factory: it has no core/bin/mfactory")
 
 
 def copy_core(source, repo):
@@ -115,7 +115,10 @@ def copy_core(source, repo):
             shutil.copytree(src, target, ignore=skip)
         else:
             shutil.copy2(src, target)
-    (dest / "bin" / "factory").chmod(0o755)
+    for name in ("mfactory", "factory"):
+        binary = dest / "bin" / name
+        if binary.is_file():
+            binary.chmod(0o755)
     return True
 
 
@@ -152,7 +155,7 @@ def create_labels(cfg, say):
         if res.returncode != 0:
             why = (res.stderr or res.stdout).strip().splitlines()
             say(f"warn  label `{name}` was not created: {why[0] if why else 'gh failed'}")
-            say("      Create the labels later with `.factory/bin/factory init`.")
+            say("      Create the labels later with `.factory/bin/mfactory install`.")
             return
     say("ok    GitHub labels: " + ", ".join(cfg["labels"][k] for k in LABELS))
 
@@ -195,10 +198,10 @@ def init(repo, tools=None, say=print):
             say(f"  {name}  ({where})" + (f"  {description[:70]}" if description else ""))
     say("")
     say("Next:")
-    say(f"  1. In your tool, run `/factory setup` to fill in {config.FILE} (or edit it yourself).")
-    say("  2. Run `.factory/bin/factory doctor`.")
+    say(f"  1. In your tool, run `/mfactory setup` to fill in {config.FILE} (or edit it yourself).")
+    say("  2. Run `.factory/bin/mfactory doctor`.")
     say(f"  3. Commit {config.FILE}, .factory/ and the generated files to {cfg.base}, and push.")
-    say(f"  4. Label an issue `{cfg['labels']['queue']}` and run `/factory run`.")
+    say(f"  4. Label an issue `{cfg['labels']['queue']}` and run `/mfactory run`.")
 
 
 # ---- upgrade ---------------------------------------------------------------
@@ -232,11 +235,19 @@ def fetch_release(ref, into):
     return folders[0]
 
 
+def project_cli(repo: Path) -> Path:
+    """The factory command inside a project. Prefers `mfactory`, then the 0.1.0 name."""
+    current: Path = repo / ".factory" / "bin" / "mfactory"
+    if current.is_file():
+        return current
+    return repo / ".factory" / "bin" / "factory"
+
+
 def upgrade(repo, ref="latest", source=None, say=print):
     """Replace `.factory/` with another version and re-sync. factory.toml is not touched."""
     repo = Path(repo)
-    if not (repo / ".factory" / "bin" / "factory").exists():
-        raise Refused("the factory isn't installed here. Run `factory init` first.")
+    if not project_cli(repo).exists():
+        raise Refused("the factory isn't installed here. Run `mfactory install` first.")
     before = (repo / ".factory" / "VERSION").read_text().strip()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(source).resolve() if source else fetch_release(ref, tmp)
@@ -251,11 +262,11 @@ def upgrade(repo, ref="latest", source=None, say=print):
         copy_core(root, repo)
     say(f"ok    .factory/ {before} -> {after}")
     # The new version's own code must do the sync, not the one still loaded here.
-    res = subprocess.run([sys.executable, str(repo / ".factory" / "bin" / "factory"), "sync"], cwd=repo)
+    res = subprocess.run([sys.executable, str(project_cli(repo)), "sync"], cwd=repo)
     if res.returncode != 0:
         raise Refused(f"the new version could not sync. Fix {config.FILE} as it says, then run "
-                      "`.factory/bin/factory sync`.")
-    say(f"Next: run `.factory/bin/factory doctor`, then commit .factory/ and the generated files to "
+                      "`.factory/bin/mfactory sync`.")
+    say(f"Next: run `.factory/bin/mfactory doctor`, then commit .factory/ and the generated files to "
         f"{base_branch(repo)}.")
 
 
@@ -333,7 +344,7 @@ def doctor(repo, run_checks=True, say=print):
             what = {"create": "is missing", "remove": "is left over from an earlier config",
                     "update": "differs from what factory.toml generates (edited by hand, or not synced)"}[action]
             fail(f"{rel} {what}")
-        say("      Run `.factory/bin/factory sync`. It overwrites hand edits: put changes in factory.toml.")
+        say("      Run `.factory/bin/mfactory sync`. It overwrites hand edits: put changes in factory.toml.")
     elif actions is not None:
         ok("generated agent and skill files match factory.toml")
     for note in notes:
@@ -341,13 +352,13 @@ def doctor(repo, run_checks=True, say=print):
 
     # the installed core
     installed = repo / ".factory"
-    if not (installed / "bin" / "factory").exists():
-        fail(".factory/ isn't installed: run `factory init`")
+    if not project_cli(repo).exists():
+        fail(".factory/ isn't installed: run `mfactory install`")
     elif CORE.resolve() != installed.resolve():
         warn(f"this command runs from {CORE}, not from {installed}")
     missing = [i for i in ITEMS + ["adapters"] if not (installed / i).exists()]
-    if missing and (installed / "bin" / "factory").exists():
-        fail(f".factory/ is incomplete, missing: {', '.join(missing)}. Run `.factory/bin/factory upgrade`.")
+    if missing and project_cli(repo).exists():
+        fail(f".factory/ is incomplete, missing: {', '.join(missing)}. Run `.factory/bin/mfactory upgrade`.")
 
     # git
     base = cfg.base
@@ -357,14 +368,14 @@ def doctor(repo, run_checks=True, say=print):
         fail(f'origin has no branch "{base}" ([project].base_branch), or it can\'t be fetched')
     else:
         ok(f"origin/{base} can be fetched")
-        tracked = run(["git", "ls-tree", "-r", "--name-only", f"origin/{base}", "--", config.FILE,
-                       ".factory/bin/factory"], cwd=repo, check=False).stdout.split()
-        if len(tracked) < 2:
+        tracked = set(run(["git", "ls-tree", "-r", "--name-only", f"origin/{base}", "--", config.FILE,
+                           ".factory/bin/mfactory", ".factory/bin/factory"], cwd=repo, check=False).stdout.split())
+        if config.FILE not in tracked or not tracked & {".factory/bin/mfactory", ".factory/bin/factory"}:
             warn(f"{config.FILE} and .factory/ aren't on origin/{base} yet. Commit and push them: "
                  "jobs build from that branch.")
     ignored = run(["git", "check-ignore", "-q", ".factory/jobs/x"], cwd=repo, check=False).returncode == 0
     (ok if ignored else fail)(".factory/jobs/ is ignored by git" if ignored
-                              else ".factory/jobs/ isn't in .gitignore: run `factory init`")
+                              else ".factory/jobs/ isn't in .gitignore: run `mfactory install`")
 
     # labels
     if _version("gh") is not None:
@@ -372,7 +383,7 @@ def doctor(repo, run_checks=True, say=print):
         if res.returncode == 0:
             have = {label["name"] for label in json.loads(res.stdout)}
             gone = [n for n in cfg["labels"].values() if n not in have]
-            (fail if gone else ok)(f"GitHub labels missing: {', '.join(gone)}. Run `factory init`." if gone
+            (fail if gone else ok)(f"GitHub labels missing: {', '.join(gone)}. Run `mfactory install`." if gone
                                    else "GitHub labels exist")
         else:
             warn("could not list the repository's labels")
@@ -380,7 +391,7 @@ def doctor(repo, run_checks=True, say=print):
     # checks on the base branch
     commands = cfg["checks"]["commands"]
     if not commands:
-        fail("[checks].commands is empty, so nothing proves a build works. Run `/factory setup`.")
+        fail("[checks].commands is empty, so nothing proves a build works. Run `/mfactory setup`.")
     elif not run_checks:
         warn("the checks were not run (--skip-checks)")
     elif failures:

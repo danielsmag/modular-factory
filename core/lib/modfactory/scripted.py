@@ -122,7 +122,7 @@ class Scripted:
     def _verify_agent_done(self, job, name, step):
         state = job.get("verify") or {}
         if not step["agent"] or state.get("commands") != "PASS":
-            raise Refused(f"{name} isn't waiting for its agent. Run `.factory/bin/factory next {job['id']}`.")
+            raise Refused(f"{name} isn't waiting for its agent. Run `.factory/bin/mfactory next {job['id']}`.")
         if not self.fresh(job, "verify.md", baseline=state.get("baseline") or [0, 0]):
             raise Refused("verify.md wasn't written by the verifier agent during this step")
         line = first_line(self.dir(job) / "verify.md") or ""

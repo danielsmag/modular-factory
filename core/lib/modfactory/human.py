@@ -5,7 +5,7 @@ import re
 from . import graph
 from .util import MARKER, Refused, body, now
 
-COMMAND = re.compile(r"\s*/factory[ \t]+([a-z][a-z-]*)\b[ \t]*(.*)", re.S)
+COMMAND = re.compile(r"\s*/(?:m)?factory[ \t]+([a-z][a-z-]*)\b[ \t]*(.*)", re.S)
 NEEDS_TEXT = {"CHANGES", "FEEDBACK", "REJECT", "ANSWER"}
 COMMENT_LIMIT = 60000
 
@@ -21,8 +21,8 @@ class Humans:
         rows = []
         for outcome in step["on"]:
             text = {"REJECT": " <why>", "ANSWER": " <your answer>", "APPROVE": ""}.get(outcome, " <what to change>")
-            rows.append(f"/factory {outcome.lower()} {job['issue']}{text}" if slash
-                        else f"`/factory {outcome.lower()}{text}`")
+            rows.append(f"/mfactory {outcome.lower()} {job['issue']}{text}" if slash
+                        else f"`/mfactory {outcome.lower()}{text}`")
         return rows
 
     def _ask(self, job, name, step):
@@ -68,7 +68,7 @@ class Humans:
     def _find_reply(self, job, step):
         """The first comment after the factory's last one that answers this step, or None.
 
-        `/factory <outcome> [text]` picks an outcome. On a step with an ANSWER
+        `/mfactory <outcome> [text]` picks an outcome. A `/factory` comment still counts. On a step with an ANSWER
         outcome, any other comment from an allowed person is the answer.
         """
         threads = [("issue", job["issue"])]

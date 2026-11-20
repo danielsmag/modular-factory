@@ -6,8 +6,8 @@ cli = "cursor-agent"
 
 [paths]
 agents = ".cursor/agents"
-skill = ".agents/skills/factory"
-# Cursor also loads the other tools' folders, so `factory sync` writes it no second copy.
+skill = ".agents/skills/mfactory"
+# Cursor also loads the other tools' folders, so `mfactory sync` writes it no second copy.
 reads_skills = [".agents/skills", ".cursor/skills", ".claude/skills", ".codex/skills"]
 
 [agents]

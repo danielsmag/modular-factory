@@ -1,13 +1,39 @@
 """What to run: new jobs, the queue of labeled issues, and the summary table."""
 
 from datetime import UTC, datetime
+from typing import Any, Protocol
 
 from . import graph
+from .config import Config
+from .gh import GitHub
+from .store import Store
 from .util import Refused, now, parse_time
 
 
+class _QueueHost(Protocol):
+    """Methods `Factory` supplies when it mixes `Queue` in."""
+
+    cfg: Config
+    gh: GitHub
+    store: Store
+
+    def _write_issue_md(self, job: dict[str, Any], issue: dict[str, Any] | None = None) -> dict[str, Any]: ...
+
+    def _enter(self, job: dict[str, Any], target: str) -> tuple[str, list[str]]: ...
+
+    def _adopt_merge(self, job: dict[str, Any]) -> bool: ...
+
+    def _find_reply(self, job: dict[str, Any], step: dict[str, Any]) -> tuple[str, str, str, Any] | None: ...
+
+
 class Queue:
-    def create(self, number):
+    """Job queue. `Factory` owns `cfg`, `gh`, and `store` and mixes this in."""
+
+    cfg: Config
+    gh: GitHub
+    store: Store
+
+    def create(self: _QueueHost, number: object) -> dict[str, Any]:
         """A new job for an open issue that carries the queue label."""
         number = int(str(number).lstrip("#"))
         labels = self.cfg["labels"]
@@ -46,7 +72,7 @@ class Queue:
         self.store.save(job)
         return job
 
-    def queue(self):
+    def queue(self: _QueueHost) -> list[tuple[Any, ...]]:
         """Rows of `action issue job step note`, in the order to act on them.
 
         `new` and `resume` rows fit in the concurrency slots. `hold` rows wait

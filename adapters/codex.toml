@@ -6,7 +6,7 @@ cli = "codex"
 
 [paths]
 agents = ".codex/agents"
-skill = ".agents/skills/factory"
+skill = ".agents/skills/mfactory"
 reads_skills = [".agents/skills"]
 
 [agents]

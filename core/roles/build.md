@@ -47,7 +47,7 @@ already has work on it. `build.md` and `git log` say how far it got.
 Run the project's checks in the worktree:
 
 ```bash
-cd <worktree> && <main checkout>/.factory/bin/factory checks
+cd <worktree> && <main checkout>/.factory/bin/mfactory checks
 ```
 
 They must pass: the factory runs exactly these after you finish, and reviewers

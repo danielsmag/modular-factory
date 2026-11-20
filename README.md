@@ -20,46 +20,57 @@ skills each agent reads.
 
 ## Install
 
-In the repository you want the factory in:
+Install the `mfactory` command once:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --global
+```
+
+Then, in each repository:
+
+```bash
+mfactory install --tool claude
+```
+
+Use `--tool cursor` or `--tool codex` instead, or repeat `--tool` for several.
+You need Python 3.11 or later, `git`, and the GitHub CLI `gh`, signed in.
+
+To install straight into one repository, without the command on your `PATH`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --tool claude
 ```
 
-Use `--tool cursor` or `--tool codex` instead, or name several:
-`--tool claude,cursor`. You need Python 3.11 or later, `git`, and the GitHub
-CLI `gh`, signed in.
-
 Then, in your coding tool:
 
 ```text
-/factory setup
+/mfactory setup
 ```
 
 This reads the project and fills in `factory.toml`: what the project is for and
 the commands that install, lint and test it. Commit `factory.toml`, `.factory/`
 and the generated agent files to your base branch, and push. The
 [install guide](docs/install.md) has each step and what to do when
-`factory doctor` reports a problem.
+`mfactory doctor` reports a problem.
 
 ## Use
 
 ```text
-/factory run                  work through every issue labeled `factory`
-/factory run 12               run issue 12 now
-/factory approve 12           answer a job that is waiting for you
-/factory <anything else>      ask about jobs, or describe a feature to file as an issue
+/mfactory run                  work through every issue labeled `factory`
+/mfactory run 12               run issue 12 now
+/mfactory approve 12           answer a job that is waiting for you
+/mfactory <anything else>      ask about jobs, or describe a feature to file as an issue
 ```
 
 A job that needs a person stops and says so on the issue or the pull request.
-You answer there with a comment, such as `/factory changes Use the existing
+You answer there with a comment, such as `/mfactory changes Use the existing
 Money type`, or in your tool. Nothing else waits for it: other jobs keep
 running.
 
 ## The pipeline is a graph you can read and change
 
 Each step names its type and where each outcome leads. This is the default
-pipeline, printed by `.factory/bin/factory graph`:
+pipeline, printed by `.factory/bin/mfactory graph`:
 
 ```text
 intake         agent   ACCEPT -> spec | NEEDS-INFO -> ask-author (max 2) | REJECT -> rejected
@@ -124,7 +135,7 @@ default = { model = "gpt-5.6-sol", effort = "medium" }   # every step that names
 
 `low`, `medium` and `high` are the job's risk, which intake decides: the
 example reviews low-risk jobs with a cheaper model. Run
-`.factory/bin/factory models` to see what every agent uses in every tool.
+`.factory/bin/mfactory models` to see what every agent uses in every tool.
 
 ## Your project's skills
 
@@ -142,41 +153,39 @@ skills = ["testing"]          # only the builder
 ## Dashboard
 
 ```bash
-.factory/bin/factory dashboard
+.factory/bin/mfactory dashboard
 ```
 
 It serves a read-only page on your machine: every job and its current step, the
 pipeline with the number of jobs in each step, what each job wrote, and the
 merged configuration with the source of each value. It changes nothing;
-approvals and feedback go through `/factory` or an issue comment.
+approvals and feedback go through `/mfactory` or an issue comment.
 
 ![The dashboard's pipeline view, showing made-up sample jobs](docs/dashboard-pipeline.png)
 
 ## Several projects
 
-Install the factory in each project. Then, in a directory of your own:
+Install the factory in each project, then subscribe that checkout. The list lives in `~/.config/modular-factory/fleet.toml`. No extra directory is required.
 
 ```bash
-mkdir -p ~/work/fleet && cd ~/work/fleet
-/path/to/modular-factory/core/bin/factory fleet init
-/path/to/modular-factory/core/bin/factory fleet add /path/to/project-a
-/path/to/modular-factory/core/bin/factory fleet add /path/to/project-b
-/path/to/modular-factory/core/bin/factory fleet dashboard
+cd /path/to/project-a && mfactory fleet subscribe
+cd /path/to/project-b && mfactory fleet subscribe
+mfactory fleet dashboard
 ```
 
-`factory fleet queue` and `factory fleet dashboard` show every project's jobs. Each job stays in its own checkout. Open that project and run `/factory run` there. The [install guide](docs/install.md#several-projects) has the rest.
+`mfactory status` and `mfactory dashboard` outside a repository show every subscribed project. `mfactory upgrade --all` upgrades each one. Each job stays in its own checkout. Open that project and run `/mfactory run` there. The [install guide](docs/install.md#several-projects) has the rest.
 
 ## Commands
 
 ```text
-factory init | sync | doctor | upgrade            install and maintain
-factory config show | graph | models | skills     see the configuration
-factory queue | create | next | done | answer     run jobs (the /factory skill uses these)
-factory summary | checks | dashboard | version
-factory fleet init | add | remove | list | queue | dashboard
+mfactory install | upgrade | uninstall | doctor | status | sync
+mfactory config show | graph | models | skills     see the configuration
+mfactory queue | create | next | done | answer     run jobs (the /mfactory skill uses these)
+mfactory summary | checks | dashboard | version
+mfactory fleet subscribe | unsubscribe | list | queue | dashboard
 ```
 
-Run them as `.factory/bin/factory <command>` from anywhere in the repository.
+Run them as `.factory/bin/mfactory <command>` from anywhere in the repository.
 
 ## Documentation
 

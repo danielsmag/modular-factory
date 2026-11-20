@@ -32,6 +32,13 @@ HEADER = (
 )
 
 
+def user_file() -> Path:
+    """The fleet file for this user. `subscribe` creates it."""
+    config_home: str | None = os.environ.get("XDG_CONFIG_HOME")
+    base: Path = Path(config_home).expanduser() if config_home else Path.home() / ".config"
+    return base / "modular-factory" / FILE
+
+
 def toml_string(value: str) -> str:
     escaped: str = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
@@ -43,6 +50,9 @@ class Project:
 
     @property
     def binary(self) -> Path:
+        current: Path = self.path / ".factory" / "bin" / "mfactory"
+        if current.is_file():
+            return current
         return self.path / ".factory" / "bin" / "factory"
 
     @property
@@ -125,6 +135,15 @@ class Fleet:
 
     @staticmethod
     def find(start: Path | None = None) -> Fleet:
+        return Fleet.locate(start, create=False)
+
+    @staticmethod
+    def locate(start: Path | None = None, create: bool = False) -> Fleet:
+        """The fleet in effect: FACTORY_FLEET, then a fleet.toml above here, then the user file.
+
+        `create` writes the user file when the first two are absent. It never creates a file
+        for a missing FACTORY_FLEET path.
+        """
         override: str | None = os.environ.get("FACTORY_FLEET")
         if override:
             file: Path = Path(override).expanduser()
@@ -136,7 +155,15 @@ class Fleet:
             candidate: Path = directory / FILE
             if candidate.is_file():
                 return Fleet.load(candidate)
-        raise Refused("no fleet.toml here. Run `factory fleet init` in the directory that should list your projects.")
+        user: Path = user_file()
+        if user.is_file():
+            return Fleet.load(user)
+        if create:
+            user.parent.mkdir(parents=True, exist_ok=True)
+            created: Fleet = Fleet(user, [])
+            created.save()
+            return created
+        raise Refused("no fleet. Run `mfactory fleet subscribe` inside a project.")
 
     @staticmethod
     def load(file: Path) -> Fleet:
@@ -176,7 +203,7 @@ class Fleet:
         repo: Path = find_repo(path)
         project: Project = Project(repo)
         if not project.binary.is_file():
-            raise Refused(f"{repo} has no .factory/bin/factory. Install the factory there first.")
+            raise Refused(f"{repo} has no .factory/bin/mfactory. Install the factory there first.")
         if any(existing.path == project.path for existing in self.projects):
             raise Refused(f"{repo} is already in {self.file}")
         self.projects.append(project)
@@ -217,16 +244,16 @@ class Fleet:
         for project in self.projects:
             label: str = self.label(project)
             if not project.binary.is_file():
-                errors.append(f"{label}: .factory/bin/factory is missing")
+                errors.append(f"{label}: .factory/bin/mfactory is missing")
                 continue
             try:
                 result: CompletedProcess[str] = run([str(project.binary), "queue"], cwd=project.path, check=False)
             except FileNotFoundError:
-                errors.append(f"{label}: .factory/bin/factory could not be run")
+                errors.append(f"{label}: .factory/bin/mfactory could not be run")
                 continue
             if result.returncode != 0:
                 detail: list[str] = (result.stderr or result.stdout).strip().splitlines()
-                errors.append(f"{label}: {detail[-1] if detail else 'factory queue failed'}")
+                errors.append(f"{label}: {detail[-1] if detail else 'mfactory queue failed'}")
                 continue
             for line in result.stdout.splitlines():
                 cells: list[str] = line.split("  ", 4)
@@ -245,7 +272,7 @@ class Fleet:
             body: dict[str, object] = read_jobs(project)
             error: object = body.get("error")
             if not project.binary.is_file():
-                missing: str = ".factory/bin/factory is missing"
+                missing: str = ".factory/bin/mfactory is missing"
                 error = f"{error}; {missing}" if isinstance(error, str) and error else missing
             description: str = ""
             info: object = body.get("project")
@@ -374,7 +401,7 @@ def handler(file: Path) -> type[BaseHTTPRequestHandler]:
     cache: QueueCache = QueueCache(file)
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "factory-fleet"
+        server_version = "mfactory-fleet"
 
         def log_message(self, format: str, *args: object) -> None:
             pass
@@ -433,7 +460,7 @@ def serve(file: Path, port: int = 4747, open_browser: bool = True, say: Callable
     except OSError as error:
         raise Refused(f"port {port} can't be used ({error.strerror}). Pick another with --port.") from error
     url: str = f"http://127.0.0.1:{server.server_address[1]}/"
-    say(f"factory fleet: {url}  (read-only, this machine only; Ctrl C stops it)")
+    say(f"mfactory fleet: {url}  (read-only, this machine only; Ctrl C stops it)")
     if open_browser:
         webbrowser.open(url)
     try:

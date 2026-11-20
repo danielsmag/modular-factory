@@ -1,4 +1,4 @@
-"""`factory sync`: write each enabled tool's agent files and the orchestrator skill from factory.toml.
+"""`mfactory sync`: write each enabled tool's agent files and the orchestrator skill from factory.toml.
 
 The prompts live once, in `.factory/roles/`. A generated agent file holds only
 what differs per tool (name, model, effort, permissions) and what comes from
@@ -11,10 +11,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import BUILTIN_REVIEWERS
-from .util import CORE, GENERATED, ConfigError
+from .util import CORE, GENERATED, ConfigError, is_generated
 
 SKILL_DIRS = [".agents/skills", ".claude/skills", ".cursor/skills", ".codex/skills"]
-NOTE = f"{GENERATED}: change factory.toml, then run `.factory/bin/factory sync`."
+NOTE = f"{GENERATED}: change factory.toml, then run `.factory/bin/mfactory sync`."
 
 DESCRIPTIONS = {
     "intake": "Decides whether an issue is worth building and at what scope, and writes intake.md.",
@@ -65,7 +65,7 @@ def found_skills(repo):
 @dataclass
 class Agent:
     key: str                    # the key in the model tables: `build`, `reviewer-code`
-    name: str                   # `factory-build`, or `factory-build-low` for a risk variant
+    name: str                   # `mfactory-build`, or `mfactory-build-low` for a risk variant
     risk: str | None
     kind: str                   # a role, `custom`, `verify` or `reviewer`
     description: str
@@ -166,7 +166,7 @@ def _claude(cfg, agent, model, text):
         front += ["skills:"] + [f"  - {name}" for name in preload]
     if agent.kind == "build" and cfg["tools"].get("claude", {}).get("stop_hook"):
         front += ["hooks:", "  Stop:", "    - hooks:", "        - type: command",
-                  "          command: '\"$CLAUDE_PROJECT_DIR\"/.factory/bin/factory hook'"]
+                  "          command: '\"$CLAUDE_PROJECT_DIR\"/.factory/bin/mfactory hook'"]
     return f"{agent.name}.md", "---\n" + "\n".join(front) + f"\n---\n<!-- {NOTE} -->\n\n{text}"
 
 
@@ -242,18 +242,31 @@ def plan(cfg):
 
 
 def stale(cfg, files):
-    """Generated files left over from an earlier config, in any tool's folders."""
+    """Generated files left over from an earlier config, in any tool's folders.
+
+    Also removes files named `factory-*` from before the mfactory rename.
+    """
     out = []
+    seen = set()
     for adapter in cfg.adapters.values():
-        for path in sorted((cfg.repo / adapter["paths"]["agents"]).glob("factory-*")):
-            rel = str(path.relative_to(cfg.repo))
-            if rel not in files and path.is_file() and GENERATED in path.read_text(errors="replace"):
-                out.append(rel)
+        folder = cfg.repo / adapter["paths"]["agents"]
+        for pattern in ("mfactory-*", "factory-*"):
+            for path in sorted(folder.glob(pattern)):
+                rel = str(path.relative_to(cfg.repo))
+                if rel in seen or rel in files or not path.is_file():
+                    continue
+                if is_generated(path.read_text(errors="replace")):
+                    seen.add(rel)
+                    out.append(rel)
     for folder in SKILL_DIRS:
-        path = cfg.repo / folder / "factory" / "SKILL.md"
-        rel = str(path.relative_to(cfg.repo))
-        if rel not in files and path.is_file() and GENERATED in path.read_text(errors="replace"):
-            out.append(rel)
+        for name in ("mfactory", "factory"):
+            path = cfg.repo / folder / name / "SKILL.md"
+            rel = str(path.relative_to(cfg.repo))
+            if rel in seen or rel in files or not path.is_file():
+                continue
+            if is_generated(path.read_text(errors="replace")):
+                seen.add(rel)
+                out.append(rel)
     return out
 
 
@@ -294,12 +307,13 @@ def describe_models(cfg):
 
 
 def describe_skills(cfg):
-    """`factory skills`: the project's skills on disk and the agents that read each."""
+    """`mfactory skills`: the project's skills on disk and the agents that read each."""
     readers = {}
     for agent in agents(cfg):
         if agent.risk is None:
             for name, _ in agent.skills:
-                readers.setdefault(name, []).append(agent.name.removeprefix("factory-"))
+                short = agent.name.removeprefix("mfactory-").removeprefix("factory-")
+                readers.setdefault(name, []).append(short)
     found = found_skills(cfg.repo)
     if not found:
         return f"No project skills found in {', '.join(SKILL_DIRS)}.\n"

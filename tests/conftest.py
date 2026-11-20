@@ -16,7 +16,15 @@ os.environ["FACTORY_VERIFY_POLL"] = "0.05"
 from modfactory import config  # noqa: E402
 from modfactory.engine import Factory  # noqa: E402
 
-CLI = ROOT / "core" / "bin" / "factory"
+CLI = ROOT / "core" / "bin" / "mfactory"
+
+
+@pytest.fixture(autouse=True)
+def isolated_user_config(tmp_path, monkeypatch):
+    """Fleet commands must not read or write the developer's real fleet file."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+
+
 BASE_CONFIG = """\
 schema = 1
 

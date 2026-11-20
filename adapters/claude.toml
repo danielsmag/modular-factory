@@ -6,7 +6,7 @@ cli = "claude"
 
 [paths]
 agents = ".claude/agents"
-skill = ".claude/skills/factory"
+skill = ".claude/skills/mfactory"
 reads_skills = [".claude/skills"]   # the project folders this tool loads skills from
 skills_preload = ".claude/skills"   # only skills here can go in an agent's `skills:` list
 

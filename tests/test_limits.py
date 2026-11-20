@@ -169,7 +169,7 @@ writes = "docs.md"
 on = { DONE = "review", SKIP = "review" }
 """)
     lines = world.next(job)
-    assert lines[0] == "start-agent factory-docs"
+    assert lines[0] == "start-agent mfactory-docs"
     assert "Outcomes: DONE | SKIP." in lines[1] and lines[1].endswith(f"Write: {world.dir(job)}/docs.md.")
     world.write(job, "docs.md", "STATUS: SKIP\n")
     assert world.done(job) == [f"{job} #1: docs SKIP -> review"]
