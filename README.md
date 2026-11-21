@@ -10,7 +10,7 @@ steps, the commands that prove a build works, which model and effort each step
 uses, how often a step may send work back, and which of the project's own
 skills each agent reads.
 
-![The dashboard's board view, showing made-up sample jobs](docs/dashboard-board.png)
+![The dashboard's board view, showing made-up sample jobs](docs/dashboard-board.png?v=2)
 
 > **Status: 0.1.0, not yet run inside a real tool.** The pipeline is covered by
 > 135 automated tests that play the orchestrator and the agents against a
@@ -161,7 +161,7 @@ pipeline with the number of jobs in each step, what each job wrote, and the
 merged configuration with the source of each value. It changes nothing;
 approvals and feedback go through `/mfactory` or an issue comment.
 
-![The dashboard's pipeline view, showing made-up sample jobs](docs/dashboard-pipeline.png)
+![The dashboard's pipeline view, showing made-up sample jobs](docs/dashboard-pipeline.png?v=2)
 
 ## Several projects
 
