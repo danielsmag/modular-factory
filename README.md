@@ -197,10 +197,10 @@ Run them as `.factory/bin/mfactory <command>` from anywhere in the repository.
 ## Development
 
 ```bash
-python3 -m pip install pytest ruff
-python3 -m pytest
-ruff check .
-python3 tests/sample_dashboard.py     # the dashboard with made-up jobs
+python3 -m pip install pytest ruff   # skip when .venv already has them
+make check                 # ruff, bash -n install.sh, pytest
+make help                  # mfactory CLI targets
+make sample-dashboard      # the dashboard with made-up jobs
 ```
 
 The factory itself uses only Python's standard library.
