@@ -3,7 +3,7 @@
 import tomllib
 
 import pytest
-from modfactory import config, sync
+from modfactory import config, graph, sync
 from modfactory.util import ConfigError
 
 
@@ -60,6 +60,40 @@ def test_config_show_names_the_source_of_every_value(world):
     assert line("build.model") == 'build.model = "opus" # adapter claude'
     assert line("build.effort") == 'build.effort = "max" # factory.toml'
     tomllib.loads(config.show(cfg))                          # the output is itself valid TOML
+
+
+def test_the_default_pipeline_does_not_warn_about_merging(world):
+    cfg = load(world)
+    assert cfg.steps["approve"]["on"]["APPROVE"]["to"] == "ready-to-merge"
+    assert cfg.steps["merge"]["enabled"] is False
+    assert cfg.steps["ready-to-merge"]["pr_ready"] is True
+    assert graph.hand_merge_warning(cfg.steps) is None
+
+
+def test_an_edge_into_a_disabled_merge_is_a_warning(world):
+    cfg = load(world, '[steps.approve]\non = { APPROVE = "merge" }\n'
+                      '[steps.ready-to-merge]\nenabled = false\nskip = "REJECT"\n')
+    assert graph.hand_merge_warning(cfg.steps) == (
+        "[steps.merge] is off, but approve.APPROVE still points at it. "
+        "The job skips the merge and the pull request stays open. "
+        "Point that edge at a human step with pr_ready = true.")
+
+
+def test_a_disabled_merge_with_nobody_asked_is_a_warning(world):
+    cfg = load(world, "[steps.ready-to-merge]\npr_ready = false\n[steps.escalated]\npr_ready = false\n")
+    assert graph.hand_merge_warning(cfg.steps) == (
+        "[steps.merge] is off and no human step has pr_ready = true, so nothing asks a person to merge.")
+
+
+def test_the_approve_agent_says_who_merges(world):
+    files, _ = plan(world)
+    assert "APPROVE asks a maintainer to merge. The factory does not merge." in files[
+        ".claude/agents/mfactory-approve.md"]
+    files, _ = plan(world, '[steps.approve]\non = { APPROVE = "merge" }\n'
+                           '[steps.ready-to-merge]\nenabled = false\nskip = "REJECT"\n'
+                           '[steps.merge]\nenabled = true\n')
+    assert "APPROVE means the factory merges after syncing the base branch and running the checks again." in files[
+        ".claude/agents/mfactory-approve.md"]
 
 
 def test_every_problem_names_its_key(world):

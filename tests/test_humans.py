@@ -25,7 +25,7 @@ def test_approve_from_the_cli_continues_and_removes_the_label(world):
     assert world.answer(job, "approve") == [f"{job} #1: spec-approval APPROVE -> build"]
     assert "factory:needs-human" not in world.labels(1)
     world.play(job)
-    assert world.job(job)["step"] == "done"
+    assert world.job(job)["step"] == "ready-to-merge"
 
 
 def test_changes_need_words_and_reach_the_spec_writer(world):
@@ -172,6 +172,10 @@ def test_a_custom_human_step_is_only_configuration(world):
     job = world.start(until="release-signoff", config_text="""
 [steps.approve]
 on = { APPROVE = "release-signoff" }
+
+[steps.ready-to-merge]
+enabled = false
+skip = "REJECT"
 
 [steps.release-signoff]
 type = "human"

@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from conftest import AUTO_MERGE
 from modfactory.util import Refused
 
 ONE = "[run]\nconcurrency = 1\n"
@@ -46,7 +47,7 @@ def test_a_waiting_job_frees_its_slot_and_queues_behind_the_others_when_it_retur
 
 
 def test_queue_explains_jobs_that_need_nothing(world):
-    done = world.start(title="Done")
+    done = world.start(title="Done", config_text=AUTO_MERGE)
     rejected = world.create(world.issue(title="No"))
     world.next(rejected)
     world.intake(rejected, decision="REJECT")
@@ -58,7 +59,7 @@ def test_queue_explains_jobs_that_need_nothing(world):
 
 
 def test_summary_is_a_table(world):
-    job = world.start()
+    job = world.start(config_text=AUTO_MERGE)
     lines = world.factory().summary([]).splitlines()
     assert lines[0].split() == ["job", "issue", "step", "round", "pr", "cost", "time"]
     assert lines[1].split() == [job, "#1", "done", "1", "#2", "-", "0m"]

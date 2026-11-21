@@ -154,7 +154,23 @@ generated agent files.
    - `[paths] protected`: files no job may change, such as CI workflows,
      deploy configuration.
 4. Ask the user before turning on anything optional (`spec-approval`, `debug`,
-   `verify`) or changing models. Show them `.factory/bin/mfactory graph`.
+   `verify`) or changing models. The default does not merge: `approve` waits
+   at `ready-to-merge` and the merge step is off. Ask whether the factory
+   should merge the pull request. Write the opt-in below only when they say
+   yes and a merge to the base branch does not publish a release. Otherwise
+   leave the default. Show them `.factory/bin/mfactory graph`.
+
+   ```toml
+   [steps.approve]
+   on = { APPROVE = "merge" }
+
+   [steps.ready-to-merge]
+   enabled = false
+   skip = "REJECT"
+
+   [steps.merge]
+   enabled = true
+   ```
 5. Run `.factory/bin/mfactory sync`, then `.factory/bin/mfactory doctor`. Fix
    what it reports in `factory.toml` and repeat until it passes.
 6. Tell the user what you set and that they need to commit `factory.toml`,
@@ -196,8 +212,9 @@ feedback or asking for something new, ask.
 
 - Only issues with the factory's label run. Adding a label needs triage or
   write access to the repository, so the label is the trust boundary.
-- Agents push only their own `factory/<job>` branch. Merging happens only
-  inside the script's merge step. The factory never deploys.
+- Agents push only their own `factory/<job>` branch. By default a maintainer
+  merges. The script merges only when the merge step is on. The factory never
+  deploys.
 - One pull request per issue. How often a step may repeat is set by `max` on
   its edge in `factory.toml`; when one is used up the script sends the job to a
   maintainer instead of going round again.

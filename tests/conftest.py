@@ -37,6 +37,18 @@ BASE_CHECKS = """
 [checks]
 commands = ["test ! -f FAIL"]
 """
+# Opt in to the script merging. The default waits for a person.
+AUTO_MERGE = """
+[steps.approve]
+on = { APPROVE = "merge" }
+
+[steps.ready-to-merge]
+enabled = false
+skip = "REJECT"
+
+[steps.merge]
+enabled = true
+"""
 
 
 def git(*args, cwd):

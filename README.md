@@ -1,9 +1,10 @@
 # modular-factory
 
 A software factory you install into any repository. You label a GitHub issue;
-agents decide whether it is worth building, write a spec, build it on a branch,
-review it and merge the pull request. It runs inside the coding tool you already
-use: Claude Code, Cursor or Codex.
+agents decide whether it is worth building, write a spec, build it on a branch
+and review it. By default a maintainer merges the pull request. A project can
+turn the merge step on so the factory merges it. It runs inside the coding tool
+you already use: Claude Code, Cursor or Codex.
 
 Everything a project changes lives in one file, `factory.toml`: the pipeline's
 steps, the commands that prove a build works, which model and effort each step
@@ -13,7 +14,7 @@ skills each agent reads.
 ![The dashboard's board view, showing made-up sample jobs](docs/dashboard-board.png?v=2)
 
 > **Status: 0.1.0, not yet run inside a real tool.** The pipeline is covered by
-> 135 automated tests that play the orchestrator and the agents against a
+> 179 automated tests that play the orchestrator and the agents against a
 > stand-in for GitHub. Nobody has yet run a job end to end in Claude Code,
 > Cursor or Codex. Expect to find problems on the first real run; see
 > [what is untested](docs/design.md#what-is-untested).
@@ -73,21 +74,43 @@ Each step names its type and where each outcome leads. This is the default
 pipeline, printed by `.factory/bin/mfactory graph`:
 
 ```text
-intake         agent   ACCEPT -> spec | NEEDS-INFO -> ask-author (max 2) | REJECT -> rejected
-ask-author     human   ANSWER -> intake | REJECT -> rejected
-spec           agent   DONE -> spec-approval
-spec-approval  human   off, continues as APPROVE -> build
-build          agent   READY -> gate | BLOCKED -> escalated
-gate           checks  PASS -> review | FAIL -> debug (max 2)
-debug          agent   off, continues as FOUND -> build
-review         review  PASS -> approve | CHANGES -> build (max 2)
-approve        agent   APPROVE -> merge | ESCALATE -> escalated
-merge          merge   MERGED -> verify | FAILED -> escalated
-verify         verify  off, continues as PASS -> done
-escalated      human   FEEDBACK -> build | REJECT -> rejected
+intake          agent   ACCEPT -> spec | NEEDS-INFO -> ask-author (max 2) | REJECT -> rejected
+ask-author      human   ANSWER -> intake | REJECT -> rejected
+spec            agent   DONE -> spec-approval
+spec-approval   human   off, continues as APPROVE -> build
+build           agent   READY -> gate | BLOCKED -> escalated
+gate            checks  PASS -> review | FAIL -> debug (max 2)
+debug           agent   off, continues as FOUND -> build
+review          review  PASS -> approve | CHANGES -> build (max 2)
+approve         agent   APPROVE -> ready-to-merge | ESCALATE -> escalated
+ready-to-merge  human   FEEDBACK -> build (max 3) | REJECT -> rejected
+merge           merge   off, continues as MERGED -> verify
+verify          verify  off, continues as PASS -> done
+escalated       human   FEEDBACK -> build | REJECT -> rejected
 ```
 
-Three steps ship switched off. Turning one on is two lines in `factory.toml`:
+The factory does not merge unless the project turns that step on. All three
+keys are required. Enabling `merge` alone leaves it unreachable, and leaving
+`ready-to-merge` on after retargeting `approve` does the same:
+
+```toml
+[steps.approve]
+on = { APPROVE = "merge" }
+
+[steps.ready-to-merge]
+enabled = false
+skip = "REJECT"
+
+[steps.merge]
+enabled = true
+```
+
+Do that only when a merge to the base branch does not publish a release.
+With the default, approving marks the pull request ready and waits. Merging
+it by hand continues from the merge step's `MERGED` edge. That path does not
+sync the base branch or run the checks again.
+
+Three other steps ship switched off. Turning one on is two lines in `factory.toml`:
 
 ```toml
 [steps.spec-approval]     # a maintainer approves the spec before anything is built
