@@ -131,9 +131,11 @@ def follow(job, step, outcome):
   `.factory/`, a generated agent or skill file, or a path in
   `[paths].protected`. A job cannot change the pipeline, the checks or its own
   judges.
-- **Merging happens only in the script**, after the base branch is merged in
-  and the checks pass again. The factory never deploys and never merges a
-  revert.
+- **The factory merges only when the merge step is on.** By default that step
+  is off: a maintainer merges, and a hand merge continues from the merge
+  step's `MERGED` edge. When the step is on, the script merges only after the
+  base branch is merged in and the checks pass again. The factory never
+  deploys and never merges a revert.
 - **Replies are checked.** A reply to a human step counts only from the
   issue's author, or from someone with write access, depending on the step.
 - **The dashboard changes nothing.** It answers only on `127.0.0.1`, refuses

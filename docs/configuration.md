@@ -42,6 +42,7 @@ mfactory: factory.toml has 2 problem(s):
 - [Checks](#checks)
 - [The pipeline: steps](#the-pipeline-steps)
 - [Loop limits](#loop-limits)
+- [Who merges](#who-merges)
 - [Optional steps](#optional-steps)
 - [Adding a step](#adding-a-step)
 - [Human steps](#human-steps)
@@ -93,7 +94,8 @@ timeout_minutes = 30
 
 The commands run in order in the job's worktree with `bash -c`. The first one
 that exits non-zero stops the run and fails the step. They run at the `gate`
-step, and again in the `merge` step after the base branch is merged in.
+step, and again in the `merge` step after the base branch is merged in, when
+that step is on.
 
 A command must not rewrite files: use `prettier --check`, not
 `prettier --write`.
@@ -123,7 +125,7 @@ An edge is a step name, or `{ to = "<step>", max = <n> }`. The end states are
 | `checks` | The script runs `[checks].commands`. | `PASS`, `FAIL` |
 | `review` | Every reviewer the job needs runs in parallel. | `PASS` if all pass, else `CHANGES` |
 | `human` | The script asks a person and parks the job. | Whatever you name in `on` |
-| `merge` | The script merges the base branch in, runs the checks, and merges the pull request. | `MERGED`, `FAILED` |
+| `merge` | When the step is on, the script merges the base branch in, runs the checks, and merges the pull request. It ships off. | `MERGED`, `FAILED` |
 | `verify` | The script, and optionally an agent, check the merged change. | `PASS`, `FAIL` |
 
 The built-in agent steps:
@@ -134,7 +136,7 @@ The built-in agent steps:
 | `spec` | `spec.md`: what to build and how to tell it works | `DONE` |
 | `build` | Code on the job's branch, a draft pull request, `build.md` | `READY`, `BLOCKED` |
 | `debug` | `round-N/debug-K.md`: why the checks fail | `FOUND`, `UNKNOWN` |
-| `approve` | `decision.md`: merge it, or ask a maintainer | `APPROVE`, `ESCALATE` |
+| `approve` | `decision.md`: ready to merge, or ask a maintainer | `APPROVE`, `ESCALATE` |
 
 Keys every step takes:
 
@@ -188,9 +190,54 @@ on = { CHANGES = "rework" }                       # still max = 2
 # on = { CHANGES = { to = "rework", max = 5 } }   # to change both
 ```
 
+## Who merges
+
+By default the factory does not merge. `approve` leads to `ready-to-merge`,
+which marks the pull request ready, labels the issue `needs_human`, and waits
+without holding a slot. The merge step stays off. Its `MERGED` edge still says
+what happens after a person merges, including when that step is off:
+
+```toml
+[steps.ready-to-merge]
+type = "human"
+who = "maintainer"
+ask = "approved: merge it yourself"
+shows = "decision.md"
+pr_ready = true
+on = { FEEDBACK = { to = "build", max = 3 }, REJECT = "rejected" }
+
+[steps.merge]
+enabled = false
+skip = "MERGED"
+```
+
+That wait does not sync the base branch or run the checks again. Branch
+protection is the gate before the person merges. The comment tells them that
+merging continues the job.
+
+To let the factory merge, turn the step on, point `approve` at it, and switch
+`ready-to-merge` off. Enabling the merge step alone leaves it unreachable, and
+leaving `ready-to-merge` on after retargeting `approve` does the same:
+
+```toml
+[steps.approve]
+on = { APPROVE = "merge" }
+
+[steps.ready-to-merge]
+enabled = false
+skip = "REJECT"
+
+[steps.merge]
+enabled = true
+```
+
+Do that only when a merge to the base branch does not publish a release. The
+script then syncs the base branch, runs the checks again, and merges.
+
 ## Optional steps
 
-Three steps ship with `enabled = false`.
+`spec-approval`, `debug` and `verify` ship with `enabled = false`. The merge
+step does too; turning that one on is the block above, not a single key.
 
 ```toml
 [steps.spec-approval]     # a maintainer approves spec.md before anything is built
@@ -258,7 +305,8 @@ A human step posts a comment where the person will see it (the pull request if
 there is one, otherwise the issue), labels the issue, and parks the job. It
 holds no slot while it waits.
 
-Adding a person's approval before the merge:
+Adding a person's approval, then letting the factory merge. The merge step
+has to be on, or the job skips it:
 
 ```toml
 [steps.release-approval]
@@ -270,6 +318,13 @@ on = { APPROVE = "merge", CHANGES = { to = "build", max = 2 }, REJECT = "rejecte
 
 [steps.approve]
 on = { APPROVE = "release-approval" }
+
+[steps.ready-to-merge]
+enabled = false
+skip = "REJECT"
+
+[steps.merge]
+enabled = true
 ```
 
 | Key | Default | Meaning |
@@ -277,7 +332,7 @@ on = { APPROVE = "release-approval" }
 | `who` | `"maintainer"` | Who may reply. `author`: the issue's author. `maintainer`: anyone with write access to the repository. |
 | `ask` | | The heading of the comment. |
 | `shows` | | A file from the job folder to include in the comment, such as `spec.md`. |
-| `pr_ready` | `false` | Mark the draft pull request ready for review when asking. |
+| `pr_ready` | `false` | Mark the draft pull request ready for review when asking. The comment then says that merging the pull request continues the job. |
 
 The person replies in their coding tool:
 
@@ -303,8 +358,9 @@ The word after `/mfactory` is the outcome's name in lower case, so a step with
 - On a step with an `ANSWER` outcome, such as `ask-author`, any comment from
   the author counts as the answer.
 - Comments from anyone else are ignored.
-- Merging the job's pull request by hand counts as approving it; the job
-  carries on from the merge step's `MERGED` edge.
+- Merging the job's pull request by hand continues the job from the merge
+  step's `MERGED` edge, including when that step is off. On the default path
+  this does not sync the base branch or run the checks again.
 
 ## Validation after merge or deploy
 

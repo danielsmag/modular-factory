@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import graph
 from .config import BUILTIN_REVIEWERS
 from .util import CORE, GENERATED, ConfigError, is_generated
 
@@ -121,6 +122,15 @@ def agents(cfg):
                 sections.append(("Your task", settings["instructions"].strip()))
                 sections.append(("Your file", f"Write `{writes}` in the job folder. Its first line must be "
                                  f"`STATUS: <OUTCOME>`, with OUTCOME one of: {', '.join(settings['on'])}."))
+            if key == "approve":
+                merge_step: dict = cfg.steps.get("merge", {})
+                who_merges: str
+                if graph.enabled(merge_step):
+                    who_merges = ("APPROVE means the factory merges after syncing the base branch "
+                                  "and running the checks again.")
+                else:
+                    who_merges = "APPROVE asks a maintainer to merge. The factory does not merge."
+                sections.append(("Who merges", who_merges))
         if settings.get("context", "").strip():
             sections.append(("Project context", settings["context"].strip()))
         skills = _skills(cfg, settings.get("skills", []), where, problems)

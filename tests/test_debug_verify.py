@@ -3,6 +3,7 @@
 import subprocess
 
 import pytest
+from conftest import AUTO_MERGE
 from modfactory import config
 from modfactory.util import MARKER, ConfigError, Refused
 
@@ -78,7 +79,7 @@ def verify(**settings):
 
 def test_verify_after_merge_runs_the_commands_on_the_merge_commit(world):
     commands = '["test -f feature-1-1.txt", "test $FACTORY_MERGE_SHA = $(git rev-parse HEAD)"]'
-    job = world.start(config_text=verify(commands=commands))
+    job = world.start(config_text=AUTO_MERGE + verify(commands=commands))
     j = world.job(job)
     assert j["step"] == "done" and j["history"][-1]["step"] == "verify"
     assert (world.dir(job) / "verify.md").read_text().startswith("VERIFY: PASS\n")
@@ -87,7 +88,7 @@ def test_verify_after_merge_runs_the_commands_on_the_merge_commit(world):
 
 
 def test_a_failing_verify_is_retried_then_fails_the_job_with_a_comment(world):
-    job = world.start(config_text=verify(commands='["echo smoke broke; false"]', retries=1))
+    job = world.start(config_text=AUTO_MERGE + verify(commands='["echo smoke broke; false"]', retries=1))
     j = world.job(job)
     assert j["step"] == "failed" and j["verify"]["attempt"] == 2
     comment = world.gh["prs"][str(j["pr"])]["comments"][-1]["body"]
@@ -98,7 +99,7 @@ def test_a_failing_verify_is_retried_then_fails_the_job_with_a_comment(world):
 
 
 def test_on_failure_issue_opens_a_new_factory_issue(world):
-    job = world.start(config_text=verify(commands='["false"]', retries=0, on_failure='"issue"'))
+    job = world.start(config_text=AUTO_MERGE + verify(commands='["false"]', retries=0, on_failure='"issue"'))
     j = world.job(job)
     new = world.gh["issues"]["3"]
     assert new["title"] == f"Fix: verification failed after #{j['pr']} (Add a thing)"
@@ -108,7 +109,7 @@ def test_on_failure_issue_opens_a_new_factory_issue(world):
 
 
 def test_on_failure_revert_pr_opens_a_draft_and_never_merges_it(world):
-    job = world.start(config_text=verify(commands='["false"]', retries=0, on_failure='"revert-pr"'))
+    job = world.start(config_text=AUTO_MERGE + verify(commands='["false"]', retries=0, on_failure='"revert-pr"'))
     j = world.job(job)
     revert = world.gh["prs"]["3"]
     assert revert["isDraft"] and revert["state"] == "OPEN" and revert["headRefName"] == f"factory/revert-{job}"
@@ -121,7 +122,7 @@ def test_on_failure_revert_pr_opens_a_draft_and_never_merges_it(world):
 
 def test_verify_after_deploy_waits_for_the_wait_command(world):
     marker = world.tmp / "deployed"
-    job = world.start(until="merge", config_text=verify(
+    job = world.start(until="merge", config_text=AUTO_MERGE + verify(
         after='"deploy"', wait=f'"test -f {marker}"', commands='["test $FACTORY_DEPLOY_URL = https://staging.test"]',
         url='"https://staging.test"', timeout_minutes=1))
     waiter = subprocess.Popen(f"sleep 0.3; touch {marker}", shell=True)
@@ -132,7 +133,7 @@ def test_verify_after_deploy_waits_for_the_wait_command(world):
 
 
 def test_verify_after_deploy_times_out(world, monkeypatch):
-    job = world.start(until="merge", config_text=verify(
+    job = world.start(until="merge", config_text=AUTO_MERGE + verify(
         after='"deploy"', wait='"false"', commands='["true"]', retries=0, timeout_minutes=1))
     monkeypatch.setattr("modfactory.scripted.time.monotonic", iter(range(0, 10_000, 40)).__next__)
     world.next(job)
@@ -141,7 +142,7 @@ def test_verify_after_deploy_times_out(world, monkeypatch):
 
 
 def test_the_verifier_agent_checks_after_the_commands_pass(world):
-    job = world.start(until="verify", config_text=verify(commands='["true"]', agent="true"))
+    job = world.start(until="verify", config_text=AUTO_MERGE + verify(commands='["true"]', agent="true"))
     lines = world.next(job)
     j = world.job(job)
     assert lines[0] == "start-agent mfactory-verify"
@@ -153,7 +154,7 @@ def test_the_verifier_agent_checks_after_the_commands_pass(world):
 
 
 def test_a_verifier_failure_is_retried_then_fails_with_its_findings(world):
-    job = world.start(until="verify", config_text=verify(commands='["true"]', agent="true", retries=1))
+    job = world.start(until="verify", config_text=AUTO_MERGE + verify(commands='["true"]', agent="true", retries=1))
     world.next(job)
     world.verifier(job, "FAIL")
     assert world.done(job) == [f"{job} #1: verify failed (attempt 1), trying again"]
@@ -166,11 +167,36 @@ def test_a_verifier_failure_is_retried_then_fails_with_its_findings(world):
 
 
 def test_a_verifying_job_holds_no_slot(world):
-    config = "[run]\nconcurrency = 1\n" + verify(commands='["true"]', agent="true")
+    config = "[run]\nconcurrency = 1\n" + AUTO_MERGE + verify(commands='["true"]', agent="true")
     job = world.start(until="verify", config_text=config)
     assert world.job(job)["running_since"] is None
     other = world.create(world.issue(title="Second"))
     assert world.next(other)[0] == "start-agent mfactory-intake"
+
+
+def test_the_default_path_waits_then_a_hand_merge_is_verified(world):
+    job = world.start(until="ready-to-merge", config_text=verify(commands='["true"]'))
+    j = world.job(job)
+    pr = str(j["pr"])
+    assert j["running_since"] is None
+    assert "or merge this pull request yourself; the factory will continue from there" in (
+        world.gh["prs"][pr]["comments"][-1]["body"])
+    assert world.gh["prs"][pr]["isDraft"] is False
+    assert world.calls("pr ready")
+    assert "factory:needs-human" in world.labels(1)
+    assert world.queue() == [("wait", 1, job, "ready-to-merge", "waiting for a maintainer")]
+    assert world.calls("pr merge") == []
+
+    subprocess.run(["gh", "pr", "merge", pr, "--squash"], cwd=world.repo, check=True)
+    lines = world.next(job)
+    assert lines[0] == f"{job} #1: PR #{pr} was merged by hand -> verify"
+    assert lines[1] == f"{job} #1: verify PASS -> done"
+    finished = world.job(job)
+    assert finished["merge_sha"]
+    assert finished["history"][-2]["step"] == "ready-to-merge"
+    assert finished["history"][-2]["outcome"] == "MERGED-BY-HAND"
+    assert finished["history"][-2]["to"] == "verify"
+    assert finished["history"][-1]["step"] == "verify"
 
 
 def test_a_pull_request_merged_by_hand_is_verified_too(world):

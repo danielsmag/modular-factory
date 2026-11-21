@@ -108,7 +108,11 @@ def problems(data):
         return out
 
     # Reachability, following only the edges a job can really take.
+    # A hand merge follows a disabled merge step's MERGED edge without entering that step.
     seen, todo = set(), [start, escalate]
+    for step in valid.values():
+        if step["type"] == "merge" and not enabled(step) and "MERGED" in step.get("on", {}):
+            todo.append(step["on"]["MERGED"]["to"])
     while todo:
         name = todo.pop()
         if name in seen or name in END_STATES:
@@ -146,6 +150,35 @@ def problems(data):
                        "so a job could go round it forever. Add max to one of its edges")
             break
     return out
+
+
+def hand_merge_warning(steps: dict[str, dict]) -> str | None:
+    """A disabled merge step that a live edge still names, or that nobody is asked to finish."""
+    merges: list[str] = [
+        name for name, step in steps.items()
+        if isinstance(step, dict) and step.get("type") == "merge" and not enabled(step)]
+    if not merges:
+        return None
+    name: str = merges[0]
+    pointed: list[str] = []
+    for step_name, step in steps.items():
+        if not isinstance(step, dict) or step.get("type") not in TYPES or not enabled(step):
+            continue
+        for outcome, edge in live_edges(step).items():
+            if edge.get("to") == name:
+                pointed.append(f"{step_name}.{outcome}")
+    if pointed:
+        noun: str = "that edge" if len(pointed) == 1 else "those edges"
+        return (f"[steps.{name}] is off, but {', '.join(pointed)} still points at it. "
+                "The job skips the merge and the pull request stays open. "
+                f"Point {noun} at a human step with pr_ready = true.")
+    asked: bool = any(
+        isinstance(step, dict) and step.get("type") == "human" and enabled(step) and step.get("pr_ready")
+        for step in steps.values())
+    if not asked:
+        return (f"[steps.{name}] is off and no human step has pr_ready = true, "
+                "so nothing asks a person to merge.")
+    return None
 
 
 def describe(cfg):

@@ -45,6 +45,22 @@ concurrency = 3             # jobs worked on at once
 [checks]
 commands = []               # for example ["npm ci", "npm run lint", "npm test"]
 
+# ---- Merging ----------------------------------------------------------------
+#
+# By default a maintainer merges the pull request. The factory does not.
+# Remove the leading "# " on all three tables to let the factory merge. Do that
+# only when a merge to the base branch does not publish a release.
+
+# [steps.approve]
+# on = {{ APPROVE = "merge" }}
+
+# [steps.ready-to-merge]
+# enabled = false
+# skip = "REJECT"
+
+# [steps.merge]
+# enabled = true
+
 # ---- Optional steps: remove the leading "# " to switch one on --------------
 
 # A maintainer approves the spec before anything is built.
@@ -331,6 +347,9 @@ def doctor(repo, run_checks=True, say=print):
     off = [n for n, s in cfg.steps.items() if not graph.enabled(s)]
     ok(f"{config.FILE} is valid: {len(cfg.steps) - len(off)} steps on"
        + (f", off: {', '.join(off)}" if off else ""))
+    gap: str | None = graph.hand_merge_warning(cfg.steps)
+    if gap:
+        warn(gap)
 
     # tools
     for tool in cfg.tools:

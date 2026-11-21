@@ -3,29 +3,52 @@
 import subprocess
 
 import pytest
+from conftest import AUTO_MERGE
 from modfactory.util import MARKER, Refused
 
 
-def test_happy_path_merges_and_cleans_up(world):
+def test_happy_path_waits_for_a_person_to_merge(world):
     number = world.issue(title="Add dark mode")
     job = world.create(number)
     assert job == "001-add-dark-mode"
     lines = world.play(job)
 
     j = world.job(job)
+    assert j["step"] == "ready-to-merge"
+    assert j["merge_sha"] is None and j["running_since"] is None
+    assert [h["step"] + " " + h["outcome"] for h in j["history"]] == [
+        "intake ACCEPT", "spec DONE", "build READY", "gate PASS", "review PASS", "approve APPROVE"]
+    assert f"{job} #{number}: spec DONE -> build (skipped spec-approval)" in lines
+    assert f"{job} #{number}: approve APPROVE -> ready-to-merge (waiting for a maintainer)" in lines
+    assert lines[-1].startswith(f"wait {job} #{number}: ready-to-merge is waiting for a maintainer")
+
+    pr = world.gh["prs"][str(j["pr"])]
+    assert pr["state"] == "OPEN" and pr["isDraft"] is False
+    assert "or merge this pull request yourself; the factory will continue from there" in pr["comments"][-1]["body"]
+    assert "factory:needs-human" in world.labels(number)
+    assert world.calls("pr merge") == []
+    assert "feature-1-1.txt" not in subprocess.run(["git", "ls-tree", "--name-only", "main"], cwd=world.origin,
+                                                    capture_output=True, text=True).stdout
+    assert world.comments(number)[0].startswith(f"{MARKER}\n### Factory intake: ACCEPT (risk low, surfaces: none)")
+
+
+def test_opt_in_auto_merge_merges_and_cleans_up(world):
+    world.configure(AUTO_MERGE)
+    number = world.issue(title="Add dark mode")
+    job = world.create(number)
+    lines = world.play(job)
+
+    j = world.job(job)
     assert j["step"] == "done"
     assert [h["step"] + " " + h["outcome"] for h in j["history"]] == [
         "intake ACCEPT", "spec DONE", "build READY", "gate PASS", "review PASS", "approve APPROVE", "merge MERGED"]
-    assert f"{job} #{number}: spec DONE -> build (skipped spec-approval)" in lines
     assert f"{job} #{number}: merge MERGED -> done (skipped verify)" in lines
     assert lines[-1] == f"finished {job} #{number}: done (PR #{j['pr']} merged)"
-
     pr = world.gh["prs"][str(j["pr"])]
     assert pr["state"] == "MERGED" and j["merge_sha"] == pr["mergeCommit"]["oid"]
     assert "feature-1-1.txt" in subprocess.run(["git", "ls-tree", "--name-only", "main"], cwd=world.origin,
                                                 capture_output=True, text=True).stdout
     assert not (world.repo / ".worktrees" / job).exists()
-    assert world.comments(number)[0].startswith(f"{MARKER}\n### Factory intake: ACCEPT (risk low, surfaces: none)")
 
 
 def test_next_prints_the_agent_and_a_prompt_with_the_job_header(world):
@@ -231,7 +254,7 @@ def test_approver_escalation_asks_a_maintainer_on_the_pull_request(world):
 
 
 def test_merge_failure_goes_to_a_maintainer(world):
-    job = world.start(until="merge")
+    job = world.start(until="merge", config_text=AUTO_MERGE)
     world.set_gh(lambda s: s.update(fail="pr merge"))
     lines = world.next(job)
     assert lines[0] == f"{job} #1: merge FAILED -> escalated (waiting for a maintainer)"
@@ -239,7 +262,7 @@ def test_merge_failure_goes_to_a_maintainer(world):
 
 
 def test_merge_conflict_with_the_base_goes_to_a_maintainer(world):
-    job = world.start(until="merge")
+    job = world.start(until="merge", config_text=AUTO_MERGE)
     (world.repo / "feature-1-1.txt").write_text("someone else's\n")
     subprocess.run("git add feature-1-1.txt && git commit -q -m clash && git push -q origin main", shell=True,
                    cwd=world.repo, check=True)
@@ -249,7 +272,7 @@ def test_merge_conflict_with_the_base_goes_to_a_maintainer(world):
 
 
 def test_merge_runs_the_checks_again_after_syncing(world):
-    job = world.start(until="merge")
+    job = world.start(until="merge", config_text=AUTO_MERGE)
     (world.repo / "FAIL").write_text("x\n")
     subprocess.run("git add FAIL && git commit -q -m broke && git push -q origin main", shell=True,
                    cwd=world.repo, check=True)

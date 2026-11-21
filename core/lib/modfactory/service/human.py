@@ -46,6 +46,8 @@ class Humans:
             how.append("- or answer in plain words")
         if kind == "pr" and name == self.cfg["run"]["escalate_to"]:
             how.append("- or merge this pull request to approve it as it is")
+        elif kind == "pr" and step.get("pr_ready"):
+            how.append("- or merge this pull request yourself; the factory will continue from there")
         text = "\n\n".join(parts)[:COMMENT_LIMIT] + "\n\n---\n" + "\n".join(how)
 
         if step.get("pr_ready") and kind == "pr" and (self.gh.pr(job["pr"], "isDraft") or {}).get("isDraft"):

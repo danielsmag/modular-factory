@@ -92,8 +92,13 @@ The agent reads your README, package manifest and CI workflows, then edits
   tests and the build. These decide whether a build may be reviewed and merged.
 - `[skills]`: which of your project's skills agents read.
 
-It asks before turning on any optional step. You can also edit `factory.toml`
-by hand; the [configuration reference](configuration.md) lists every key.
+It asks before turning on any optional step. By default a maintainer merges
+the pull request and the factory does not. Ask whether a merge to the base
+branch publishes a release. Only when it does not, and the user wants the
+factory to merge, turn the merge step on, point `approve` at it, and switch
+`ready-to-merge` off. You can
+also edit `factory.toml` by hand; the [configuration reference](configuration.md)
+lists every key.
 
 After any change to `factory.toml`:
 
@@ -114,7 +119,7 @@ ok    factory 0.1.0, Python 3.12.3
 ok    git: git version 2.43.0
 ok    gh: gh version 2.60.0
 ok    gh is signed in
-ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, verify
+ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, merge, verify
 ok    Claude Code: claude 2.1.0
 ok    generated agent and skill files match factory.toml
 ok    origin/main can be fetched

@@ -88,7 +88,7 @@ def test_feedback_from_a_maintainer_gives_a_fresh_budget(world):
     world.build(job, files={"FAIL": None, "fixed.txt": "x\n"})
     world.done(job)
     world.play(job)
-    assert world.job(job)["step"] == "done"
+    assert world.job(job)["step"] == "ready-to-merge"
 
 
 def test_needs_info_is_limited_too(world):
@@ -119,7 +119,8 @@ def problems(world, text):
 def test_edges_must_point_at_steps(world):
     assert problems(world, '[steps.build]\non = { READY = "gaet" }\n') == [
         '[steps.build].on.READY points at unknown step "gaet". Steps: intake, ask-author, spec, spec-approval, '
-        "build, gate, debug, review, approve, merge, verify, escalated; end states: done, failed, rejected"]
+        "build, gate, debug, review, approve, ready-to-merge, merge, verify, escalated; "
+        "end states: done, failed, rejected"]
 
 
 def test_built_in_steps_need_their_outcomes_and_no_others(world):
@@ -174,13 +175,15 @@ on = { DONE = "review", SKIP = "review" }
     world.write(job, "docs.md", "STATUS: SKIP\n")
     assert world.done(job) == [f"{job} #1: docs SKIP -> review"]
     world.play(job)
+    assert world.job(job)["step"] == "ready-to-merge"
     assert [h["step"] for h in world.job(job)["history"]] == [
-        "intake", "spec", "build", "gate", "docs", "review", "approve", "merge"]
+        "intake", "spec", "build", "gate", "docs", "review", "approve"]
 
 
 def test_removing_a_default_step_is_one_line(world):
     job = world.start(config_text='[steps.approve]\nenabled = false\nskip = "APPROVE"\n')
     j = world.job(job)
-    assert j["step"] == "done"
-    assert [h["step"] for h in j["history"]] == ["intake", "spec", "build", "gate", "review", "merge"]
+    assert j["step"] == "ready-to-merge"
+    assert [h["step"] for h in j["history"]] == ["intake", "spec", "build", "gate", "review"]
     assert j["history"][4]["skipped"] == ["approve"]
+    assert j["history"][4]["to"] == "ready-to-merge"

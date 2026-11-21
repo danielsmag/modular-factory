@@ -46,6 +46,7 @@ def test_init_installs_everything_a_project_needs(bare):
 
     toml = (repo / "factory.toml").read_text()
     assert 'enabled = ["claude", "codex"]' in toml and 'base_branch = "main"' in toml
+    assert "# [steps.merge]\n# enabled = true" in toml
     assert (repo / ".gitignore").read_text() == (
         "node_modules/\n\n# software factory runtime state\n/.factory/jobs/\n/.worktrees/\n")
     assert (repo / ".claude/agents/mfactory-build.md").exists()
@@ -156,8 +157,9 @@ def test_models_and_graph_describe_the_setup(world):
     assert models[0].split() == ["agent", "claude", "codex"]
     assert "mfactory-debug              opus / high      inherit / high" in models
     graph = world.cli("graph").stdout
-    assert "gate           checks  PASS -> review | FAIL -> debug (max 2)" in graph
-    assert "spec-approval  human   off, continues as APPROVE -> build" in graph
+    assert "gate            checks  PASS -> review | FAIL -> debug (max 2)" in graph
+    assert "spec-approval   human   off, continues as APPROVE -> build" in graph
+    assert "merge           merge   off, continues as MERGED -> verify" in graph
 
 
 # ---- doctor ----------------------------------------------------------------
@@ -182,13 +184,16 @@ def test_doctor_passes_on_a_ready_project(world):
     ready(world)
     res = doctor(world)
     assert res.returncode == 0, res.stdout
-    for line in ("ok    gh is signed in", "ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, verify",
+    for line in ("ok    gh is signed in",
+                 "ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, merge, verify",
                  "ok    generated agent and skill files match factory.toml", "ok    origin/main can be fetched",
                  "ok    .factory/jobs/ is ignored by git", "ok    GitHub labels exist",
                  "Everything a run needs is in place."):
         assert line in res.stdout, line
     assert "ok    the checks pass on origin/main" in res.stdout
     assert "warn  Claude Code: `claude` isn't on PATH" in res.stdout
+    assert "still points at it" not in res.stdout
+    assert "nothing asks a person to merge" not in res.stdout
 
 
 def test_doctor_finds_hand_edits_missing_labels_and_failing_checks(world):
@@ -222,6 +227,17 @@ def test_doctor_reports_config_problems_first(world):
     assert res.returncode == 1
     assert 'FAIL  [steps.gate].on.PASS points at unknown step "nowhere".' in res.stdout
     assert "Fix factory.toml first" in res.stdout
+
+
+def test_doctor_warns_when_an_edge_skips_a_disabled_merge(bare):
+    bare.cli("init")
+    (bare.repo / "factory.toml").write_text(
+        'schema = 1\n[project]\nbase_branch = "main"\n[checks]\ncommands = ["true"]\n'
+        '[steps.approve]\non = { APPROVE = "merge" }\n'
+        '[steps.ready-to-merge]\nenabled = false\nskip = "REJECT"\n')
+    res = doctor(bare, "--skip-checks")
+    assert "warn  [steps.merge] is off, but approve.APPROVE still points at it." in res.stdout
+    assert "FAIL  [steps.merge]" not in res.stdout
 
 
 def test_doctor_warns_when_the_factory_is_not_on_the_base_branch(bare):

@@ -94,10 +94,20 @@ on = { PASS = "approve", CHANGES = { to = "build", max = 2 } }
 
 [steps.approve]
 type = "agent"
-on = { APPROVE = "merge", ESCALATE = "escalated" }
+on = { APPROVE = "ready-to-merge", ESCALATE = "escalated" }
+
+[steps.ready-to-merge]
+type = "human"
+who = "maintainer"
+ask = "approved: merge it yourself"
+shows = "decision.md"
+pr_ready = true
+on = { FEEDBACK = { to = "build", max = 3 }, REJECT = "rejected" }
 
 [steps.merge]
 type = "merge"
+enabled = false          # a maintainer merges; turn this on only with approve's APPROVE edge
+skip = "MERGED"
 on = { MERGED = "verify", FAILED = "escalated" }
 
 [steps.verify]
