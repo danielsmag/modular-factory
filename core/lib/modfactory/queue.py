@@ -5,7 +5,7 @@ from typing import Any, Protocol
 
 from . import graph
 from .config import Config
-from .gh import GitHub
+from .service import GitHub
 from .store import Store
 from .util import Refused, now, parse_time
 

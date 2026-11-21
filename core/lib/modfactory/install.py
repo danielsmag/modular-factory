@@ -14,7 +14,7 @@ from . import checks, config, graph
 from . import sync as syncer
 from .util import CORE, SOURCE_REPO, ConfigError, FactoryError, Refused, run, tail, version
 
-ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "dashboard.html", "VERSION"]
+ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "VERSION"]
 LABELS = {
     "queue": ("ff4a26", "The software factory builds this issue"),
     "needs_info": ("d4a72c", "The factory is waiting for the issue's author"),
@@ -84,25 +84,30 @@ commands = []               # for example ["npm ci", "npm run lint", "npm test"]
 
 
 def layout(root):
-    """(core, adapters, licence folder) for a source checkout or an installed `.factory/`."""
+    """(core, adapters, web, licence folder) for a source checkout or an installed `.factory/`."""
     root = Path(root)
     if (root / "core" / "bin" / "mfactory").is_file() or (root / "core" / "bin" / "factory").is_file():
-        return root / "core", root / "adapters", root
+        return root / "core", root / "adapters", root / "web", root
     if (root / "bin" / "mfactory").is_file() or (root / "bin" / "factory").is_file():
-        return root, root / "adapters", root
+        return root, root / "adapters", root / "web", root
     raise Refused(f"{root} is not a copy of the factory: it has no core/bin/mfactory")
 
 
 def copy_core(source, repo):
     """Put the core into `<repo>/.factory/`, leaving `.factory/jobs/` alone."""
-    core, adapters, licence = layout(source)
+    core, adapters, web, licence = layout(source)
     dest = Path(repo) / ".factory"
     if core.resolve() == dest.resolve():
         return False
     dest.mkdir(exist_ok=True)
     skip = shutil.ignore_patterns("__pycache__", "*.pyc")
     sources = {item: core / item for item in ITEMS}
-    sources |= {"adapters": adapters, "LICENSE": licence / "LICENSE", "NOTICE": licence / "NOTICE"}
+    sources |= {
+        "adapters": adapters,
+        "web": web,
+        "LICENSE": licence / "LICENSE",
+        "NOTICE": licence / "NOTICE",
+    }
     for item, src in sources.items():
         if not src.exists():
             raise Refused(f"{source} is incomplete: {src} is missing")
@@ -115,6 +120,10 @@ def copy_core(source, repo):
             shutil.copytree(src, target, ignore=skip)
         else:
             shutil.copy2(src, target)
+    # The page used to be copied as .factory/dashboard.html.
+    stale: Path = dest / "dashboard.html"
+    if stale.is_file():
+        stale.unlink()
     for name in ("mfactory", "factory"):
         binary = dest / "bin" / name
         if binary.is_file():
@@ -251,7 +260,7 @@ def upgrade(repo, ref="latest", source=None, say=print):
     before = (repo / ".factory" / "VERSION").read_text().strip()
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(source).resolve() if source else fetch_release(ref, tmp)
-        core, _, _ = layout(root)
+        core, _, _, _ = layout(root)
         after = (core / "VERSION").read_text().strip()
         new_schema = config.read_toml(core / "defaults.toml")["schema"]
         have = config.read_toml(repo / config.FILE).get("schema") if (repo / config.FILE).exists() else new_schema
@@ -356,7 +365,7 @@ def doctor(repo, run_checks=True, say=print):
         fail(".factory/ isn't installed: run `mfactory install`")
     elif CORE.resolve() != installed.resolve():
         warn(f"this command runs from {CORE}, not from {installed}")
-    missing = [i for i in ITEMS + ["adapters"] if not (installed / i).exists()]
+    missing = [i for i in ITEMS + ["adapters", "web"] if not (installed / i).exists()]
     if missing and project_cli(repo).exists():
         fail(f".factory/ is incomplete, missing: {', '.join(missing)}. Run `.factory/bin/mfactory upgrade`.")
 

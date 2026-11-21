@@ -12,7 +12,8 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 from conftest import ROOT, git
-from modfactory import dashboard
+from modfactory.fleet.service import one_handler
+from modfactory.util import dashboard_page
 
 
 @pytest.fixture
@@ -37,7 +38,8 @@ def test_init_installs_everything_a_project_needs(bare):
     assert res.returncode == 0, res.stderr
     repo = bare.repo
     for item in ("bin/mfactory", "bin/factory", "lib/modfactory/cli/__init__.py", "roles/build.md", "skill/SKILL.md",
-                 "defaults.toml", "adapters/claude.toml", "dashboard.html", "VERSION", "LICENSE",
+                 "defaults.toml", "adapters/claude.toml", "web/dashboard.html", "web/dashboard.css",
+                 "web/dashboard.js", "VERSION", "LICENSE",
                  "NOTICE"):
         assert (repo / ".factory" / item).exists(), item
     assert not list((repo / ".factory").rglob("__pycache__"))
@@ -239,6 +241,7 @@ def newer(world, version="9.9.9", schema=1):
     copy = world.tmp / "newer"
     shutil.copytree(ROOT / "core", copy / "core", ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copytree(ROOT / "adapters", copy / "adapters")
+    shutil.copytree(ROOT / "web", copy / "web")
     for name in ("LICENSE", "NOTICE"):
         shutil.copy(ROOT / name, copy / name)
     (copy / "core/VERSION").write_text(version + "\n")
@@ -254,12 +257,15 @@ def test_upgrade_replaces_the_core_and_leaves_factory_toml_and_jobs(world):
     job = world.start(until="spec")
     world.factory()
     toml = (world.repo / "factory.toml").read_text()
+    (world.repo / ".factory/dashboard.html").write_text("old page\n")
     res = subprocess.run([str(cli), "upgrade", "--source", str(newer(world))], cwd=world.repo,
                          capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
     assert "ok    .factory/ 0.1.0 -> 9.9.9" in res.stdout
     assert installed(world).stdout.strip() == "9.9.9"
     assert "New in this version." in (world.repo / ".factory/roles/build.md").read_text()
+    assert (world.repo / ".factory/web/dashboard.html").is_file()
+    assert not (world.repo / ".factory/dashboard.html").exists()
     assert (world.repo / "factory.toml").read_text() == toml
     assert (world.repo / ".factory/jobs" / job / "job.json").exists()
 
@@ -279,7 +285,7 @@ def test_upgrade_refuses_a_schema_it_cannot_migrate(world):
 @pytest.fixture
 def served(world):
     job = world.start(until="spec", title="<img src=x onerror=alert(1)>")
-    server = ThreadingHTTPServer(("127.0.0.1", 0), dashboard.handler(world.repo))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), one_handler(world.repo))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield job, f"http://127.0.0.1:{server.server_address[1]}"
     server.shutdown()
@@ -295,22 +301,25 @@ def fetch(url, host=None):
 def test_the_dashboard_serves_the_page_and_live_data(served, world):
     job, base = served
     page, headers = fetch(base + "/")
-    assert page == (ROOT / "core/dashboard.html").read_text()
+    assert page == dashboard_page().decode()
     assert "default-src 'none'" in headers["Content-Security-Policy"]
-    index = json.loads(fetch(base + "/jobs/index.json")[0])
-    assert index["jobs"][0]["id"] == job and index["jobs"][0]["title"] == "<img src=x onerror=alert(1)>"
-    assert json.loads(fetch(base + "/jobs/graph.json")[0])["start"] == "intake"
-    assert {"key": "run.concurrency", "value": 3, "source": "default"} in json.loads(
-        fetch(base + "/jobs/config.json")[0])
-    text, headers = fetch(f"{base}/jobs/{job}/intake.md")
+    body = json.loads(fetch(base + "/projects.json")[0])
+    project = body["projects"][0]
+    assert project["name"] == world.repo.name
+    assert project["jobs"][0]["id"] == job and project["jobs"][0]["title"] == "<img src=x onerror=alert(1)>"
+    assert project["graph"]["start"] == "intake"
+    assert {"key": "run.concurrency", "value": 3, "source": "default"} in project["config"]
+    text, headers = fetch(f"{base}/projects/{world.repo.name}/jobs/{job}/intake.md")
     assert text.startswith("DECISION: ACCEPT") and headers["Content-Type"] == "text/plain; charset=utf-8"
 
 
 def test_the_dashboard_serves_nothing_outside_the_jobs_folder(served, world):
     job, base = served
     (world.repo / "secret.md").write_text("secret\n")
-    for path in (f"/jobs/{job}/job.json", "/jobs/../../secret.md", "/jobs/%2e%2e/%2e%2e/secret.md",
-                 f"/jobs/{job}/../../../secret.md", "/factory.toml"):
+    name = world.repo.name
+    for path in (f"/projects/{name}/jobs/{job}/job.json", f"/projects/{name}/jobs/../../secret.md",
+                 f"/projects/{name}/jobs/%2e%2e/%2e%2e/secret.md",
+                 f"/projects/{name}/jobs/{job}/../../../secret.md", "/factory.toml"):
         with pytest.raises(urllib.error.HTTPError) as error:
             fetch(base + path)
         assert error.value.code == 404, path
@@ -319,7 +328,7 @@ def test_the_dashboard_serves_nothing_outside_the_jobs_folder(served, world):
 def test_the_dashboard_answers_only_to_its_own_address(served):
     _, base = served
     with pytest.raises(urllib.error.HTTPError) as error:
-        fetch(base + "/jobs/index.json", host="evil.example")
+        fetch(base + "/projects.json", host="evil.example")
     assert error.value.code == 403
 
 
@@ -333,9 +342,10 @@ def test_start_dashboard_serves_until_stop(world):
         started = world.cli("start", "dashboard", "--port", port, "--no-open")
         assert started.returncode == 0, started.stderr
         assert url in started.stdout
-        with urllib.request.urlopen(url + "jobs/index.json", timeout=5) as response:
+        with urllib.request.urlopen(url + "projects.json", timeout=5) as response:
             body = json.loads(response.read().decode())
-        assert body["jobs"] == []
+        assert body["projects"][0]["jobs"] == []
+        assert body["projects"][0]["name"] == world.repo.name
         again = world.cli("start", "dashboard", "--no-open")
         assert again.returncode == 1
         assert "already running" in again.stderr
@@ -352,20 +362,20 @@ def test_start_dashboard_serves_until_stop(world):
 
 
 def test_the_dashboard_page_never_puts_job_text_into_html_unescaped():
-    page = (ROOT / "core/dashboard.html").read_text()
+    page = dashboard_page().decode()
     for unsafe in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval("):
         assert unsafe not in page, unsafe
 
 
 def test_the_dashboard_page_loads_nothing_from_elsewhere():
-    page = (ROOT / "core/dashboard.html").read_text()
+    page = dashboard_page().decode()
     for remote in ("<script src", "<link", "@import", "url(http", 'src="http', "<iframe", "<img"):
         assert remote not in page, remote
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="needs node to parse the page's script")
 def test_the_dashboard_script_parses(tmp_path):
-    page = (ROOT / "core/dashboard.html").read_text()
+    page = dashboard_page().decode()
     script = page[page.index("<script>") + len("<script>"):page.rindex("</script>")]
     (tmp_path / "page.js").write_text(script)
     result = subprocess.run(["node", "--check", str(tmp_path / "page.js")], capture_output=True, text=True)

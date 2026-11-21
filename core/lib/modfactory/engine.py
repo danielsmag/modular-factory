@@ -11,10 +11,9 @@ from pathlib import Path
 
 from . import checks, cost, graph
 from .config import RISKS, shown_agent
-from .gh import GitHub
-from .human import Humans
 from .queue import Queue
 from .scripted import Scripted
+from .service import GitHub, Humans
 from .store import Store
 from .util import MARKER, Refused, body, first_line, header, now, quote, run
 

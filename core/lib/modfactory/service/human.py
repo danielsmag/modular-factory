@@ -2,8 +2,8 @@
 
 import re
 
-from . import graph
-from .util import MARKER, Refused, body, now
+from .. import graph
+from ..util import MARKER, Refused, body, now
 
 COMMAND = re.compile(r"\s*/(?:m)?factory[ \t]+([a-z][a-z-]*)\b[ \t]*(.*)", re.S)
 NEEDS_TEXT = {"CHANGES", "FEEDBACK", "REJECT", "ANSWER"}

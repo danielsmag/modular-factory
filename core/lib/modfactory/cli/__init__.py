@@ -9,16 +9,15 @@ import sys
 from pathlib import Path
 
 from .. import checks, config, graph, install
-from .. import dashboard as dash
 from .. import fleet as fleet_mod
 from .. import sync as syncer
 from ..engine import Factory
+from ..fleet import service as fleet_http
+from ..fleet.command import fleet_command
 from ..store import Store
 from ..util import ConfigError, FactoryError, Refused, find_repo, version
-from .fleet import fleet_command
 from .maintain import status, status_all, uninstall, upgrade_all, upgrade_self
 from .parser import parser
-from .service import start_dashboard, stop_dashboard
 
 
 def _stale_note(cfg) -> None:
@@ -76,9 +75,9 @@ def run(args: argparse.Namespace) -> int:
         print(version())
         return 0
     if command == "start":
-        return start_dashboard(args)
+        return fleet_http.start_dashboard(args)
     if command == "stop":
-        return stop_dashboard()
+        return fleet_http.stop_dashboard()
     if command == "fleet":
         return fleet_command(args)
     if command == "hook":
@@ -96,7 +95,7 @@ def run(args: argparse.Namespace) -> int:
         return status_all()
     if command == "dashboard" and (args.all or _project_repo() is None):
         group: fleet_mod.Fleet = fleet_mod.Fleet.find()
-        fleet_mod.serve(group.file, args.port, not args.no_open)
+        fleet_http.serve(group.file, args.port, not args.no_open)
         return 0
 
     repo = find_repo()
@@ -139,11 +138,11 @@ def run(args: argparse.Namespace) -> int:
     elif command == "dashboard":
         subscribed: tuple[fleet_mod.Fleet, str] | None = _subscribed(repo)
         if subscribed is None:
-            dash.serve(repo, args.port, not args.no_open)
+            fleet_http.serve_one(repo, args.port, not args.no_open)
         else:
             group: fleet_mod.Fleet = subscribed[0]
             label: str = subscribed[1]
-            fleet_mod.serve(group.file, args.port, not args.no_open, project=label)
+            fleet_http.serve(group.file, args.port, not args.no_open, project=label)
     else:
         factory: Factory = Factory(cfg)
         if command == "queue":

@@ -41,29 +41,40 @@ In this repository:
 core/bin/mfactory          the CLI's entry point
 core/bin/factory          the old name, kept so an upgrade from 0.1.0 can sync
 core/lib/modfactory/      the factory's code
-  cli/                    the command line: parser, fleet commands, install and status
+  cli/                    the command line: parser, install and status
   config.py               factory.toml over the defaults; validation; `config show`
   graph.py                steps, edges, outcomes; validation of the graph
   engine.py               next and done: entering steps, following edges, limits
-  human.py                asking a person and reading the reply
   scripted.py             the merge step and the verify step
   checks.py               [checks].commands and protected paths
   queue.py                queue, create, summary
   sync.py                 agent and skill files for each tool
   install.py              copy, init, upgrade, doctor
-  dashboard.py            the local server for the dashboard
-  fleet.py                several projects: fleet.toml, one queue, one dashboard
-  store.py, gh.py, cost.py, util.py
+  fleet/                  several projects: fleet.toml, one queue, the dashboard
+    paths.py              fleet.toml name, schema, and the user file
+    project.py            one checkout: binary and jobs folder
+    registry.py           load, save, subscribe, locate
+    concurrency.py        fleet-wide cap on new and resume rows
+    queue.py              run each project's own factory queue
+    jobs.py               read each project's jobs, graph, and config
+    command.py            `mfactory fleet` subcommands
+    service.py            the dashboard server, and start/stop
+  service/                services the factory calls
+    gh.py                 GitHub, through the `gh` CLI
+    human.py              asking a person and reading the reply
+  store.py, cost.py, util.py
 core/roles/*.md           one prompt per agent step and reviewer
 core/skill/SKILL.md       the orchestrator
 core/defaults.toml        the default pipeline and settings
-core/dashboard.html       the dashboard: one project, or every subscribed project with a filter
+web/dashboard.html        the dashboard shell: one project, or every subscribed project with a filter
+web/dashboard.css         styles, inlined into the page when it is served
+web/dashboard.js          the page's script, inlined the same way
 adapters/*.toml           per tool: folders, agent file format, default models
 install.sh
 tests/
 ```
 
-In a project, `core/` becomes `.factory/`, with `adapters/` inside it.
+In a project, `core/` becomes `.factory/`, with `adapters/` and `web/` inside it.
 
 Each job has a folder, `.factory/jobs/<id>/`, in the main checkout and ignored
 by git:
@@ -182,9 +193,9 @@ each tool allows.
 - **`doctor` runs the checks** on a clean checkout of the base branch, unless
   told not to, because a base branch that fails its own checks fails every
   job.
-- **The dashboard reads live state.** The server builds the list of jobs on
-  each request instead of relying on a file written at each change, so it
-  cannot show an out-of-date list.
+- **The dashboard reads each request.** The server rebuilds the project list
+  from each checkout's job files. `index.json`, `graph.json`, and `config.json`
+  are used when that project has written them.
 - **A fleet is a list of checkouts.** The default file is
   `~/.mfactory/fleet.toml`. `install.sh --global` creates `~/.mfactory`.
   `mfactory fleet subscribe` creates the fleet file.

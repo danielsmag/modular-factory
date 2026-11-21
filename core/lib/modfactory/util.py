@@ -52,6 +52,35 @@ def adapters_dir():
     return inside if inside.is_dir() else CORE.parent / "adapters"
 
 
+def web_dir() -> Path:
+    """`web/` sits next to `core/` in the source repo and the global install, and inside `.factory/` once installed."""
+    installed: Path = CORE / "web"
+    if (installed / "dashboard.html").is_file():
+        return installed
+    return CORE.parent / "web"
+
+
+def dashboard_page() -> bytes:
+    """The dashboard as one document.
+
+    `dashboard.css` and `dashboard.js` are inlined. The browser is not given a
+    separate file to load: the page's policy allows only inline style and script.
+    """
+    root: Path = web_dir()
+    names: tuple[str, ...] = ("dashboard.html", "dashboard.css", "dashboard.js")
+    missing: list[str] = [name for name in names if not (root / name).is_file()]
+    if missing:
+        raise FactoryError(f"{root} is missing {', '.join(missing)}")
+    page: str = (root / "dashboard.html").read_text()
+    style: str = (root / "dashboard.css").read_text()
+    script: str = (root / "dashboard.js").read_text()
+    style_mark: str = "/* dashboard.css */\n"
+    script_mark: str = "/* dashboard.js */\n"
+    if style_mark not in page or script_mark not in page:
+        raise FactoryError(f"{root / 'dashboard.html'} is missing its style or script marker")
+    return page.replace(style_mark, style, 1).replace(script_mark, script, 1).encode()
+
+
 def now():
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 

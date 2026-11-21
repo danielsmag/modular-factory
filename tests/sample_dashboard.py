@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "core" / "lib"))
 
-from modfactory import dashboard  # noqa: E402
+from modfactory.fleet.service import serve_one  # noqa: E402
 
 CONFIG = """\
 schema = 1
@@ -160,7 +160,7 @@ def main():
             plan += [("spec-approval", 0, "maintainer", False), ("escalated", 1, "maintainer", True)]
             for number, (stop, days_ago, waiting, detour) in enumerate(plan, 1):
                 make(jobs_dir, number, TITLES[(number - 1) % len(TITLES)], stop, days_ago, rng, waiting, detour)
-        dashboard.serve(repo, args.port, open_browser=False)
+        serve_one(repo, args.port, open_browser=False)
 
 
 if __name__ == "__main__":

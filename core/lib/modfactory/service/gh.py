@@ -2,7 +2,7 @@
 
 import json
 
-from .util import MARKER, Refused, run
+from ..util import MARKER, Refused, run
 
 WRITERS = {"admin", "maintain", "write"}
 

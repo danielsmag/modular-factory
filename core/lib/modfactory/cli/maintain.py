@@ -256,13 +256,14 @@ def upgrade_self(ref: str = "latest", source: str | None = None, say: Callable[[
     before: str = version()
     with tempfile.TemporaryDirectory() as tmp:
         root: Path = Path(source).resolve() if source else fetch_release(ref, tmp)
-        core, adapters, licence = layout(root)
+        core, adapters, web, licence = layout(root)
         after: str = (core / "VERSION").read_text().strip()
         tree: Path = Path(tmp) / "next"
         tree.mkdir()
         skip = shutil.ignore_patterns("__pycache__", "*.pyc")
         shutil.copytree(core, tree / "core", ignore=skip)
         shutil.copytree(adapters, tree / "adapters", ignore=skip)
+        shutil.copytree(web, tree / "web", ignore=skip)
         for name in ("LICENSE", "NOTICE"):
             src: Path = licence / name
             if src.is_file():

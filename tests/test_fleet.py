@@ -12,10 +12,11 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
-from conftest import CLI, ROOT, git
+from conftest import CLI, git
 from modfactory.cli import main
-from modfactory.fleet import Fleet, Project, handler
-from modfactory.util import Refused
+from modfactory.fleet import Fleet, Project
+from modfactory.fleet.service import handler
+from modfactory.util import Refused, dashboard_page
 
 
 def factory_script(repo: Path, body: str) -> None:
@@ -180,7 +181,7 @@ def test_the_fleet_dashboard_serves_both_projects(served):
     rows: list[dict[str, object]] = [{"key": "run.concurrency", "value": 3, "source": "default"}]
     (one / ".factory" / "jobs" / "config.json").write_text(json.dumps(rows))
     page, headers = fetch(base + "/")
-    assert page == (ROOT / "core/dashboard.html").read_text()
+    assert page == dashboard_page().decode()
     assert 'aria-label="Projects"' in page
     assert 'data-view="pipeline"' in page
     assert "default-src 'none'" in headers["Content-Security-Policy"]
@@ -248,20 +249,20 @@ def test_the_fleet_dashboard_serves_the_queue_and_caches_it(tmp_path):
 
 
 def test_the_fleet_page_never_puts_job_text_into_html_unescaped():
-    page: str = (ROOT / "core/dashboard.html").read_text()
+    page: str = dashboard_page().decode()
     for unsafe in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval("):
         assert unsafe not in page, unsafe
 
 
 def test_the_fleet_page_loads_nothing_from_elsewhere():
-    page: str = (ROOT / "core/dashboard.html").read_text()
+    page: str = dashboard_page().decode()
     for remote in ("<script src", "<link", "@import", "url(http", 'src="http', "<iframe", "<img"):
         assert remote not in page, remote
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="needs node to parse the page's script")
 def test_the_fleet_script_parses(tmp_path):
-    page: str = (ROOT / "core/dashboard.html").read_text()
+    page: str = dashboard_page().decode()
     script: str = page[page.index("<script>") + len("<script>"):page.rindex("</script>")]
     (tmp_path / "page.js").write_text(script)
     result: subprocess.CompletedProcess[str] = subprocess.run(
@@ -403,7 +404,7 @@ def test_snapshot_attaches_only_a_real_graph(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(not shutil.which("node"), reason="needs node to run the page's script")
 def test_a_queue_row_for_an_existing_job_is_not_a_second_card(tmp_path: Path) -> None:
-    page: str = (ROOT / "core/dashboard.html").read_text()
+    page: str = dashboard_page().decode()
     script: str = page.split("<script>", 1)[1].rsplit("</script>", 1)[0].split("/* boot */", 1)[0]
     script += """
 const rows = [
@@ -439,21 +440,21 @@ def test_dashboard_inside_a_subscribed_repo_opens_that_project(world, monkeypatc
         seen["project"] = project
         seen["open"] = open_browser
 
-    def single(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
-        seen["single"] = repo_arg
+    def serve_one(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
+        seen["one"] = repo_arg
 
-    monkeypatch.setattr("modfactory.cli.fleet_mod.serve", serve)
-    monkeypatch.setattr("modfactory.cli.dash.serve", single)
+    monkeypatch.setattr("modfactory.cli.fleet_http.serve", serve)
+    monkeypatch.setattr("modfactory.cli.fleet_http.serve_one", serve_one)
     assert main(["dashboard", "--no-open"]) == 0
     assert seen["project"] == "repo"
     assert seen["open"] is False
     assert seen["file"] is not None
-    assert "single" not in seen
+    assert "one" not in seen
 
     seen.clear()
     assert main(["dashboard", "--all", "--no-open"]) == 0
     assert seen["project"] is None
-    assert "single" not in seen
+    assert "one" not in seen
 
 
 def test_dashboard_in_a_plain_git_checkout_opens_the_fleet(world, monkeypatch, tmp_path):
@@ -472,15 +473,15 @@ def test_dashboard_in_a_plain_git_checkout_opens_the_fleet(world, monkeypatch, t
         seen["file"] = fleet_file
         seen["project"] = project
 
-    def single(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
-        seen["single"] = repo_arg
+    def serve_one(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
+        seen["one"] = repo_arg
 
-    monkeypatch.setattr("modfactory.cli.fleet_mod.serve", serve)
-    monkeypatch.setattr("modfactory.cli.dash.serve", single)
+    monkeypatch.setattr("modfactory.cli.fleet_http.serve", serve)
+    monkeypatch.setattr("modfactory.cli.fleet_http.serve_one", serve_one)
     assert main(["dashboard", "--no-open"]) == 0
     assert seen["file"] == file
     assert seen["project"] is None
-    assert "single" not in seen
+    assert "one" not in seen
 
 
 def test_dashboard_inside_an_unsubscribed_repo_stays_on_that_repo(world, monkeypatch):
@@ -493,12 +494,12 @@ def test_dashboard_inside_an_unsubscribed_repo_stays_on_that_repo(world, monkeyp
     ) -> None:
         seen["fleet"] = True
 
-    def single(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
+    def serve_one(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
         seen["repo"] = repo_arg
         seen["open"] = open_browser
 
-    monkeypatch.setattr("modfactory.cli.fleet_mod.serve", serve)
-    monkeypatch.setattr("modfactory.cli.dash.serve", single)
+    monkeypatch.setattr("modfactory.cli.fleet_http.serve", serve)
+    monkeypatch.setattr("modfactory.cli.fleet_http.serve_one", serve_one)
     assert main(["dashboard", "--no-open"]) == 0
     assert seen["repo"] == world.repo.resolve()
     assert seen["open"] is False
@@ -516,7 +517,7 @@ def test_fleet_alone_opens_the_dashboard(tmp_path, monkeypatch):
         seen["port"] = port
         seen["open"] = open_browser
 
-    monkeypatch.setattr("modfactory.cli.fleet.fleet_mod.serve", serve)
+    monkeypatch.setattr("modfactory.fleet.command.serve", serve)
     assert main(["fleet", "--port", "4751", "--no-open"]) == 0
     assert seen["port"] == 4751
     assert seen["open"] is False

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>factory</title>
+<!-- dashboard.css and dashboard.js are inlined here when the page is served. -->
+<style>
+/* dashboard.css */
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/board" aria-label="factory, board">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#ff4a26" stroke-width="2" aria-hidden="true"><path d="M3 21V10l6 4V10l6 4V4h6v17z"/></svg>
+    factory
+  </a>
+  <nav class="nav" aria-label="Views">
+    <a href="#/board" data-view="board">Board</a>
+    <a href="#/pipeline" data-view="pipeline">Pipeline</a>
+    <a href="#/jobs" data-view="jobs">Jobs</a>
+    <a href="#/config" data-view="config">Config</a>
+  </nav>
+  <div id="filters" class="filters" role="group" aria-label="Projects"></div>
+  <div class="tools">
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span class="sr">Search jobs</span>
+      <input id="search" type="search" placeholder="Search jobs..." autocomplete="off" spellcheck="false">
+      <kbd id="hotkey">Ctrl K</kbd>
+    </label>
+    <div class="live" id="live"><span id="live-readout"><span id="live-status" role="status">connecting</span><span id="clock" aria-hidden="true"></span></span></div>
+    <a class="cta" href="https://github.com/danielsmag/modular-factory#readme" target="_blank" rel="noopener noreferrer">DOCS</a>
+  </div>
+</header>
+<main class="page" id="view" aria-live="off"></main>
+<footer><span id="foot-left">read-only · approvals and feedback go through /mfactory or an issue comment</span><span id="foot-right"></span></footer>
+
+<script>
+/* dashboard.js */
+</script>
+</body>
+</html>
