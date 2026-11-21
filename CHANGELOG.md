@@ -6,6 +6,15 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.2.0
+
+The factory no longer merges by default. After approval it marks the pull
+request ready and waits at `ready-to-merge`. A hand merge continues from the
+merge step's `MERGED` edge. Schema stays 1. A project that never overrode
+`approve` or `merge` changes behavior on upgrade. To keep the old behavior,
+point `approve` at `merge`, switch `ready-to-merge` off, and set
+`[steps.merge] enabled = true`.
+
 - A build that stops before it rewrites `build.md` can leave `progress.md` in the job folder. The next builder of that step is told to read it. `done` deletes the file once the build outcome is accepted.
 - `mfactory start dashboard` serves the dashboard in the background. `mfactory stop` ends it. `mfactory dashboard` still stays in the foreground until Ctrl C.
 - The command is `mfactory`. Generated agents are `mfactory-*`, and the skill

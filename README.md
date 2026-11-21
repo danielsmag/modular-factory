@@ -13,7 +13,7 @@ skills each agent reads.
 
 ![The dashboard's board view, showing made-up sample jobs](docs/dashboard-board.png?v=2)
 
-> **Status: 0.1.0, not yet run inside a real tool.** The pipeline is covered by
+> **Status: 0.2.0, not yet run inside a real tool.** The pipeline is covered by
 > 179 automated tests that play the orchestrator and the agents against a
 > stand-in for GitHub. Nobody has yet run a job end to end in Claude Code,
 > Cursor or Codex. Expect to find problems on the first real run; see
