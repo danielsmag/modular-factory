@@ -17,7 +17,7 @@ import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from typing import TextIO
 from urllib.parse import quote, unquote, urlsplit
@@ -201,12 +201,25 @@ def release() -> None:
         path.unlink(missing_ok=True)
 
 
+class DashboardServer(ThreadingHTTPServer):
+    """`HTTPServer.server_bind` reverse-resolves the listen address.
+
+    `socket.getfqdn` blocks on the macOS runner for longer than `start` waits,
+    so the process is alive and the dashboard is reported as not started.
+    """
+
+    def server_bind(self) -> None:
+        super(HTTPServer, self).server_bind()
+        self.server_name = str(self.server_address[0])
+        self.server_port = int(self.server_address[1])
+
+
 def _listen(
     load: Callable[[], Fleet], port: int, open_browser: bool, say: Callable[[str], None],
     project: str | None, label: str,
 ) -> None:
     try:
-        server: ThreadingHTTPServer = ThreadingHTTPServer(("127.0.0.1", port), _handler(load))
+        server: DashboardServer = DashboardServer(("127.0.0.1", port), _handler(load))
     except OSError as error:
         raise Refused(f"port {port} can't be used ({error.strerror}). Pick another with --port.") from error
     url: str = f"http://127.0.0.1:{server.server_address[1]}/"

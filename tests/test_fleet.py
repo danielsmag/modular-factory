@@ -3,19 +3,19 @@
 import json
 import shlex
 import shutil
+import socket
 import subprocess
 import sys
 import threading
 import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 from conftest import CLI, git
 from modfactory.cli import main
 from modfactory.fleet import Fleet, Project
-from modfactory.fleet.service import handler
+from modfactory.fleet.service import DashboardServer, handler
 from modfactory.util import Refused, dashboard_page
 
 
@@ -163,7 +163,7 @@ def served(tmp_path):
     file: Path = tmp_path / "fleet.toml"
     group: Fleet = Fleet(file, [Project(one.resolve()), Project(two.resolve())])
     group.save()
-    server: ThreadingHTTPServer = ThreadingHTTPServer(("127.0.0.1", 0), handler(file))
+    server: DashboardServer = DashboardServer(("127.0.0.1", 0), handler(file))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield one, f"http://127.0.0.1:{server.server_address[1]}"
     server.shutdown()
@@ -174,6 +174,19 @@ def fetch(url, host=None):
     request = urllib.request.Request(url, headers={"Host": host} if host else {})
     with urllib.request.urlopen(request, timeout=10) as response:
         return response.read().decode(), response.headers
+
+
+def test_the_dashboard_bind_does_not_reverse_resolve(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def refuse(name: str = "") -> str:
+        raise AssertionError(f"reverse lookup of {name}")
+
+    monkeypatch.setattr(socket, "getfqdn", refuse)
+    server: DashboardServer = DashboardServer(("127.0.0.1", 0), handler(tmp_path / "fleet.toml"))
+    try:
+        assert server.server_name == "127.0.0.1"
+        assert server.server_port != 0
+    finally:
+        server.server_close()
 
 
 def test_the_fleet_dashboard_serves_both_projects(served):
@@ -230,7 +243,7 @@ def test_the_fleet_dashboard_serves_the_queue_and_caches_it(tmp_path):
     file: Path = tmp_path / "fleet.toml"
     group: Fleet = Fleet(file, [Project(good), Project(bad)])
     group.save()
-    server: ThreadingHTTPServer = ThreadingHTTPServer(("127.0.0.1", 0), handler(file))
+    server: DashboardServer = DashboardServer(("127.0.0.1", 0), handler(file))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base: str = f"http://127.0.0.1:{server.server_address[1]}"
     try:

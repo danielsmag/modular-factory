@@ -8,11 +8,10 @@ import sys
 import threading
 import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
 
 import pytest
 from conftest import ROOT, git
-from modfactory.fleet.service import one_handler
+from modfactory.fleet.service import DashboardServer, one_handler
 from modfactory.util import dashboard_page
 
 
@@ -285,7 +284,7 @@ def test_upgrade_refuses_a_schema_it_cannot_migrate(world):
 @pytest.fixture
 def served(world):
     job = world.start(until="spec", title="<img src=x onerror=alert(1)>")
-    server = ThreadingHTTPServer(("127.0.0.1", 0), one_handler(world.repo))
+    server = DashboardServer(("127.0.0.1", 0), one_handler(world.repo))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield job, f"http://127.0.0.1:{server.server_address[1]}"
     server.shutdown()
