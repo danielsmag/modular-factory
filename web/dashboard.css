@@ -104,7 +104,7 @@ h2 { font: 500 14px var(--sans); margin: 0; }
 
 /* ---- kanban ---- */
 .kanban { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
-.kcol { flex: 0 0 220px; min-width: 220px; }
+.kcol { flex: 0 0 220px; width: 220px; min-width: 220px; max-width: 220px; }
 .kcol-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 8px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
 .kcol-head h3 { margin: 0; font: 600 13px var(--sans); flex: none; }
 .kcol-head .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px var(--mono); color: var(--muted); }
@@ -123,7 +123,7 @@ h2 { font: 500 14px var(--sans); margin: 0; }
 .kcard .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .kcard .num { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--mono); color: var(--muted); }
 .kcard .flag { margin-left: auto; font: 600 10px var(--mono); letter-spacing: .04em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
-.kcard .feature { font-size: 13px; line-height: 1.4; margin: 0 0 6px; overflow-wrap: anywhere; }
+.kcard .feature { font-size: 13px; line-height: 1.4; margin: 0 0 6px; white-space: normal; overflow-wrap: anywhere; }
 .kcard .links { display: flex; flex-wrap: wrap; gap: 8px 10px; }
 .kcard .meta { display: flex; flex-wrap: wrap; gap: 8px 10px; margin-top: 8px; font: 11px var(--mono); color: var(--muted); }
 .kcard .meta .hot { color: var(--bad); }

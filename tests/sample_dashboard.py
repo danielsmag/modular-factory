@@ -19,7 +19,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "core" / "lib"))
 
+from modfactory.config import as_json as config_as_json  # noqa: E402
+from modfactory.config import load  # noqa: E402
+from modfactory.fleet.jobs import file_rows  # noqa: E402
 from modfactory.fleet.service import serve_one  # noqa: E402
+from modfactory.graph import as_json as graph_as_json  # noqa: E402
+from modfactory.util import version  # noqa: E402
 
 CONFIG = """\
 schema = 1
@@ -140,6 +145,39 @@ def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=Fals
         (folder / "decision.md").write_text("DECISION: APPROVE\n\n## Why\nEvery criterion is met.\n")
 
 
+def publish(repo: Path, jobs_dir: Path) -> None:
+    """Write the files the dashboard reads, and a stub CLI so the queue stays quiet."""
+    cfg = load(repo)
+    jobs: list[dict[str, object]] = []
+    for child in sorted(jobs_dir.iterdir()):
+        job_file: Path = child / "job.json"
+        if not job_file.is_file():
+            continue
+        loaded: object = json.loads(job_file.read_text())
+        if not isinstance(loaded, dict):
+            continue
+        loaded["files"] = file_rows(child)
+        jobs.append(loaded)
+    project: object = cfg["project"]
+    labels: object = cfg["labels"]
+    index: dict[str, object] = {
+        "generated_at": stamp(datetime.now(UTC)),
+        "version": version(),
+        "project": project if isinstance(project, dict) else {},
+        "repo": repo.name,
+        "tools": list(cfg.tools),
+        "labels": labels if isinstance(labels, dict) else {},
+        "jobs": jobs,
+    }
+    (jobs_dir / "index.json").write_text(json.dumps(index, indent=1) + "\n")
+    (jobs_dir / "graph.json").write_text(json.dumps(graph_as_json(cfg), indent=1) + "\n")
+    (jobs_dir / "config.json").write_text(json.dumps(config_as_json(cfg), indent=1) + "\n")
+    binary: Path = repo / ".factory" / "bin" / "mfactory"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    binary.write_text("#!/bin/sh\nexit 0\n")
+    binary.chmod(0o755)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--port", type=int, default=4747)
@@ -160,6 +198,7 @@ def main():
             plan += [("spec-approval", 0, "maintainer", False), ("escalated", 1, "maintainer", True)]
             for number, (stop, days_ago, waiting, detour) in enumerate(plan, 1):
                 make(jobs_dir, number, TITLES[(number - 1) % len(TITLES)], stop, days_ago, rng, waiting, detour)
+        publish(repo, jobs_dir)
         serve_one(repo, args.port, open_browser=False)
 
 
