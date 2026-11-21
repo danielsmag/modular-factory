@@ -23,7 +23,7 @@ skills each agent reads.
 Install the `mfactory` command once:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --global
+curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --global
 ```
 
 Then, in each repository:
@@ -38,7 +38,7 @@ You need Python 3.11 or later, `git`, and the GitHub CLI `gh`, signed in.
 To install straight into one repository, without the command on your `PATH`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --tool claude
+curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --tool claude
 ```
 
 Then, in your coding tool:

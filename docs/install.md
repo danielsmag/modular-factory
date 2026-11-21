@@ -16,13 +16,13 @@ Python files that use only the standard library.
 Install the command once, for your user:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --global
+curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --global
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--global` | Install `mfactory` for your user. It must not be combined with `--tool`. |
-| `--version v0.1.0` | Install that release. Default: the latest release, or the `main` branch before the first release. |
+| `--version v0.1.0` | Install that release. Default: the latest release, or the `master` branch before the first release. |
 | `--source DIR` | Install from a local copy of this repository instead of downloading. |
 
 This creates `~/.mfactory` (`FACTORY_HOME` when set) and links `~/.local/bin/mfactory`. The fleet list is `~/.mfactory/fleet.toml`. Then, in each repository:
@@ -34,19 +34,19 @@ mfactory install --tool claude
 To install straight into the repository you are in, without a command on `PATH`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --tool claude
+curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --tool claude
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--tool claude\|cursor\|codex` | The tool to generate agents for. Repeat it or separate names with commas for several. Default: `claude`. |
-| `--version v0.1.0` | Install that release. Default: the latest release, or the `main` branch before the first release. |
+| `--version v0.1.0` | Install that release. Default: the latest release, or the `master` branch before the first release. |
 | `--source DIR` | Install from a local copy of this repository instead of downloading. |
 
 To read the script before running it, download it first:
 
 ```bash
-curl -fsSL -o install.sh https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh
+curl -fsSL -o install.sh https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh
 less install.sh
 bash install.sh --tool cursor
 ```

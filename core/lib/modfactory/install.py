@@ -224,8 +224,8 @@ def fetch_release(ref, into):
                                         timeout=30) as res:
                 ref = json.load(res)["tag_name"]
         except (urllib.error.URLError, KeyError, ValueError):
-            ref = "main"  # no release published yet
-    kind = "heads" if ref == "main" else "tags"
+            ref = "master"  # no release published yet
+    kind = "heads" if ref == "master" else "tags"
     url = f"https://codeload.github.com/{SOURCE_REPO}/tar.gz/refs/{kind}/{ref}"
     archive = Path(into) / "factory.tar.gz"
     try:

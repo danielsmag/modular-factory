@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Install the software factory.
 #
-#   curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --global
-#   curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/main/install.sh | bash -s -- --tool claude
+#   curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --global
+#   curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --tool claude
 #
 # --global installs the mfactory command for your user. Without it, the script
 # copies the factory into the git repository you run it in.
@@ -75,9 +75,9 @@ if [ -z "$SOURCE" ]; then
   if [ "$VERSION" = latest ]; then
     tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
       "$PYTHON" -c 'import json, sys; print(json.load(sys.stdin)["tag_name"])' 2>/dev/null || true)"
-    # Before the first release, the main branch is the latest version.
+    # Before the first release, the master branch is the latest version.
     ref="${tag:+refs/tags/$tag}"
-    ref="${ref:-refs/heads/main}"
+    ref="${ref:-refs/heads/master}"
   fi
   echo "Downloading $REPO ($ref)"
   curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$ref" | tar -xz -C "$SOURCE" --strip-components=1 ||
