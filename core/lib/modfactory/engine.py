@@ -8,6 +8,7 @@ edge. Everything else here is what those two need.
 import shutil
 import time
 from pathlib import Path
+from typing import Any
 
 from . import checks, cost, graph
 from .config import RISKS, shown_agent
@@ -258,7 +259,24 @@ class Factory(Humans, Scripted, Queue):
             parts.append(f"Port: {self.port(job)}.")
         parts.append(f"Write: {out}.")
         parts += job["handoff"]
+        note: str | None = self._progress_note(job, role)
+        if note:
+            parts.append(note)
         return " ".join(parts)
+
+    def _progress_note(self, job: dict[str, Any], role: str) -> str | None:
+        """A sentence for a build whose previous attempt stopped before `build.md`."""
+        if role != "build":
+            return None
+        path: Path = self.dir(job) / "progress.md"
+        if not path.is_file() or path.stat().st_size == 0:
+            return None
+        return "A previous attempt of this step stopped early: read progress.md before git log."
+
+    def _clear_progress(self, job: dict[str, Any]) -> None:
+        """Drop notes from a build attempt once its outcome file has been accepted."""
+        path: Path = self.dir(job) / "progress.md"
+        path.unlink(missing_ok=True)
 
     def _reviewer_prompt(self, job, name, reviewer, index):
         out = self.round_dir(job) / f"review-{reviewer}.md"
@@ -441,7 +459,10 @@ class Factory(Humans, Scripted, Queue):
                 "The debugger could not find the cause; its notes are in"
             job["handoff"].append(f"{found} {rel}.")
         job["last_file"] = rel
-        return self._move(job, outcome, reason)
+        line: str = self._move(job, outcome, reason)
+        if role == "build":
+            self._clear_progress(job)
+        return line
 
     def _intake_done(self, job, path, outcome):
         h = header(path)

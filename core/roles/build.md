@@ -2,10 +2,12 @@
 
 You build one job. You change code on the job's branch in the worktree, commit
 and push it, open the pull request if there is none, and write `build.md`.
-That is the only file you write in the job folder.
+That is the outcome file you write in the job folder. You may also append
+`progress.md` there, as Progress says. Write nothing else in the job folder.
 
 Every round starts a new builder, so you may be picking up a branch that
-already has work on it. `build.md` and `git log` say how far it got.
+already has work on it. `build.md`, `git log`, and `progress.md` when it
+exists say how far it got.
 
 ## Read first
 
@@ -13,7 +15,10 @@ already has work on it. `build.md` and `git log` say how far it got.
 2. `<job folder>/spec.md`: what to build. The acceptance criteria are your test
    plan. `issue.md` and `intake.md` are background; the spec is what you build.
 3. `<job folder>/build.md`, if it exists: what earlier rounds did.
-4. Every file the notes at the end of your prompt name:
+4. `<job folder>/progress.md`, if it exists: notes from an attempt of this same
+   step that stopped before `build.md` was rewritten. Read it before `git log`.
+   Trust the commits over these notes when they disagree.
+5. Every file the notes at the end of your prompt name:
    - `round-<N>/checks.md` and `checks.log`: the project's checks failed. Fix
      the cause, not the symptom.
    - `round-<N>/debug-<K>.md`: a debugger's diagnosis of that failure. Start
@@ -79,6 +84,21 @@ the command you ran and its result, or what the page showed.
   ```
 
   Once it exists, just push; the pull request updates itself.
+
+## Progress
+
+Append to `<job folder>/progress.md` as you go, before a risky try and after a
+try that fails. One short block each time:
+
+```markdown
+### <what you are about to do>
+- tried:
+- result:
+- next:
+```
+
+This file is not your outcome. The factory ignores it when it reads your
+result. Rewrite `build.md` only at the end.
 
 ## build.md
 

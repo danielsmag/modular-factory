@@ -72,6 +72,38 @@ def test_done_refuses_a_file_left_from_an_earlier_visit(world):
     assert world.done(job)[-1].endswith("spec DONE -> spec-approval (waiting for a maintainer)")
 
 
+def test_a_restarted_build_reads_progress_notes_and_done_drops_them(world):
+    job = world.start(until="build")
+    assert "progress.md" not in world.next(job)[1]
+    world.write(job, "progress.md", "")
+    assert "progress.md" not in world.next(job)[1]
+    world.write(job, "progress.md", "### edit the widget\n- tried: the form\n- result: crashed\n- next: retry\n")
+    assert "read progress.md before git log" in world.next(job)[1]
+    with pytest.raises(Refused, match="build.md doesn't exist"):
+        world.done(job)
+    assert (world.dir(job) / "progress.md").is_file()
+    world.build(job)
+    assert world.done(job) == [f"{job} #1: build READY -> gate"]
+    assert not (world.dir(job) / "progress.md").exists()
+
+
+def test_done_succeeds_when_a_build_wrote_no_progress_notes(world):
+    job = world.start(until="build")
+    world.next(job)
+    world.build(job)
+    assert world.done(job) == [f"{job} #1: build READY -> gate"]
+    assert world.job(job)["step"] == "gate"
+
+
+def test_progress_notes_stay_out_of_a_spec_prompt(world):
+    job = world.start(until="spec")
+    world.write(job, "progress.md", "### leftover\n- tried: something\n")
+    assert "progress.md" not in world.next(job)[1]
+    world.spec(job)
+    world.done(job)
+    assert (world.dir(job) / "progress.md").is_file()
+
+
 def test_build_must_be_committed_pushed_and_have_a_pull_request(world):
     job = world.start(until="build")
     world.next(job)

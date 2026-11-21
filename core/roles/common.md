@@ -15,7 +15,8 @@ Job: <id>. Step: <step>. Job folder: <path>/. Main checkout: <repo>. Worktree: <
 - **Job folder**: the job's files, in the main checkout. Earlier steps wrote
   theirs here; yours goes here too.
 - **Write**: the one file you write for the factory. Write nothing else in the
-  job folder.
+  job folder, except `progress.md` when your role names it. That file is notes
+  for a restarted attempt, not your outcome.
 - **Worktree**: a checkout of the job's branch. All code is read, run and
   changed there, never in the main checkout, which belongs to the user and to
   other jobs.

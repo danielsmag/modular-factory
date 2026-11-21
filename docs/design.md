@@ -83,6 +83,7 @@ by git:
 job.json                  the job's state: step, history, counts, pull request
 issue.md                  the issue and its comments, as quoted data
 intake.md  spec.md  build.md  decision.md  verify.md
+progress.md               notes from a build attempt that stopped early
 feedback-1.md             what a person asked for
 round-1/checks.md         the gate's verdict, with checks.log
 round-1/review-code.md    one file per reviewer
@@ -286,9 +287,11 @@ project's `factory/bin/job`, `factory/bin/gate`, `factory/bin/route` and
 - **Project skills** are passed to agents explicitly, per step.
 - **Checks are a list of commands**, not a shell script, and stop at the first
   failure.
-- **Every round starts a fresh builder** that reads `build.md` and the git
-  log. Resuming the previous builder by message was dropped, because not every
-  tool can do it.
+- **Every round starts a fresh builder** that reads `build.md`, `progress.md`
+  when a previous attempt of that step stopped early, and the git log.
+  Resuming the previous builder by message was dropped, because not every
+  tool can do it. `done` deletes `progress.md` once the build outcome is
+  accepted.
 - **The stop hook and the cost** are optional and Claude Code only.
 - **The dashboard was rewritten** with four views, a new look, and a local
   server that confines what it serves.
