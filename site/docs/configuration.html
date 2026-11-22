@@ -148,7 +148,8 @@ on = { APPROVE = "merge", CHANGES = { to = "build", max = 2 }, REJECT = "rejecte
     <table>
       <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td class="mono">who</td><td><code>maintainer</code></td><td><code>author</code> or <code>maintainer</code> (write access).</td></tr>
+        <tr><td class="mono">who</td><td><code>maintainer</code></td><td><code>author</code>: the issue's author (the operator may also reply). <code>maintainer</code>: anyone with write access. <code>operator</code>: the signed-in user running the factory. A list of logins: only those accounts.</td></tr>
+        <tr><td class="mono">replies</td><td><code>any</code></td><td><code>any</code>: a comment from someone <code>who</code> allows, or <code>mfactory answer</code>. <code>tool</code>: ignore comments. Only <code>mfactory answer</code> counts.</td></tr>
         <tr><td class="mono">ask</td><td></td><td>The heading of the comment.</td></tr>
         <tr><td class="mono">shows</td><td></td><td>A file from the job folder to include.</td></tr>
         <tr><td class="mono">pr_ready</td><td><code>false</code></td><td>Mark the draft pull request ready. The comment says that merging continues the job.</td></tr>
@@ -261,7 +262,7 @@ step = 10</code></pre>
       <tbody>
         <tr><td class="mono">[labels] queue</td><td>Issues with this label are built.</td></tr>
         <tr><td class="mono">[labels] needs_info</td><td>Put on an issue while its author is being asked.</td></tr>
-        <tr><td class="mono">[labels] needs_human</td><td>Put on an issue while a maintainer is being asked.</td></tr>
+        <tr><td class="mono">[labels] needs_human</td><td>Put on an issue while a maintainer, the operator, or a named login is being asked.</td></tr>
         <tr><td class="mono">[paths] worktrees</td><td>Where each job's worktree goes, relative to the repository. Keep it ignored by git.</td></tr>
         <tr><td class="mono">[paths] protected</td><td>Patterns of files no job may change or delete. <code>*</code> also matches <code>/</code>. A job may add new files that match.</td></tr>
         <tr><td class="mono">[ports] base, step</td><td>Job number <code>n</code> gets ports from <code>base + step * (n % 100)</code>, so dev servers of parallel jobs do not collide.</td></tr>

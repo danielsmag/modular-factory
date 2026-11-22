@@ -57,7 +57,7 @@
 /mfactory reject 12 Out of scope for this quarter.</code></pre>
   <p>On the issue or pull request, leave the number off:</p>
   <pre data-lang="text"><code>/mfactory changes Use the existing Money type instead of a new one.</code></pre>
-  <p>The word after <code>/mfactory</code> is the outcome's name in lower case. A step with <code>on = { SHIP = "merge", HOLD = "build" }</code> takes <code>/mfactory ship</code> and <code>/mfactory hold</code>. Words that come with the reply are saved, and the next agent is told to act on them. <code>REJECT</code> needs a reason. Who may reply depends on the step: the issue's author, or someone with write access. See <a href="pipeline.html#human-steps">human steps</a>.</p>
+  <p>The word after <code>/mfactory</code> is the outcome's name in lower case. A step with <code>on = { SHIP = "merge", HOLD = "build" }</code> takes <code>/mfactory ship</code> and <code>/mfactory hold</code>. Words that come with the reply are saved, and the next agent is told to act on them. <code>REJECT</code> needs a reason. Who may reply depends on the step: the issue's author, someone with write access, the operator, or a named list of logins. <code>replies = "tool"</code> ignores comments. See <a href="pipeline.html#human-steps">human steps</a>.</p>
   <p>Merging the job's pull request by hand continues the job from the merge step's <code>MERGED</code> edge, including when that step is off. On the default path this does not sync the base branch or run the checks again.</p>
 
   <h2 id="watch">Watch</h2>

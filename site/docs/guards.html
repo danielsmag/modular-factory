@@ -35,7 +35,7 @@
 
   <h2 id="merge-and-replies">Merge and replies</h2>
   <p>The factory merges only when the merge step is on. By default that step is off: a maintainer merges, and a hand merge continues from the merge step's <code>MERGED</code> edge. When the step is on, the script merges only after the base branch is merged in and the checks pass again. The factory never deploys and never merges a revert.</p>
-  <p>A reply to a human step counts only from the issue's author, or from someone with write access, depending on the step. Comments from anyone else are ignored.</p>
+  <p>A reply to a human step counts only from the issue's author, from someone with write access, from the operator, or from named logins, depending on the step. <code>replies = "tool"</code> ignores comments and takes the reply from the coding tool. Comments from anyone else are ignored.</p>
 
   <h2 id="the-dashboard">The dashboard</h2>
   <p>The dashboard changes nothing. It answers only on <code>127.0.0.1</code>, refuses requests with another <code>Host</code> header, serves only <code>.md</code> and <code>.log</code> files from <code>.factory/jobs/</code>, loads nothing from the network, and builds its page without ever turning text into markup, because job text comes from GitHub issues.</p>

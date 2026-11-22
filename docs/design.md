@@ -137,7 +137,9 @@ def follow(job, step, outcome):
   base branch is merged in and the checks pass again. The factory never
   deploys and never merges a revert.
 - **Replies are checked.** A reply to a human step counts only from the
-  issue's author, or from someone with write access, depending on the step.
+  issue's author, from someone with write access, from the operator, or from
+  named logins, depending on the step. `replies = "tool"` ignores comments
+  and takes the reply from the coding tool.
 - **The dashboard changes nothing.** It answers only on `127.0.0.1`, refuses
   requests with another `Host` header, serves only `.md` and `.log` files from
   `.factory/jobs/`, loads nothing from the network, and builds its page

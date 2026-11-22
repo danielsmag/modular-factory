@@ -134,14 +134,15 @@ on = { READY = "docs" }</code></pre>
     <table>
       <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td class="mono">who</td><td><code>maintainer</code></td><td><code>author</code>: the issue's author. <code>maintainer</code>: anyone with write access.</td></tr>
+        <tr><td class="mono">who</td><td><code>maintainer</code></td><td><code>author</code>: the issue's author (the operator may also reply). <code>maintainer</code>: anyone with write access. <code>operator</code>: the signed-in user running the factory. A list of logins: only those accounts.</td></tr>
+        <tr><td class="mono">replies</td><td><code>any</code></td><td><code>any</code>: a comment from someone <code>who</code> allows, or <code>mfactory answer</code>. <code>tool</code>: ignore comments. Only <code>mfactory answer</code> counts.</td></tr>
         <tr><td class="mono">ask</td><td></td><td>The heading of the comment.</td></tr>
         <tr><td class="mono">shows</td><td></td><td>A file from the job folder to include, such as <code>spec.md</code>.</td></tr>
         <tr><td class="mono">pr_ready</td><td><code>false</code></td><td>Mark the draft pull request ready. The comment then says that merging continues the job.</td></tr>
       </tbody>
     </table>
   </div>
-  <p>Comments from anyone else are ignored. On a step with an <code>ANSWER</code> outcome, such as <code>ask-author</code>, any comment from the author counts as the answer. Words given with a reply are saved as <code>feedback-&lt;k&gt;.md</code>. <code>REJECT</code> ends the job as <code>rejected</code> and needs a reason.</p>
+  <p>Comments from anyone else are ignored. With <code>replies = "tool"</code>, every comment is ignored. On a step with an <code>ANSWER</code> outcome, such as <code>ask-author</code>, any comment from the author counts as the answer. Words given with a reply are saved as <code>feedback-&lt;k&gt;.md</code>. <code>REJECT</code> ends the job as <code>rejected</code> and needs a reason. <code>mfactory answer</code> is the person running the factory. <code>who</code> does not filter it.</p>
 
   <h2 id="validation-after-merge">Validation after merge</h2>
   <p>Turn <code>verify</code> on to check the change again after it is merged, or after a deploy your own script waits for. The factory never deploys. A job being validated holds no slot.</p>

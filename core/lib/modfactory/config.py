@@ -236,6 +236,20 @@ def a_regex(value: object) -> str | None:
     return None
 
 
+# GitHub login: 1–39 letters, digits, or hyphens, not starting or ending with a hyphen.
+LOGIN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
+WHO_WORDS = ("author", "maintainer", "operator")
+
+
+def a_who(value: object) -> str | None:
+    """Who may reply on GitHub: a role, or a non-empty list of logins."""
+    if isinstance(value, str) and value in WHO_WORDS:
+        return None
+    if isinstance(value, list) and value and all(isinstance(item, str) and LOGIN.fullmatch(item) for item in value):
+        return None
+    return 'must be "author", "maintainer", "operator", or a list of GitHub logins'
+
+
 TABLES = {
     "project": {"description": a_string, "base_branch": a_filled_string,
                 "merge_method": one_of("merge", "squash", "rebase"),
@@ -255,8 +269,8 @@ STEP_KEYS = {
               "writes": a_filled_string, "skills": a_string_list, "context": a_string, "port": a_bool},
     "checks": {},
     "review": {},
-    "human": {"who": one_of("author", "maintainer"), "shows": a_string, "ask": a_string,
-              "pr_ready": a_bool},
+    "human": {"who": a_who, "shows": a_string, "ask": a_string, "pr_ready": a_bool,
+              "replies": one_of("any", "tool")},
     "merge": {},
     "verify": {"after": one_of("merge", "deploy"), "commands": a_string_list, "agent": a_bool,
                "retries": an_int(0), "on_failure": one_of("comment", "issue", "revert-pr"),

@@ -125,8 +125,9 @@ FACTORY_REPLY
 
 Then start the loop for that job. People can also reply on GitHub by
 commenting `/mfactory approve` (or the other words) on the issue or the pull
-request the factory commented on; `next` and `queue` pick those up. Merging a
-job's pull request by hand also counts as approving it.
+request the factory commented on; `next` and `queue` pick those up. A step
+with `replies = "tool"` ignores those comments; only the `answer` command
+counts. Merging a job's pull request by hand also counts as approving it.
 
 A rejected job is over. To run its issue again, delete `.factory/jobs/<job>`
 and put the factory's label back on the issue.

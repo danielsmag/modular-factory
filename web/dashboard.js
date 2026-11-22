@@ -346,9 +346,23 @@ function elapsed(job) {
   if (!start) return "-";
   return span(((time(job.finished_at) || Date.now()) - start) / 1000);
 }
+function waitingAudience(job) {
+  const who = job.waiting && job.waiting.who;
+  if (who === "author") return "the author (@" + job.author + ")";
+  if (who === "operator") return job.waiting.operator ? "the operator (@" + job.waiting.operator + ")" : "the operator";
+  if (Array.isArray(who)) {
+    const names = who.map((login) => "@" + login);
+    if (names.length <= 1) return names[0] || "a maintainer";
+    if (names.length === 2) return names[0] + " or " + names[1];
+    return names.slice(0, -1).join(", ") + ", or " + names[names.length - 1];
+  }
+  return "a maintainer";
+}
 function flagOf(job) {
-  if (job.waiting && job.waiting.who === "author") return "asked author";
-  if (job.waiting && job.waiting.who === "maintainer") return "your call";
+  const who = job.waiting && job.waiting.who;
+  if (who === "author") return "asked author";
+  if (who === "operator" || who === "maintainer") return "your call";
+  if (Array.isArray(who)) return who.length === 1 ? "asked @" + who[0] : "asked " + who.length + " people";
   if (job.step === "rejected") return "rejected";
   return "";
 }
@@ -902,8 +916,10 @@ function jobDetail(job) {
 
   if (job.waiting) {
     parts.push(el("div", { class: "ask" },
-      el("h2", { text: `Waiting for ${job.waiting.who === "author" ? "the author, @" + job.author : "a maintainer"} since ${ago(job.waiting.since)}` }),
-      el("p", { text: job.reason || `Step ${job.step} needs a reply. Type one of these in your coding tool, or comment it on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} without the number.` }),
+      el("h2", { text: `Waiting for ${waitingAudience(job)} since ${ago(job.waiting.since)}` }),
+      el("p", { text: job.reason || (job.waiting.replies === "tool"
+        ? `Step ${job.step} needs a reply in your coding tool. A comment on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} does not count.`
+        : `Step ${job.step} needs a reply. Type one of these in your coding tool, or comment it on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} without the number.`) }),
       commands(job).map((cmd) => el("div", { class: "cmd" }, el("code", { text: cmd }),
         el("button", { type: "button", text: "Copy", onclick: async (e) => {
           const literal = cmd.replace(/ <[^>]+>$/, " ");

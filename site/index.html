@@ -505,6 +505,11 @@ function board() {
   const week = merged.filter((j) => time(j.finished_at) > Date.now() - 7 * 86400000).length;
   const waiting = all.filter((j) => j.waiting);
   const authors = waiting.filter((j) => j.waiting.who === "author").length;
+  const named = waiting.filter((j) => Array.isArray(j.waiting.who)).length;
+  const rest = waiting.length - authors - named;
+  const waitingNote = named
+    ? [`${authors} author`, `${rest} maintainer`, `${named} named`].filter((part) => !part.startsWith("0 ")).join(" · ")
+    : `${authors} author · ${rest} maintainer`;
   const split = byStep(all);
   const total = all.reduce((a, j) => a + (j.cost_usd || 0), 0);
   const finished = all.filter((j) => j.finished_at && j.step === "done").map((j) => (time(j.finished_at) - time(j.created_at)) / 1000).sort((a, b) => a - b);
@@ -518,7 +523,7 @@ function board() {
     el("div", { class: "cards" },
       card("Running", String(running.length), `of ${idx.concurrency} slots`, "M5 3l14 9-14 9z", true),
       card("Merged", String(merged.length), week ? `+${week} this week` : "none this week", "M5 12l5 5L20 7", false, week ? "" : "flat"),
-      card("Needs you", String(waiting.length), waiting.length ? `${authors} author · ${waiting.length - authors} maintainer` : "nothing waiting", "M12 8v5M12 17h.01M12 3a9 9 0 100 18 9 9 0 000-18z", false, waiting.length ? "hot" : "flat"),
+      card("Needs you", String(waiting.length), waiting.length ? waitingNote : "nothing waiting", "M12 8v5M12 17h.01M12 3a9 9 0 100 18 9 9 0 000-18z", false, waiting.length ? "hot" : "flat"),
       split.priced ? card("Cost", money(total), "Claude Code", "M12 3v18M16 7H10a3 3 0 000 6h4a3 3 0 010 6H7", false, "flat")
                    : card("Median time to merge", span(median), `${merged.length} merged`, "M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z", false, "flat")),
     el("div", { class: "split" },
@@ -693,6 +698,18 @@ async function showFile(job, path) {
   }
   if (state.file && state.file.job === job.id && state.file.path === path) { state.file.text = text; render(); }
 }
+function waitingAudience(job) {
+  const who = job.waiting && job.waiting.who;
+  if (who === "author") return "the author (@" + job.author + ")";
+  if (who === "operator") return job.waiting.operator ? "the operator (@" + job.waiting.operator + ")" : "the operator";
+  if (Array.isArray(who)) {
+    const names = who.map((login) => "@" + login);
+    if (names.length <= 1) return names[0] || "a maintainer";
+    if (names.length === 2) return names[0] + " or " + names[1];
+    return names.slice(0, -1).join(", ") + ", or " + names[names.length - 1];
+  }
+  return "a maintainer";
+}
 function jobDetail(job) {
   const step = stepOf(job.step);
   const parts = [];
@@ -710,8 +727,10 @@ function jobDetail(job) {
 
   if (job.waiting) {
     parts.push(el("div", { class: "ask" },
-      el("h2", { text: `Waiting for ${job.waiting.who === "author" ? "the author, @" + job.author : "a maintainer"} since ${ago(job.waiting.since)}` }),
-      el("p", { text: job.reason || `Step ${job.step} needs a reply. Type one of these in your coding tool, or comment it on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} without the number.` }),
+      el("h2", { text: `Waiting for ${waitingAudience(job)} since ${ago(job.waiting.since)}` }),
+      el("p", { text: job.reason || (job.waiting.replies === "tool"
+        ? `Step ${job.step} needs a reply in your coding tool. A comment on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} does not count.`
+        : `Step ${job.step} needs a reply. Type one of these in your coding tool, or comment it on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} without the number.`) }),
       commands(job).map((cmd) => el("div", { class: "cmd" }, el("code", { text: cmd }),
         el("button", { type: "button", text: "Copy", onclick: async (e) => {
           const literal = cmd.replace(/ <[^>]+>$/, " ");
