@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome · factory</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body data-page="welcome">
+<article class="doc" id="doc">
+  <h1>factory</h1>
+  <p class="lede">A software factory you install into any repository. You label a GitHub issue. Agents decide whether it is worth building, write a spec, build it on a branch, and review it. By default a maintainer merges the pull request.</p>
+  <p>It runs inside the coding tool you already use: Claude Code, Cursor, or Codex. Everything a project changes lives in one file, <code>factory.toml</code>.</p>
+
+  <aside class="callout warn">
+    <p class="tag">Status · 0.2.1</p>
+    <p>The pipeline is covered by automated tests that play the orchestrator and the agents against a stand-in for GitHub. No job has yet run end to end inside Claude Code, Cursor, or Codex. Expect problems on the first real run. See <a href="guards.html#what-is-untested">what is untested</a>.</p>
+  </aside>
+
+  <h2 id="install">Install</h2>
+  <p>Install the command once, then put the factory in a repository:</p>
+  <pre data-lang="bash"><code>curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --global
+mfactory install --tool claude</code></pre>
+  <p>Use <code>--tool cursor</code> or <code>--tool codex</code> instead, or repeat <code>--tool</code> for several. Then, in the coding tool, <code>/mfactory setup</code>. The <a href="install.html">install guide</a> has each step, and what to do when <code>mfactory doctor</code> reports a problem.</p>
+
+  <h2 id="why-a-factory">Why a factory</h2>
+  <ul>
+    <li><strong>One file.</strong> Steps, checks, models, reviewers, and skills are <code>factory.toml</code>, merged key by key over the defaults. A mistake names the key.</li>
+    <li><strong>The pipeline is data.</strong> No prompt describes the graph. Changing an edge changes no prompt. The <a href="concepts.html">orchestrator</a> works the same for any graph.</li>
+    <li><strong>The script decides.</strong> Which step a job is in, where an outcome leads, whether a limit is reached, whether the checks pass, when to merge. Agents write the content of one step.</li>
+    <li><strong>Three tools, one set of prompts.</strong> <code>mfactory sync</code> writes each tool's agent files from the same roles. See <a href="tools.html">Tools</a>.</li>
+    <li><strong>Nothing added to the project.</strong> Python's standard library, <code>git</code>, and the GitHub CLI. No package to pin.</li>
+    <li><strong>The label is the trust boundary.</strong> Only issues with the <code>factory</code> label run. Adding a label needs triage or write access. See <a href="guards.html">Guards</a>.</li>
+  </ul>
+
+  <h2 id="one-job-two-commands">One job, two commands</h2>
+  <p>The orchestrator repeats two commands. It does not choose the next step.</p>
+  <pre data-lang="text"><code>$ .factory/bin/mfactory next 004
+start-agent mfactory-spec
+prompt: Job: 004-dark-mode. Step: spec. Job folder: /repo/.factory/jobs/004-dark-mode/. ...
+then: .factory/bin/mfactory done 004-dark-mode
+
+$ .factory/bin/mfactory done 004-dark-mode
+004-dark-mode #12: spec DONE -&gt; build</code></pre>
+  <p><code>next</code> runs checks, merge, and verify itself. For agent and review steps it prints which agents to start and the one-line prompt of each. <code>done</code> reads the file the agent wrote and follows the edge for that outcome.</p>
+
+  <h2 id="the-default-pipeline">The default pipeline</h2>
+  <p>Each step names its type and where each outcome leads. This is what <code>.factory/bin/mfactory graph</code> prints. Steps marked off are passed through.</p>
+  <pre data-lang="text"><code>intake          agent   ACCEPT -&gt; spec | NEEDS-INFO -&gt; ask-author (max 2) | REJECT -&gt; rejected
+ask-author      human   ANSWER -&gt; intake | REJECT -&gt; rejected
+spec            agent   DONE -&gt; spec-approval
+spec-approval   human   off, continues as APPROVE -&gt; build
+build           agent   READY -&gt; gate | BLOCKED -&gt; escalated
+gate            checks  PASS -&gt; review | FAIL -&gt; debug (max 2)
+debug           agent   off, continues as FOUND -&gt; build
+review          review  PASS -&gt; approve | CHANGES -&gt; build (max 2)
+approve         agent   APPROVE -&gt; ready-to-merge | ESCALATE -&gt; escalated
+ready-to-merge  human   FEEDBACK -&gt; build (max 3) | REJECT -&gt; rejected
+merge           merge   off, continues as MERGED -&gt; verify
+verify          verify  off, continues as PASS -&gt; done
+escalated       human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pre>
+  <p>The factory does not merge unless the project turns that step on. <a href="pipeline.html#who-merges">Who merges</a> has the three keys that change it. A <code>max</code> on an edge is how many times in a row a step may send a job that way. When the limit is used up, the job goes to a maintainer.</p>
+
+  <h2 id="read-next">Read next</h2>
+  <div class="jumps">
+    <a href="install.html"><span class="k">Get started</span><strong>Install</strong><span>The command, the repository, setup, and doctor.</span></a>
+    <a href="first-job.html"><span class="k">Get started</span><strong>First job</strong><span>Label an issue, run it, answer when it waits.</span></a>
+    <a href="concepts.html"><span class="k">Concepts</span><strong>How it works</strong><span>Script, orchestrator, agents, and where files live.</span></a>
+    <a href="configuration.html"><span class="k">Reference</span><strong>factory.toml</strong><span>Every key, and which file set it.</span></a>
+  </div>
+</article>
+<script src="docs.js"></script>
+</body>
+</html>

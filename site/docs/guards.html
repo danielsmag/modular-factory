@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guards · factory</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body data-page="guards">
+<article class="doc" id="doc">
+  <h1>Guards</h1>
+  <p class="lede">What keeps a job from steering the pipeline, passing a failing build, or rewriting the agents that judge it. None of this removes the risk. It narrows it.</p>
+
+  <h2 id="the-label">The label</h2>
+  <p>Only issues with the <code>factory</code> label run. Adding a label needs triage or write access. That is the trust boundary: whose words the factory will build.</p>
+
+  <h2 id="issue-text-is-data">Issue text is data</h2>
+  <p>Issue text reaches agents only inside <code>issue.md</code>, which every prompt calls quoted data. The orchestrator never pastes it into a prompt. This lowers the risk of an issue steering an agent. It does not remove it.</p>
+
+  <h2 id="intake-has-no-shell">Intake has no shell</h2>
+  <p>Intake reads an issue nobody has reviewed, so it gets the fewest abilities each tool allows.</p>
+  <ul>
+    <li>In Claude Code, intake has the read and write tools and no shell.</li>
+    <li>In Cursor, the only restriction an agent file offers is <code>readonly</code>, which also stops intake writing <code>intake.md</code>. Intake replies with the file's contents. The orchestrator passes the reply to <code>mfactory done &lt;job&gt; --reply</code>, which checks it and writes the file.</li>
+    <li>In Codex, intake's file sets <code>shell_tool = false</code> and hands in its reply the same way. Whether a Codex agent without a shell can still read the project's files has not been tried. If it cannot, set <code>[tools.codex] intake_shell = true</code>. Intake then has a shell on Codex, which is a weaker guard.</li>
+  </ul>
+
+  <h2 id="checks-are-a-script">Checks are a script</h2>
+  <p>No agent's opinion can pass a build whose checks fail. <code>[checks].commands</code> run in order in the job's worktree. The first command that exits non-zero fails the step. They run at the <code>gate</code> step, and again in the <code>merge</code> step after the base branch is merged in, when that step is on.</p>
+  <p>A command must not rewrite files. Use <code>prettier --check</code>, not <code>prettier --write</code>.</p>
+
+  <h2 id="protected-paths">Protected paths</h2>
+  <p>The checks fail any branch that touches <code>factory.toml</code>, <code>.factory/</code>, a generated agent or skill file, or a path in <code>[paths].protected</code>. A job cannot change the pipeline, the checks, or its own judges. This holds whatever the check commands say, and whatever <code>protected</code> lists.</p>
+  <p><code>*</code> in a pattern also matches <code>/</code>. A job may add new files that match a protected pattern. It may not change or delete one that already exists.</p>
+
+  <h2 id="merge-and-replies">Merge and replies</h2>
+  <p>The factory merges only when the merge step is on. By default that step is off: a maintainer merges, and a hand merge continues from the merge step's <code>MERGED</code> edge. When the step is on, the script merges only after the base branch is merged in and the checks pass again. The factory never deploys and never merges a revert.</p>
+  <p>A reply to a human step counts only from the issue's author, or from someone with write access, depending on the step. Comments from anyone else are ignored.</p>
+
+  <h2 id="the-dashboard">The dashboard</h2>
+  <p>The dashboard changes nothing. It answers only on <code>127.0.0.1</code>, refuses requests with another <code>Host</code> header, serves only <code>.md</code> and <code>.log</code> files from <code>.factory/jobs/</code>, loads nothing from the network, and builds its page without ever turning text into markup, because job text comes from GitHub issues.</p>
+
+  <h2 id="what-is-untested">What is untested</h2>
+  <aside class="callout bad">
+    <p class="tag">No real tool yet</p>
+    <p>The tests run whole jobs through the real script in temporary git repositories, with a stand-in for <code>gh</code>. They do not cover anything that needs a real tool or the real GitHub.</p>
+  </aside>
+  <ul>
+    <li>No job has run in Claude Code, Cursor, or Codex. The generated agent files follow each tool's documentation. No tool has loaded them.</li>
+    <li>Whether each tool's main agent follows the orchestrator skill: starts agents by the exact name, in parallel, in the background, and passes prompts unchanged.</li>
+    <li>Handing in intake's file as a reply, on Cursor and Codex.</li>
+    <li>Whether a Codex agent with <code>shell_tool = false</code> can read files.</li>
+    <li>Whether Cursor lists the <code>/mfactory</code> skill twice when all three tools are enabled.</li>
+    <li>Model names. The factory does not check them.</li>
+    <li>The real <code>gh</code>. The factory calls <code>gh api</code>, <code>gh issue</code>, <code>gh pr</code>, and <code>gh label</code> with the documented flags. Only the stand-in has answered.</li>
+    <li><code>install.sh</code> downloading from GitHub. The tests install from a local copy.</li>
+    <li>Windows.</li>
+  </ul>
+</article>
+<script src="docs.js"></script>
+</body>
+</html>

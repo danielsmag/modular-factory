@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changelog · factory</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body data-page="changelog">
+<article class="doc" id="doc">
+  <h1>Changelog</h1>
+  <p class="lede">Versions follow semantic versioning. Until 1.0.0, a minor version may change <code>factory.toml</code> keys. The <code>schema</code> number changes when it does, and the changelog says what to change.</p>
+  <p>The repository copy is <a href="../../CHANGELOG.md">CHANGELOG.md</a>.</p>
+
+  <h2 id="v0-2-1">0.2.1</h2>
+  <ul>
+    <li>A docs site at <a href="https://danielsmag.github.io/modular-factory/docs/">danielsmag.github.io/modular-factory/docs</a>, in the dashboard's look. The dashboard's DOCS button opens it.</li>
+  </ul>
+
+  <h2 id="v0-2-0">0.2.0</h2>
+  <p>The factory no longer merges by default. After approval it marks the pull request ready and waits at <code>ready-to-merge</code>. A hand merge continues from the merge step's <code>MERGED</code> edge. Schema stays 1. A project that never overrode <code>approve</code> or <code>merge</code> changes behavior on upgrade. To keep the old behavior, point <code>approve</code> at <code>merge</code>, switch <code>ready-to-merge</code> off, and set <code>[steps.merge] enabled = true</code>.</p>
+  <ul>
+    <li>A build that stops before it rewrites <code>build.md</code> can leave <code>progress.md</code>. The next builder of that step is told to read it. <code>done</code> deletes the file once the build outcome is accepted.</li>
+    <li><code>mfactory start dashboard</code> serves the dashboard in the background. <code>mfactory stop</code> ends it. <code>mfactory dashboard</code> still stays in the foreground until Ctrl C.</li>
+    <li>The command is <code>mfactory</code>. Generated agents are <code>mfactory-*</code>, and the skill command is <code>/mfactory</code>. A <code>/factory</code> comment still counts. <code>mfactory sync</code> removes generated files that still use the old names.</li>
+    <li><code>install.sh --global</code> installs <code>mfactory</code> for your user. <code>mfactory install</code>, <code>upgrade</code>, <code>uninstall</code>, <code>doctor</code>, <code>status</code>, and <code>sync</code> manage a project. <code>mfactory upgrade --self</code> updates that user install.</li>
+    <li>The fleet file is <code>~/.mfactory/fleet.toml</code>. <code>mfactory fleet subscribe</code> adds a checkout. Outside a repository, <code>mfactory dashboard</code> and <code>mfactory status</code> show every subscribed project. <code>mfactory upgrade --all</code> upgrades each one.</li>
+    <li>One local queue and one read-only dashboard for several installed projects. Each job stays in its own checkout. <code>[run].concurrency</code> caps one project. <code>[fleet].concurrency</code> caps <code>new</code> and <code>resume</code> rows across projects. <code>fleet.toml</code> or <code>--concurrency</code> overrides the fleet cap.</li>
+    <li>One dashboard for every subscribed project. Board, pipeline, jobs, and config are the same page, with a filter for All or one project.</li>
+  </ul>
+
+  <h2 id="v0-1-0">0.1.0</h2>
+  <p>First version. <code>schema = 1</code>.</p>
+  <ul>
+    <li>One <code>factory.toml</code> per project: pipeline, checks, models and efforts, reviewers, surfaces, project skills. It merges key by key over the defaults, and a mistake is reported with the key to fix.</li>
+    <li>The pipeline is a graph of steps with outcome edges. A <code>max</code> on an edge limits how often a step may send a job back.</li>
+    <li>Step types: <code>agent</code>, <code>checks</code>, <code>review</code>, <code>human</code>, <code>merge</code>, <code>verify</code>. A project adds its own agent and human steps in <code>factory.toml</code>.</li>
+    <li>Optional steps, shipped switched off: approval of the spec, a debugger after failing checks, and validation after merge or deploy.</li>
+    <li>Model and effort per step and per tool, with variants by the job's risk.</li>
+    <li>Adapters for Claude Code, Cursor, and Codex.</li>
+    <li><code>install.sh</code>, <code>init</code>, <code>upgrade</code>, and <code>doctor</code>.</li>
+    <li>A read-only dashboard: board, pipeline, jobs, and configuration.</li>
+  </ul>
+
+  <h2 id="known-limits">Known limits</h2>
+  <ul>
+    <li>No job has yet run inside Claude Code, Cursor, or Codex. See <a href="guards.html#what-is-untested">what is untested</a>.</li>
+    <li>macOS, Linux, or WSL only.</li>
+  </ul>
+</article>
+<script src="docs.js"></script>
+</body>
+</html>

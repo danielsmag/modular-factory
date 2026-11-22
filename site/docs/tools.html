@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tools · factory</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body data-page="tools">
+<article class="doc" id="doc">
+  <h1>Tools</h1>
+  <p class="lede">Claude Code, Cursor, and Codex run the same prompts. A generated agent file holds only that tool's settings, a pointer to the role, and the sections that come from <code>factory.toml</code>.</p>
+
+  <h2 id="where-each-tool-writes">Where each tool writes</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th></th><th>Claude Code</th><th>Cursor</th><th>Codex</th></tr></thead>
+      <tbody>
+        <tr><td>Agent files</td><td class="mono">.claude/agents/*.md</td><td class="mono">.cursor/agents/*.md</td><td class="mono">.codex/agents/*.toml</td></tr>
+        <tr><td>Skill</td><td class="mono">.claude/skills/mfactory</td><td>Reads Claude's, else <code>.agents/skills/mfactory</code></td><td class="mono">.agents/skills/mfactory</td></tr>
+        <tr><td>Model per step</td><td class="mono">model:</td><td class="mono">model:</td><td class="mono">model =</td></tr>
+        <tr><td>Effort per step</td><td class="mono">effort:</td><td><code>model: name[effort=x]</code>, only with a named model</td><td class="mono">model_reasoning_effort =</td></tr>
+        <tr><td>Intake's guard</td><td>No shell. Writes its file.</td><td><code>readonly: true</code>. Hands its file in as a reply.</td><td><code>shell_tool = false</code>. Hands its file in as a reply.</td></tr>
+        <tr><td>Project skills</td><td>Named in the prompt, and preloaded from <code>.claude/skills</code></td><td>Named in the prompt</td><td>Named in the prompt</td></tr>
+        <tr><td>Cost per job</td><td>From transcripts</td><td>Not recorded</td><td>Not recorded</td></tr>
+        <tr><td>Builder stop hook</td><td>Optional</td><td>No</td><td>No</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Enable the tools you use:</p>
+  <pre data-lang="toml"><code>[tools]
+enabled = ["claude", "cursor"]</code></pre>
+  <p><code>mfactory sync</code> rewrites the generated files. Edit <code>factory.toml</code>, never those files. <code>mfactory sync --check</code> exits 1 when anything is out of date and changes nothing.</p>
+  <p>The command is <code>mfactory</code>. Generated agents are <code>mfactory-*</code>. The skill command is <code>/mfactory</code>. A <code>/factory</code> comment on an issue or pull request still counts. <code>mfactory sync</code> removes generated files that still use the old names, so an upgrade from 0.1.0 can finish.</p>
+
+  <h2 id="intake">Intake</h2>
+  <p>Intake is the step that reads an unreviewed issue, so each tool gives it as little as that tool allows. The full account is on <a href="guards.html#intake-has-no-shell">Guards</a>. The short version: Claude Code writes <code>intake.md</code> itself. Cursor and Codex hand the file's contents back as the agent's reply, and <code>done --reply</code> writes it.</p>
+  <p>On Codex, if an agent with <code>shell_tool = false</code> cannot read the project, set <code>[tools.codex] intake_shell = true</code>. That is a weaker guard.</p>
+
+  <h2 id="models-and-effort">Models and effort</h2>
+  <p>Each tool has its own table, because model names differ. <code>[models.&lt;tool&gt;].default</code> applies to every agent of that tool that names no value of its own, so one line gives Cursor or Codex a model for every step.</p>
+  <pre data-lang="toml"><code>[models.claude]
+build = { model = "opus", effort = "high" }
+reviewer-code = { model = "sonnet", effort = "medium", low = { model = "haiku", effort = "low" } }
+
+[models.cursor]
+default = { model = "gpt-5.6-sol", effort = "medium" }</code></pre>
+  <p><code>low</code>, <code>medium</code>, and <code>high</code> inside an entry are the job's risk, which intake decides. The factory writes one extra agent file per variant, such as <code>mfactory-reviewer-code-low</code>, and starts the right one. <code>model = "inherit"</code> uses the model of the session that runs <code>/mfactory run</code>.</p>
+  <p>Cursor takes an effort only together with a named model. <code>mfactory sync</code> says so when an effort would be ignored. The factory does not check model names: a name your tool does not know fails when the agent starts. Every key, the shipped defaults, and the effort levels each tool accepts are in <a href="configuration.html#models-and-effort">factory.toml</a>.</p>
+  <p><code>[tools.claude] stop_hook</code> runs the checks when the build agent stops, and sends it back to work if they fail. Claude Code only. <code>[tools.claude] cost</code> works out each job's cost from Claude Code's transcripts. Other tools record no cost.</p>
+
+  <h2 id="one-skill-or-two">One skill, or two</h2>
+  <p>A tool gets its own copy of the <code>/mfactory</code> skill only when no copy already sits in a folder it reads.</p>
+  <ul>
+    <li>Claude Code and Cursor: the skill is written only to <code>.claude/skills/mfactory</code>. Cursor reads that folder, so it lists the skill once.</li>
+    <li>All three: Codex also gets <code>.agents/skills/mfactory</code>. Cursor may list the skill twice. The copies are identical.</li>
+  </ul>
+  <p>Do not run two orchestrators on the same checkout at the same time. They share <code>.factory/jobs/</code>.</p>
+</article>
+<script src="docs.js"></script>
+</body>
+</html>

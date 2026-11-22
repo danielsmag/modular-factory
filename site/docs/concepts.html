@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it works · factory</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body data-page="concepts">
+<article class="doc" id="doc">
+  <h1>How it works</h1>
+  <p class="lede">Three parts. The script owns state. The orchestrator starts the agents the script names. Each agent does one step and writes one file.</p>
+
+  <h2 id="three-parts">Three parts</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Part</th><th>What it is</th><th>What it decides</th></tr></thead>
+      <tbody>
+        <tr><td>The script, <code>.factory/bin/mfactory</code></td><td>Python, standard library only</td><td>Everything about state: which step a job is in, where an outcome leads, whether a limit is reached, whether the checks pass, when to merge.</td></tr>
+        <tr><td>The orchestrator, the <code>/mfactory</code> skill</td><td>A prompt your coding tool's main agent follows</td><td>Nothing. It asks the script what to do, starts the agents the script names, and reports back.</td></tr>
+        <tr><td>The agents</td><td>One small generated file per step, pointing at a prompt in <code>.factory/roles/</code></td><td>The content of their one step: a spec, a build, a review.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The pipeline is data in <code>factory.toml</code>, so no prompt describes it. Changing the pipeline changes no prompt, and the orchestrator works the same for any graph.</p>
+
+  <h2 id="the-loop">The loop</h2>
+  <pre data-lang="text"><code>$ .factory/bin/mfactory next 004
+start-agent mfactory-spec
+prompt: Job: 004-dark-mode. Step: spec. Job folder: /repo/.factory/jobs/004-dark-mode/. ...
+then: .factory/bin/mfactory done 004-dark-mode
+
+$ .factory/bin/mfactory done 004-dark-mode
+004-dark-mode #12: spec DONE -&gt; build</code></pre>
+  <p><code>next</code> runs <code>checks</code>, <code>merge</code>, and <code>verify</code> steps itself and prints the result. For <code>agent</code> and <code>review</code> steps it prints which agents to start and the one-line prompt of each. <code>done</code> reads the first line of the file the agent wrote, checks the work (the file is new, the tree is clean, the branch is pushed), and follows the edge for that outcome.</p>
+  <p>Whether an agent's file is new is decided by comparing the file's size and modification time with what was recorded when the job entered the step, not by comparing clocks.</p>
+
+  <h2 id="where-the-factory-lives">Where the factory lives</h2>
+  <p>In a project, the factory is the <code>.factory/</code> folder. In this repository that folder is built from <code>core/</code>, with <code>adapters/</code> and <code>web/</code> beside it.</p>
+  <pre data-lang="text"><code>.factory/bin/mfactory          the CLI
+.factory/lib/modfactory/      the factory's code
+.factory/roles/*.md           one prompt per agent step and reviewer
+.factory/skill/SKILL.md       the orchestrator
+.factory/defaults.toml        the default pipeline and settings
+.factory/adapters/*.toml      per tool: folders, agent file format, default models
+.factory/web/                 the dashboard, inlined when it is served</code></pre>
+  <p>You edit <code>factory.toml</code> at the repository root. <code>mfactory sync</code> writes the agent files the tool actually loads. See <a href="tools.html#where-each-tool-writes">where each tool writes</a>.</p>
+
+  <h2 id="a-jobs-folder">A job's folder</h2>
+  <p>Each job has a folder, <code>.factory/jobs/&lt;id&gt;/</code>, in the main checkout. Git ignores it. The branch is <code>factory/&lt;id&gt;</code>, in a worktree at <code>.worktrees/&lt;id&gt;</code>.</p>
+  <pre data-lang="text"><code>job.json                  state: step, history, counts, pull request
+issue.md                  the issue and its comments, as quoted data
+intake.md  spec.md  build.md  decision.md  verify.md
+progress.md               notes from a build attempt that stopped early
+feedback-1.md             what a person asked for
+round-1/checks.md         the gate's verdict, with checks.log
+round-1/review-code.md    one file per reviewer
+round-1/debug-1.md        the debugger's diagnosis</code></pre>
+  <p>A build that stops before it rewrites <code>build.md</code> can leave <code>progress.md</code>. The next builder of that step is told to read it. <code>done</code> deletes the file once the build outcome is accepted.</p>
+
+  <h2 id="what-the-script-will-not-do">What the script will not do</h2>
+  <ul>
+    <li>It does not deploy.</li>
+    <li>It does not merge a revert. A failed validation can open a draft pull request that reverts the merge, for a person to merge.</li>
+    <li>It does not merge at all unless the merge step is on. See <a href="pipeline.html#who-merges">who merges</a>.</li>
+    <li>It does not let a job edit <code>factory.toml</code>, <code>.factory/</code>, or a generated agent or skill file. See <a href="guards.html#protected-paths">protected paths</a>.</li>
+  </ul>
+</article>
+<script src="docs.js"></script>
+</body>
+</html>

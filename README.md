@@ -13,7 +13,7 @@ skills each agent reads.
 
 ![The dashboard's board view, showing made-up sample jobs](docs/dashboard-board.png?v=2)
 
-> **Status: 0.2.0, not yet run inside a real tool.** The pipeline is covered by
+> **Status: 0.2.1, not yet run inside a real tool.** The pipeline is covered by
 > 179 automated tests that play the orchestrator and the agents against a
 > stand-in for GitHub. Nobody has yet run a job end to end in Claude Code,
 > Cursor or Codex. Expect to find problems on the first real run; see
@@ -212,6 +212,10 @@ Run them as `.factory/bin/mfactory <command>` from anywhere in the repository.
 
 ## Documentation
 
+The docs site is <https://danielsmag.github.io/modular-factory/docs/>: sidebar,
+search, and a page for each guide, in the same look as the dashboard. The same
+material is in the repository:
+
 - [Install guide](docs/install.md): installing, setting up, upgrading, removing.
 - [Configuration reference](docs/configuration.md): every key in `factory.toml`.
 - [Design notes](docs/design.md): how it works, what guards it, what is
@@ -230,6 +234,4 @@ The factory itself uses only Python's standard library.
 
 ## Licence
 
-GPLv3. modular-factory is derived from
-[Software Factory for Claude Code (v2)](https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2)
-by ZazenCodes. See [NOTICE](NOTICE) and [what changed](docs/design.md#what-changed-from-the-reference).
+GPLv3. See [NOTICE](NOTICE) and [what changed](docs/design.md#what-changed-from-the-reference).

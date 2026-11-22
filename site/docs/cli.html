@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLI · factory</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body data-page="cli">
+<article class="doc" id="doc">
+  <h1>CLI</h1>
+  <p class="lede"><code>mfactory</code> on your <code>PATH</code> after <code>install.sh --global</code>, or <code>.factory/bin/mfactory</code> from anywhere in a repository. A job is its id (<code>004-dark-mode</code>), the number in its id (<code>004</code>), or its issue (<code>12</code> or <code>#12</code>).</p>
+  <p><code>install</code> and <code>init</code> are the same command. <code>hook</code> exists for the Claude Code stop hook and is left out of the help list.</p>
+
+  <h2 id="install-and-maintain">Install and maintain</h2>
+  <div class="def">
+    <div class="def-h"><code>install</code> <code>--tool TOOL</code></div>
+    <p>Install the factory into this repository. <code>--tool</code> is <code>claude</code>, <code>cursor</code>, or <code>codex</code>. Repeat it for several. Default: <code>claude</code>. Never overwrites <code>factory.toml</code>.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>sync</code> <span class="chip">--check</span></div>
+    <p>Write the agent and skill files from <code>factory.toml</code>. <code>--check</code> changes nothing and exits 1 if anything is out of date.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>doctor</code> <span class="chip">--skip-checks</span></div>
+    <p>Check that everything a run needs is in place, including the checks on a clean copy of the base branch. <code>--skip-checks</code> leaves that run out.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>upgrade</code> <span class="chip">--version</span> <span class="chip">--source</span> <span class="chip">--self</span> <span class="chip">--all</span></div>
+    <p>Replace <code>.factory/</code> and re-sync. Leaves <code>factory.toml</code> and <code>.factory/jobs/</code> alone. <code>--version</code> is a tag such as <code>v0.2.0</code> (default <code>latest</code>). <code>--source</code> is a local copy. <code>--self</code> updates the global CLI. <code>--all</code> upgrades every project in the fleet.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>uninstall</code> <span class="chip">--config</span> <span class="chip">--labels</span></div>
+    <p>Remove the factory from this repository. <code>factory.toml</code> stays unless <code>--config</code> is set. <code>--labels</code> deletes the factory labels on GitHub.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>status</code> <span class="chip">--all</span></div>
+    <p>The installed version, and whether generated files are current. <code>--all</code> prints one row per subscribed project. Outside a repository, status shows the fleet.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>version</code></div>
+    <p>Print the factory's version.</p>
+  </div>
+
+  <h2 id="see-the-configuration">See the configuration</h2>
+  <div class="def">
+    <div class="def-h"><code>config show</code> <span class="chip">--json</span></div>
+    <p>The merged configuration, and which file set each value.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>graph</code> <span class="chip">--json</span></div>
+    <p>The pipeline in effect.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>models</code></div>
+    <p>The model and effort of each agent, per tool.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>skills</code></div>
+    <p>The project's skills and which agents read them.</p>
+  </div>
+
+  <h2 id="run-jobs">Run jobs</h2>
+  <p>The <code>/mfactory</code> skill uses these. You can run them yourself. The orchestrator is still what starts agents.</p>
+  <div class="def">
+    <div class="def-h"><code>queue</code></div>
+    <p>What to run now.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>create &lt;issue&gt;</code></div>
+    <p>Start a job for a labeled issue.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>next &lt;job&gt;</code></div>
+    <p>Say what the orchestrator must do for a job. Runs checks, merge, and verify itself.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>done &lt;job&gt;</code> <span class="chip">--reply</span></div>
+    <p>Read the outcome of the step an agent finished. <code>--reply</code> reads the agent's reply from standard input. Cursor and Codex intake need this.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>answer &lt;job&gt; &lt;outcome&gt; [text...]</code></div>
+    <p>Reply to a step that waits for a person. The outcome is one the step allows, such as <code>approve</code>, <code>changes</code>, <code>feedback</code>, <code>answer</code>, or <code>reject</code>. Words can follow, or come on standard input.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>summary [jobs...]</code></div>
+    <p>A table of jobs.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>route &lt;job&gt;</code></div>
+    <p>Which agents a job uses.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>checks</code></div>
+    <p>Run <code>[checks].commands</code> in the current directory.</p>
+  </div>
+
+  <h2 id="dashboard">Dashboard</h2>
+  <div class="def">
+    <div class="def-h"><code>dashboard</code> <span class="chip">--port</span> <span class="chip">--no-open</span> <span class="chip">--all</span></div>
+    <p>Serve the read-only dashboard on this machine. Default port <code>4747</code>. Stays in the foreground until Ctrl C. <code>--all</code> is one board for every subscribed project.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>start dashboard</code></div>
+    <p>Serve the dashboard and return. Same flags as <code>dashboard</code>.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>stop [dashboard]</code></div>
+    <p>Stop the background dashboard.</p>
+  </div>
+
+  <h2 id="fleet">Fleet</h2>
+  <p><code>mfactory fleet</code> with no subcommand opens the fleet dashboard. <code>--port</code> and <code>--no-open</code> apply there.</p>
+  <div class="def">
+    <div class="def-h"><code>fleet init</code></div>
+    <p>Write <code>fleet.toml</code> in the current directory. A file here, or <code>FACTORY_FLEET</code>, wins over <code>~/.mfactory/fleet.toml</code>.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>fleet subscribe [path]</code></div>
+    <p>Add this repository, or a path, to the user fleet.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>fleet unsubscribe [path]</code></div>
+    <p>Remove this repository, or a path, from the fleet.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>fleet add &lt;path&gt;</code></div>
+    <p>Add a checkout where the factory is already installed.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>fleet remove &lt;path&gt;</code></div>
+    <p>Remove a project by its path or folder name.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>fleet list</code></div>
+    <p>List the projects in <code>fleet.toml</code>.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>fleet queue</code> <span class="chip">--concurrency N</span></div>
+    <p>Run each project's own factory queue. <code>--concurrency</code> is the fleet-wide cap for <code>new</code> and <code>resume</code> rows. Default: <code>[fleet].concurrency</code>.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>fleet dashboard</code></div>
+    <p>Serve the dashboard for every subscribed project. Same page as <code>mfactory dashboard</code>.</p>
+  </div>
+</article>
+<script src="docs.js"></script>
+</body>
+</html>
