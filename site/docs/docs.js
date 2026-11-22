@@ -153,12 +153,109 @@ function fillToc(article) {
 
 function enhanceCode(article) {
   for (const pre of article.querySelectorAll("pre")) {
+    const code = pre.querySelector("code") || pre;
+    paint(code, pre.dataset.lang || "");
     const wrap = el("div", { class: "codeblock" });
     const button = el("button", { type: "button", text: "copy" });
     button.addEventListener("click", () => copyText(pre.innerText, button));
     const bar = el("div", { class: "codebar" }, el("span", { text: pre.dataset.lang || "" }), button);
     pre.parentNode.insertBefore(wrap, pre);
     wrap.append(bar, pre);
+  }
+}
+function paint(code, lang) {
+  if (lang !== "toml" && lang !== "bash") return;
+  const src = code.textContent;
+  const lines = src.split("\n");
+  const nodes = [];
+  const push = (kind, text) => {
+    if (!text) return;
+    nodes.push(kind ? el("span", { class: "tok " + kind, text }) : document.createTextNode(text));
+  };
+  lines.forEach((line, index) => {
+    if (lang === "toml") tomlLine(line, push);
+    else bashLine(line, push);
+    if (index < lines.length - 1) push("", "\n");
+  });
+  code.replaceChildren(...nodes);
+}
+function quoted(text, push) {
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === "#") { push("com", text.slice(i)); return; }
+    if (text[i] === '"' || text[i] === "'") {
+      const quote = text[i];
+      let j = i + 1;
+      while (j < text.length && text[j] !== quote) {
+        if (text[j] === "\\" && quote === '"') j += 2;
+        else j += 1;
+      }
+      if (j < text.length) j += 1;
+      push("str", text.slice(i, j));
+      i = j;
+      continue;
+    }
+    let j = i;
+    while (j < text.length && text[j] !== "#" && text[j] !== '"' && text[j] !== "'") j += 1;
+    push("", text.slice(i, j));
+    i = j;
+  }
+}
+function tomlLine(line, push) {
+  const trimmed = line.trimStart();
+  if (trimmed.startsWith("#")) { push("com", line); return; }
+  if (trimmed.startsWith("[")) {
+    const end = line.indexOf("]");
+    if (end !== -1) {
+      push("sec", line.slice(0, end + 1));
+      quoted(line.slice(end + 1), push);
+      return;
+    }
+  }
+  const eq = line.indexOf("=");
+  if (eq > 0 && !line.slice(0, eq).includes('"') && !line.slice(0, eq).includes("'")) {
+    push("key", line.slice(0, eq));
+    push("", "=");
+    quoted(line.slice(eq + 1), push);
+    return;
+  }
+  quoted(line, push);
+}
+function bashLine(line, push) {
+  if (line.trimStart().startsWith("#")) { push("com", line); return; }
+  let i = 0;
+  let word = true;
+  while (i < line.length) {
+    if (line[i] === "#") { push("com", line.slice(i)); return; }
+    if (line[i] === '"' || line[i] === "'") {
+      const quote = line[i];
+      let j = i + 1;
+      while (j < line.length && line[j] !== quote) j += 1;
+      if (j < line.length) j += 1;
+      push("str", line.slice(i, j));
+      i = j;
+      word = false;
+      continue;
+    }
+    if (line.startsWith("--", i)) {
+      let j = i;
+      while (j < line.length && !/\s/.test(line[j])) j += 1;
+      push("flag", line.slice(i, j));
+      i = j;
+      word = false;
+      continue;
+    }
+    if (word && /\S/.test(line[i])) {
+      let j = i;
+      while (j < line.length && !/\s/.test(line[j])) j += 1;
+      push("cmd", line.slice(i, j));
+      i = j;
+      word = false;
+      continue;
+    }
+    push("", line[i]);
+    if (line[i] === "|" || line[i] === "&" || line[i] === ";") word = true;
+    i += 1;
   }
 }
 function copyText(text, button) {
