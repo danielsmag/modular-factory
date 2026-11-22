@@ -6,6 +6,20 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.2.5
+
+- test: drop install tests pinned to 0.2.1.
+
+## 0.2.4
+
+- fix: name the GitHub release with the version.
+
+## 0.2.3
+
+- fix: pass the GitHub token to the release job.
+
+## 0.2.2
+
 - A human step can limit GitHub replies to the operator (`who = "operator"`) or to named logins (`who = ["login-a", "login-b"]`). `replies = "tool"` ignores comments and accepts only `mfactory answer`. `author` and `maintainer` are unchanged. Schema stays 1.
 - `[project] pr_title` and `[project] pr_title_pattern` set the pull request title. The builder and intake are told the format. `done` refuses a READY build whose title does not match the pattern. Empty means the spec title and no check. Schema stays 1.
 - The dashboard has an Overview tab, between Jobs and Config: running slots, merged jobs with a steady-pace line, cost or time by step, and the job table. Board stays the jobs-by-step view.
