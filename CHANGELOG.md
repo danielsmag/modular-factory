@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- `mfactory upgrade` upgrades the global CLI, every subscribed project, and the checkout you are in when that checkout is not subscribed. `--self` updates only the global CLI. `--all` upgrades only subscribed projects. One failure does not stop the others.
+
 ## 0.3.2
 
 - The GitHub release title is the tag, such as `v0.3.2`.

@@ -134,12 +134,12 @@ enabled = ["claude", "cursor"]</code></pre>
   <p>Cursor also reads <code>.claude/skills</code>. With Claude Code and Cursor enabled, the factory writes the skill only to <code>.claude/skills/mfactory</code>, so Cursor lists it once. With all three tools enabled it also writes <code>.agents/skills/mfactory</code> for Codex, and Cursor may list the skill twice. The copies are identical. See <a href="tools.html">Tools</a>.</p>
 
   <h2 id="upgrade">Upgrade</h2>
-  <pre data-lang="bash"><code>.factory/bin/mfactory upgrade
-.factory/bin/mfactory upgrade --version v0.2.0
+  <pre data-lang="bash"><code>mfactory upgrade
+mfactory upgrade --version v0.2.0
 mfactory upgrade --self
 mfactory upgrade --all</code></pre>
-  <p>Upgrade replaces <code>.factory/</code> (not <code>.factory/jobs/</code>), runs <code>sync</code>, and leaves <code>factory.toml</code> alone. It refuses a release whose <code>schema</code> number differs from your <code>factory.toml</code>. The <a href="changelog.html">changelog</a> says what to change when that number moves. Commit the result.</p>
-  <p><code>--self</code> updates the user install from <code>install.sh --global</code>. <code>--all</code> upgrades every project in the fleet. A project that fails does not stop the others.</p>
+  <p><code>mfactory upgrade</code> updates the CLI from <code>install.sh --global</code> and every subscribed project. Standing in an installed checkout that is not subscribed updates that checkout too. It replaces <code>.factory/</code> (not <code>.factory/jobs/</code>), runs <code>sync</code>, and leaves <code>factory.toml</code> alone. It refuses a release whose <code>schema</code> number differs from your <code>factory.toml</code>. The <a href="changelog.html">changelog</a> says what to change when that number moves. One project failing does not stop the others. Commit the result in each repository.</p>
+  <p><code>--self</code> updates only the global CLI. <code>--all</code> upgrades only subscribed projects.</p>
 
   <h2 id="remove">Remove</h2>
   <pre data-lang="bash"><code>mfactory uninstall

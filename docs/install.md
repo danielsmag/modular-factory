@@ -188,7 +188,7 @@ mfactory fleet dashboard
 mfactory fleet unsubscribe
 ```
 
-`subscribe` and `unsubscribe` take a path when you are not standing in the repository. `mfactory dashboard` outside a repository, or in a checkout with no `factory.toml`, uses this same list. `mfactory status` outside a repository does too. `mfactory upgrade --all` upgrades every subscribed project. A project that fails does not stop the others, and each repository still needs its own commit.
+`subscribe` and `unsubscribe` take a path when you are not standing in the repository. `mfactory dashboard` outside a repository, or in a checkout with no `factory.toml`, uses this same list. `mfactory status` outside a repository does too. `mfactory upgrade` upgrades the global CLI and every subscribed project. A project that fails does not stop the others, and each repository still needs its own commit.
 
 A `fleet.toml` in the current directory or a parent still wins, and so does `FACTORY_FLEET`. `mfactory fleet init` writes that local file. `fleet add` accepts a checkout only after the factory is installed there.
 
@@ -226,14 +226,20 @@ Codex, and Cursor may list the skill twice; the copies are identical.
 ## Upgrade
 
 ```bash
-.factory/bin/mfactory upgrade                 # the latest release
-.factory/bin/mfactory upgrade --version v0.2.0
+mfactory upgrade                              # global CLI and every subscribed project
+mfactory upgrade --version v0.2.0
+mfactory upgrade --self                       # global CLI only
+mfactory upgrade --all                        # subscribed projects only
 ```
 
-It replaces `.factory/` (not `.factory/jobs/`), runs `sync`, and leaves
-`factory.toml` alone. It refuses a release whose `schema` number differs from
-your `factory.toml`; the [changelog](../CHANGELOG.md) says what to change when
-that number moves. Commit the result.
+`mfactory upgrade` updates the CLI from `install.sh --global` and every
+subscribed project. Standing in an installed checkout that is not subscribed
+updates that checkout too. It replaces `.factory/` (not `.factory/jobs/`),
+runs `sync`, and leaves `factory.toml` alone. It refuses a release whose
+`schema` number differs from your `factory.toml`; the
+[changelog](../CHANGELOG.md) says what to change when that number moves.
+One project failing does not stop the others. Commit the result in each
+repository.
 
 ## Remove
 

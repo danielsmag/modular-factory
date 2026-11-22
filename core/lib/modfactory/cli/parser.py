@@ -43,12 +43,13 @@ def parser() -> argparse.ArgumentParser:
     doctor: argparse.ArgumentParser = sub.add_parser("doctor", help="check that everything a run needs is in place")
     doctor.add_argument("--skip-checks", action="store_true",
                         help="don't run [checks].commands on the base branch")
-    upgrade: argparse.ArgumentParser = sub.add_parser("upgrade", help="move .factory/ to another version and re-sync")
+    upgrade: argparse.ArgumentParser = sub.add_parser(
+        "upgrade", help="upgrade the global CLI and every installed project")
     upgrade.add_argument("--version", default="latest", dest="ref",
                          help="a release tag such as v0.2.0 (default: latest)")
     upgrade.add_argument("--source", help="a local copy of the factory to install from, instead of downloading")
-    upgrade.add_argument("--self", action="store_true", help="update the global CLI from install.sh --global")
-    upgrade.add_argument("--all", action="store_true", help="upgrade every project in the fleet")
+    upgrade.add_argument("--self", action="store_true", help="update only the global CLI")
+    upgrade.add_argument("--all", action="store_true", help="upgrade only subscribed projects")
     remove: argparse.ArgumentParser = sub.add_parser("uninstall", help="remove the factory from this repository")
     remove.add_argument("--config", action="store_true", help="also delete factory.toml")
     remove.add_argument("--labels", action="store_true", help="also delete the factory labels on GitHub")
