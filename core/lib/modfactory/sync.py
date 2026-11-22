@@ -9,9 +9,10 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from . import graph
-from .config import BUILTIN_REVIEWERS
+from .config import BUILTIN_REVIEWERS, Config
 from .util import CORE, GENERATED, ConfigError, is_generated
 
 SKILL_DIRS = [".agents/skills", ".claude/skills", ".cursor/skills", ".codex/skills"]
@@ -86,6 +87,34 @@ def _skills(cfg, own, where, problems):
     return rows
 
 
+def _pull_request_title(cfg: Config, kind: str) -> str | None:
+    """What build and intake are told about the pull request title, or None when both keys are empty."""
+    project: dict[str, Any] = cfg["project"]
+    example: str = str(project.get("pr_title", "")).strip()
+    pattern: str = str(project.get("pr_title_pattern", "")).strip()
+    if not example and not pattern:
+        return None
+    lines: list[str] = []
+    if kind == "build":
+        lines.append(
+            "Open the pull request with a title in this form, not the spec title. "
+            "If a pull request already exists and its title does not match, change it with "
+            '`gh pr edit <number> --title "..."`.'
+        )
+    else:
+        lines.append(
+            "If the issue does not contain a value this title needs, such as a ticket key, "
+            "return NEEDS-INFO and ask for it. Do not invent one."
+        )
+    if example:
+        lines.append(f"Form: `{example}`.")
+    if pattern:
+        lines.append(f"The whole title must match `{pattern}`.")
+    if project.get("merge_method") == "squash":
+        lines.append("Squash merge uses this title as the commit on the base branch.")
+    return "\n".join(lines)
+
+
 def agents(cfg):
     """Every agent the factory can start, one per risk variant."""
     out, problems = [], []
@@ -131,6 +160,10 @@ def agents(cfg):
                 else:
                     who_merges = "APPROVE asks a maintainer to merge. The factory does not merge."
                 sections.append(("Who merges", who_merges))
+            if kind in ("intake", "build"):
+                title_text: str | None = _pull_request_title(cfg, kind)
+                if title_text:
+                    sections.append(("Pull request title", title_text))
         if settings.get("context", "").strip():
             sections.append(("Project context", settings["context"].strip()))
         skills = _skills(cfg, settings.get("skills", []), where, problems)

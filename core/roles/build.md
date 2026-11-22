@@ -76,14 +76,21 @@ the command you ran and its result, or what the page showed.
   `git status --porcelain` prints nothing when you finish.
 - Push with `git push -u origin <branch>`. Push only the job branch.
 - If the branch has no pull request yet (`gh pr view <branch>` fails), open it
-  as a draft, with the spec's title, `Closes #<issue>` as the first line of
-  the body, and your Summary below it:
+  as a draft. Use the spec's title, unless your instructions name a pull
+  request title format: then follow that format. `Closes #<issue>` is the
+  first line of the body, and your Summary follows it:
 
   ```bash
-  gh pr create --draft --base <base> --head <branch> --title "<spec title>" --body-file <file>
+  gh pr create --draft --base <base> --head <branch> --title "<title>" --body-file <file>
   ```
 
-  Once it exists, just push; the pull request updates itself.
+- If a pull request already exists, push updates it. When your instructions
+  name a title format and the current title does not follow it, change the
+  title:
+
+  ```bash
+  gh pr edit <number> --title "<title>"
+  ```
 
 ## Progress
 

@@ -35,6 +35,9 @@ schema = 1
 [project]
 description = ""            # what the project is for; intake uses it to decide what belongs
 base_branch = "{base}"
+# pr_title = "feat: add CSV export [ABC-123]"
+# pr_title_pattern = '^(feat|fix|perf|refactor|chore|docs|test|ci|build|revert)(\\(.+\\))?!?: .+ \\[[A-Z]+-\\d+\\]$'
+# Leave both unset to use the spec's title. With squash merge the title is the commit on the base branch.
 
 [tools]
 enabled = [{tools}]         # claude, cursor, codex
