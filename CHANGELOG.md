@@ -6,6 +6,10 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.2.5
+
+- test: drop install tests pinned to 0.2.1.
+
 ## 0.2.4
 
 - fix: name the GitHub release with the version.
