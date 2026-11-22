@@ -222,9 +222,24 @@ def one_of(*options):
     return test
 
 
+def a_regex(value: object) -> str | None:
+    """A string that is empty or a compiling regular expression. Empty means the check is off."""
+    if not isinstance(value, str):
+        return "must be a string"
+    pattern: str = value.strip()
+    if not pattern:
+        return None
+    try:
+        re.compile(pattern)
+    except re.error as error:
+        return f"must be a valid regular expression ({error})"
+    return None
+
+
 TABLES = {
     "project": {"description": a_string, "base_branch": a_filled_string,
-                "merge_method": one_of("merge", "squash", "rebase")},
+                "merge_method": one_of("merge", "squash", "rebase"),
+                "pr_title": a_string, "pr_title_pattern": a_regex},
     "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string},
     "fleet": {"concurrency": an_int(1)},
     "checks": {"commands": a_string_list, "timeout_minutes": an_int(1)},

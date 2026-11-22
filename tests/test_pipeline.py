@@ -1,9 +1,10 @@
 """A job's way through the default pipeline, and the rules that guard each move."""
 
 import subprocess
+from pathlib import Path
 
 import pytest
-from conftest import AUTO_MERGE
+from conftest import AUTO_MERGE, World
 from modfactory.util import MARKER, Refused
 
 
@@ -110,14 +111,6 @@ def test_a_restarted_build_reads_progress_notes_and_done_drops_them(world):
     assert not (world.dir(job) / "progress.md").exists()
 
 
-def test_done_succeeds_when_a_build_wrote_no_progress_notes(world):
-    job = world.start(until="build")
-    world.next(job)
-    world.build(job)
-    assert world.done(job) == [f"{job} #1: build READY -> gate"]
-    assert world.job(job)["step"] == "gate"
-
-
 def test_progress_notes_stay_out_of_a_spec_prompt(world):
     job = world.start(until="spec")
     world.write(job, "progress.md", "### leftover\n- tried: something\n")
@@ -125,6 +118,47 @@ def test_progress_notes_stay_out_of_a_spec_prompt(world):
     world.spec(job)
     world.done(job)
     assert (world.dir(job) / "progress.md").is_file()
+
+
+def _require_conventional_title(world: World) -> None:
+    """Set the title pattern on the project's existing [project] table."""
+    path: Path = world.repo / "factory.toml"
+    pattern: str = "pr_title_pattern = '^(feat|fix): .+ \\[[A-Z]+-\\d+\\]$'\n"
+    text: str = path.read_text().replace('base_branch = "main"\n', 'base_branch = "main"\n' + pattern)
+    path.write_text(text)
+
+
+def test_a_blocked_build_does_not_check_the_pull_request_title(world: World) -> None:
+    _require_conventional_title(world)
+    job: str = world.start(until="build")
+    world.next(job)
+    world.build(job, status="BLOCKED")
+    assert world.done(job) == [f"{job} #1: build BLOCKED -> escalated (waiting for a maintainer)"]
+    views: list[list[str]] = [
+        call for call in world.gh["calls"] if call[:2] == ["pr", "view"] and "title" in call]
+    assert views == []
+
+
+def test_done_refuses_a_pull_request_title_that_misses_the_pattern(world: World) -> None:
+    _require_conventional_title(world)
+    job: str = world.start(until="build")
+    world.next(job)
+    world.build(job)
+
+    with pytest.raises(Refused, match=r"title 'Add a thing' does not match"):
+        world.done(job)
+    assert world.job(job)["step"] == "build"
+
+    def retitle(state: dict[str, object]) -> None:
+        prs: object = state["prs"]
+        assert isinstance(prs, dict)
+        for pr in prs.values():
+            assert isinstance(pr, dict)
+            pr["title"] = "feat: add a thing [ABC-123]"
+
+    world.set_gh(retitle)
+    assert world.done(job) == [f"{job} #1: build READY -> gate"]
+    assert world.job(job)["step"] == "gate"
 
 
 def test_build_must_be_committed_pushed_and_have_a_pull_request(world):

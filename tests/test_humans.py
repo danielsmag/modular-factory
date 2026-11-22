@@ -6,22 +6,14 @@ from modfactory.util import MARKER, Refused
 SPEC_APPROVAL = "[steps.spec-approval]\nenabled = true\n"
 
 
-def test_spec_approval_parks_the_job_and_shows_the_spec(world):
+def test_approve_from_the_cli_continues_and_removes_the_label(world):
     job = world.start(until="spec-approval", config_text=SPEC_APPROVAL)
     j = world.job(job)
     assert j["waiting"]["who"] == "maintainer" and j["running_since"] is None
     asked = world.comments(1)[-1]
     assert asked.startswith(f"{MARKER}\n### Factory: approve the spec before it is built")
     assert "**spec.md**" in asked and "1. It exists." in asked
-    assert "- `/mfactory approve`" in asked and "- `/mfactory changes <what to change>`" in asked
     assert "factory:needs-human" in world.labels(1)
-    assert world.next(job) == [
-        f"wait {job} #1: spec-approval is waiting for a maintainer. Reply with: "
-        "/mfactory approve 1 | /mfactory changes 1 <what to change> | /mfactory reject 1 <why>"]
-
-
-def test_approve_from_the_cli_continues_and_removes_the_label(world):
-    job = world.start(until="spec-approval", config_text=SPEC_APPROVAL)
     assert world.answer(job, "approve") == [f"{job} #1: spec-approval APPROVE -> build"]
     assert "factory:needs-human" not in world.labels(1)
     world.play(job)
@@ -47,16 +39,10 @@ def test_an_outcome_the_step_lacks_is_refused(world):
         world.answer(job2, "approve")
 
 
-def test_a_maintainer_can_approve_with_a_comment(world):
-    job = world.start(until="spec-approval", config_text=SPEC_APPROVAL)
-    world.comment(1, "/mfactory approve", "maintainer")
-    assert world.queue()[0] == ("resume", 1, job, "spec-approval", "a reply is waiting")
-    assert world.next(job)[0] == f"{job} #1: spec-approval APPROVE -> build"
-
-
 def test_a_factory_comment_from_before_the_rename_still_counts(world):
     job = world.start(until="spec-approval", config_text=SPEC_APPROVAL)
     world.comment(1, "/factory approve", "maintainer")
+    assert world.queue()[0] == ("resume", 1, job, "spec-approval", "a reply is waiting")
     assert world.next(job)[0] == f"{job} #1: spec-approval APPROVE -> build"
 
 

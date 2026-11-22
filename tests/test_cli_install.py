@@ -46,6 +46,7 @@ def test_init_installs_everything_a_project_needs(bare):
 
     toml = (repo / "factory.toml").read_text()
     assert 'enabled = ["claude", "codex"]' in toml and 'base_branch = "main"' in toml
+    assert "pr_title_pattern" in toml
     assert "# [steps.merge]\n# enabled = true" in toml
     assert (repo / ".gitignore").read_text() == (
         "node_modules/\n\n# software factory runtime state\n/.factory/jobs/\n/.worktrees/\n")

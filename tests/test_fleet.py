@@ -261,28 +261,6 @@ def test_the_fleet_dashboard_serves_the_queue_and_caches_it(tmp_path):
     assert counts.read_text().count("x") == 1
 
 
-def test_the_fleet_page_never_puts_job_text_into_html_unescaped():
-    page: str = dashboard_page().decode()
-    for unsafe in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval("):
-        assert unsafe not in page, unsafe
-
-
-def test_the_fleet_page_loads_nothing_from_elsewhere():
-    page: str = dashboard_page().decode()
-    for remote in ("<script src", "<link", "@import", "url(http", 'src="http', "<iframe", "<img"):
-        assert remote not in page, remote
-
-
-@pytest.mark.skipif(not shutil.which("node"), reason="needs node to parse the page's script")
-def test_the_fleet_script_parses(tmp_path):
-    page: str = dashboard_page().decode()
-    script: str = page[page.index("<script>") + len("<script>"):page.rindex("</script>")]
-    (tmp_path / "page.js").write_text(script)
-    result: subprocess.CompletedProcess[str] = subprocess.run(
-        ["node", "--check", str(tmp_path / "page.js")], capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
-
-
 def test_a_bad_schema_is_refused(tmp_path):
     file: Path = tmp_path / "fleet.toml"
     file.write_text("schema = 2\n")

@@ -116,19 +116,13 @@ def problems(world, text):
     return error.value.problems
 
 
-def test_edges_must_point_at_steps(world):
+def test_the_graph_refuses_a_step_that_cannot_run(world):
     assert problems(world, '[steps.build]\non = { READY = "gaet" }\n') == [
         '[steps.build].on.READY points at unknown step "gaet". Steps: intake, ask-author, spec, spec-approval, '
         "build, gate, debug, review, approve, ready-to-merge, merge, verify, escalated; "
         "end states: done, failed, rejected"]
-
-
-def test_built_in_steps_need_their_outcomes_and_no_others(world):
     found = problems(world, '[steps.gate]\non = { MAYBE = "build" }\n')
     assert "[steps.gate].on.MAYBE is not an outcome of a checks step. Outcomes: FAIL, PASS" in found
-
-
-def test_a_loop_needs_a_max_or_a_person(world):
     found = problems(world, """
 [steps.gate]
 on = { PASS = "lint" }
@@ -140,20 +134,11 @@ on = { OK = "review", REDO = "build" }
 """)
     assert found == ["loop build -> gate -> lint -> build has no edge with max and no human step, "
                      "so a job could go round it forever. Add max to one of its edges"]
-
-
-def test_a_step_nothing_points_at_is_reported(world):
     found = problems(world, '[steps.lint]\ntype = "agent"\ninstructions = "Lint."\non = { OK = "gate" }\n')
     assert found == ['[steps.lint] can\'t be reached from [run].start = "intake". '
                      "Point an edge at it, or set enabled = false"]
-
-
-def test_a_disabled_step_needs_skip(world):
     found = problems(world, '[steps.lint]\ntype = "agent"\nenabled = false\ninstructions = "x"\non = { OK = "gate" }\n')
     assert found == ["[steps.lint] is off, so [steps.lint].skip must name the outcome to continue with: OK"]
-
-
-def test_escalate_to_must_be_a_human_step(world):
     assert problems(world, '[run]\nescalate_to = "build"\n') == [
         '[run].escalate_to = "build" must be an enabled human step']
 

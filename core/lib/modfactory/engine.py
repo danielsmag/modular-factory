@@ -5,6 +5,7 @@ are scripts itself. `done` reads the outcome an agent wrote and follows its
 edge. Everything else here is what those two need.
 """
 
+import re
 import shutil
 import time
 from pathlib import Path
@@ -510,7 +511,24 @@ class Factory(Humans, Scripted, Queue):
             if len(prs) != 1:
                 raise Refused(f"expected one open PR from {job['branch']}, found {len(prs)}")
             job["pr"], job["pr_url"] = prs[0]["number"], prs[0]["url"]
+        self._require_pr_title(job)
         return None
+
+    def _require_pr_title(self, job: dict[str, Any]) -> None:
+        """Refuse a READY build whose pull request title misses `[project].pr_title_pattern`."""
+        pattern: str = str(self.cfg["project"].get("pr_title_pattern", "")).strip()
+        if not pattern:
+            return
+        found: object = self.gh.pr(job["pr"], "title")
+        if not isinstance(found, dict) or not isinstance(found.get("title"), str):
+            raise Refused(f"could not read the title of pull request #{job['pr']}")
+        title: str = found["title"]
+        if re.fullmatch(pattern, title):
+            return
+        raise Refused(
+            f"pull request #{job['pr']} title {title!r} does not match "
+            f"[project].pr_title_pattern {pattern!r}. "
+            f'Change it with `gh pr edit {job["pr"]} --title "..."`.')
 
     # ---- review ------------------------------------------------------------
 

@@ -147,6 +147,10 @@ generated agent files.
    - `[project] description`: two or three sentences on what the project is
      for and what does not belong in it. Intake judges issues against this.
    - `[project] base_branch`, if it isn't `master`.
+   - `[project] pr_title` and `[project] pr_title_pattern`, when the repository
+     requires a pull request title format, such as Conventional Commits or a
+     ticket key. Leave both empty to use the spec's title. With squash merge
+     the title becomes the commit on the base branch.
    - `[checks] commands`: the commands from step 2, in the order CI runs them.
      Each must exit non-zero on failure and must not rewrite files.
    - `[skills]` and `skills = [...]` under a step or reviewer, when a project

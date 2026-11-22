@@ -74,7 +74,9 @@ concurrency = 3
 | `schema` | `1` | The version of this file's format. `mfactory upgrade` refuses a release that needs another. |
 | `[project] description` | `""` | What the project is for and what does not belong in it. Intake judges issues against it. |
 | `[project] base_branch` | `"master"` | Jobs branch from `origin/<base_branch>` and merge into it. |
-| `[project] merge_method` | `"squash"` | `merge`, `squash` or `rebase`. |
+| `[project] merge_method` | `"squash"` | `merge`, `squash` or `rebase`. With `squash`, the pull request title becomes the commit on the base branch. |
+| `[project] pr_title` | `""` | Example pull request title, such as `feat: add CSV export [ABC-123]`. The builder uses this shape instead of the spec title. Empty means the spec title. The script does not fill placeholders. |
+| `[project] pr_title_pattern` | `""` | Regular expression the whole title must match (`fullmatch`). Empty means no check. `done` refuses a `READY` build whose title does not match. |
 | `[tools] enabled` | `["claude"]` | The tools to write agent files for: `claude`, `cursor`, `codex`. |
 | `[tools.claude] stop_hook` | `false` | Run the checks when the build agent stops, and send it back to work if they fail. Claude Code only. |
 | `[tools.claude] cost` | `true` | Work out each job's cost from Claude Code's transcripts. Other tools record no cost. |
@@ -83,6 +85,18 @@ concurrency = 3
 | `[fleet] concurrency` | `3` | `new` and `resume` rows kept across every project when this factory runs `fleet queue`. `fleet.toml` or `--concurrency` overrides it. A project's `factory.toml` cannot. |
 | `[run] start` | `"intake"` | The step a new job starts in. |
 | `[run] escalate_to` | `"escalated"` | The human step a job goes to when a loop limit is reached. |
+
+`pr_title` is what the agents are shown. `pr_title_pattern` is what the script
+checks. Either may be set alone. The check runs for every merge method. When
+the issue lacks a value the title needs, such as a ticket key, intake returns
+`NEEDS-INFO` and asks. It does not invent one. After changing either key, run
+`mfactory sync` so the build and intake agents see it.
+
+```toml
+[project]
+pr_title = "feat: add CSV export [ABC-123]"
+pr_title_pattern = '^(feat|fix|perf|refactor|chore|docs|test|ci|build|revert)(\(.+\))?!?: .+ \[[A-Z]+-\d+\]$'
+```
 
 ## Checks
 

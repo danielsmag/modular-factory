@@ -57,6 +57,36 @@ def git(*args, cwd):
     return res.stdout.strip()
 
 
+def _git(args: list[str], cwd: Path, env: dict[str, str]) -> None:
+    res = subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True)
+    assert res.returncode == 0, f"git {' '.join(args)}: {res.stderr}"
+
+
+@pytest.fixture(scope="session")
+def repo_template(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
+    """One committed origin and checkout. Each test copies it instead of running git init."""
+    root: Path = tmp_path_factory.mktemp("template")
+    env: dict[str, str] = os.environ.copy()
+    env.update({
+        "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com",
+        "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
+    })
+    origin: Path = root / "origin.git"
+    repo: Path = root / "repo"
+    _git(["init", "-q", "--bare", "-b", "main", str(origin)], root, env)
+    repo.mkdir()
+    _git(["init", "-q", "-b", "main"], repo, env)
+    (repo / "README.md").write_text("# app\n")
+    (repo / ".gitignore").write_text("/.factory/jobs/\n/.worktrees/\n")
+    (repo / "factory.toml").write_text(BASE_CONFIG + BASE_CHECKS)
+    _git(["add", "-A"], repo, env)
+    _git(["commit", "-q", "-m", "init"], repo, env)
+    _git(["remote", "add", "origin", str(origin)], repo, env)
+    _git(["push", "-q", "-u", "origin", "main"], repo, env)
+    return origin, repo
+
+
 class World:
     def __init__(self, tmp):
         self.tmp = tmp
@@ -230,7 +260,7 @@ class World:
 
 
 @pytest.fixture
-def world(tmp_path, monkeypatch):
+def world(tmp_path, monkeypatch, repo_template):
     w = World(tmp_path)
     stubs = tmp_path / "bin"
     stubs.mkdir()
@@ -240,6 +270,7 @@ def world(tmp_path, monkeypatch):
         "PATH": f"{stubs}{os.pathsep}{os.environ['PATH']}", "GH_STATE": str(w.state_file), "GH_ORIGIN": str(w.origin),
         "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com", "GIT_COMMITTER_NAME": "Test",
         "GIT_COMMITTER_EMAIL": "test@example.com", "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
         "CLAUDE_CONFIG_DIR": str(tmp_path / "claude"),
     }.items():
         monkeypatch.setenv(key, value)
@@ -247,16 +278,12 @@ def world(tmp_path, monkeypatch):
         "user": "operator", "permissions": {"maintainer": "write"}, "labels": [], "issues": {}, "prs": {},
         "next_number": 0, "next_comment": 0, "calls": [], "fail": None}))
 
-    git("init", "-q", "--bare", "-b", "main", str(w.origin), cwd=tmp_path)
-    w.repo.mkdir()
-    git("init", "-q", "-b", "main", cwd=w.repo)
-    (w.repo / "README.md").write_text("# app\n")
-    (w.repo / ".gitignore").write_text("/.factory/jobs/\n/.worktrees/\n")
-    w.configure("")
-    git("add", "-A", cwd=w.repo)
-    git("commit", "-q", "-m", "init", cwd=w.repo)
-    git("remote", "add", "origin", str(w.origin), cwd=w.repo)
-    git("push", "-q", "-u", "origin", "main", cwd=w.repo)
+    origin: Path
+    repo: Path
+    origin, repo = repo_template
+    shutil.copytree(origin, w.origin, symlinks=True)
+    shutil.copytree(repo, w.repo, symlinks=True)
+    git("remote", "set-url", "origin", str(w.origin), cwd=w.repo)
     yield w
     if w._factory:
         w._factory.store.release()

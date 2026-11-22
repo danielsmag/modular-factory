@@ -8,6 +8,8 @@ schema = 1
 description = ""          # what the project is for; intake uses it to decide what belongs
 base_branch = "master"
 merge_method = "squash"   # merge, squash or rebase
+pr_title = ""             # example pull request title; empty means the spec title
+pr_title_pattern = ""     # when set, done refuses a READY build whose title does not match
 
 [tools]
 enabled = ["claude"]      # claude, cursor, codex

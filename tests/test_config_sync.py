@@ -149,6 +149,45 @@ def test_broken_toml_is_a_config_problem(world):
         config.load(world.repo, text="schema = \n")
 
 
+def test_a_pull_request_title_pattern_must_compile(world):
+    assert "must be a valid regular expression" in problems(
+        world, "[project]\npr_title_pattern = '('\n")[0]
+    assert problems(world, "[project]\npr_title = 1\n") == [
+        "[project].pr_title must be a string (got 1)"]
+    load(world, "[project]\npr_title = ''\npr_title_pattern = ''\n")
+
+
+def test_pull_request_title_is_told_only_when_set(world):
+    files, _ = plan(world)
+    assert "Pull request title" not in files[".claude/agents/mfactory-build.md"]
+    assert "Pull request title" not in files[".claude/agents/mfactory-intake.md"]
+
+    text = """
+[project]
+pr_title = "feat: add CSV export [ABC-123]"
+pr_title_pattern = '^(feat|fix): .+ \\[[A-Z]+-\\d+\\]$'
+"""
+    files, _ = plan(world, text)
+    build = files[".claude/agents/mfactory-build.md"]
+    intake = files[".claude/agents/mfactory-intake.md"]
+    assert "## Pull request title" in build
+    assert "not the spec title" in build
+    assert "feat: add CSV export [ABC-123]" in build
+    assert "The whole title must match `^(feat|fix): .+ \\[[A-Z]+-\\d+\\]$`." in build
+    assert "gh pr edit" in build
+    assert "Squash merge uses this title as the commit on the base branch." in build
+    assert "NEEDS-INFO" in intake and "Do not invent one." in intake
+    assert "gh pr edit" not in intake
+
+    files, _ = plan(world, "[project]\npr_title_pattern = '^feat: .+$'\n")
+    assert "The whole title must match `^feat: .+$`." in files[".claude/agents/mfactory-build.md"]
+    assert "Form:" not in files[".claude/agents/mfactory-build.md"]
+
+    files, _ = plan(world, '[project]\nmerge_method = "merge"\npr_title = "feat: add a thing"\n')
+    built = files[".claude/agents/mfactory-build.md"]
+    assert "feat: add a thing" in built and "Squash merge" not in built
+
+
 def test_a_custom_step_needs_instructions(world):
     assert problems(world, '[steps.gate]\non = { PASS = "docs" }\n[steps.docs]\ntype = "agent"\n'
                            'on = { DONE = "review" }\n') == [
