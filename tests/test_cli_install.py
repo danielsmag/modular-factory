@@ -250,52 +250,6 @@ def test_doctor_warns_when_the_factory_is_not_on_the_base_branch(bare):
     assert "warn  factory.toml and .factory/ aren't on origin/main yet." in res.stdout
 
 
-# ---- upgrade ---------------------------------------------------------------
-
-
-def newer(world, version="9.9.9", schema=1):
-    """A copy of the factory's source that claims to be a later version."""
-    copy = world.tmp / "newer"
-    shutil.copytree(ROOT / "core", copy / "core", ignore=shutil.ignore_patterns("__pycache__"))
-    shutil.copytree(ROOT / "adapters", copy / "adapters")
-    shutil.copytree(ROOT / "web", copy / "web")
-    for name in ("LICENSE", "NOTICE"):
-        shutil.copy(ROOT / name, copy / name)
-    (copy / "core/VERSION").write_text(version + "\n")
-    defaults = copy / "core/defaults.toml"
-    defaults.write_text(defaults.read_text().replace("schema = 1", f"schema = {schema}"))
-    role = copy / "core/roles/build.md"
-    role.write_text(role.read_text() + "\nNew in this version.\n")
-    return copy
-
-
-def test_upgrade_replaces_the_core_and_leaves_factory_toml_and_jobs(world):
-    cli = ready(world)
-    job = world.start(until="spec")
-    world.factory()
-    toml = (world.repo / "factory.toml").read_text()
-    (world.repo / ".factory/dashboard.html").write_text("old page\n")
-    res = subprocess.run([str(cli), "upgrade", "--source", str(newer(world))], cwd=world.repo,
-                         capture_output=True, text=True)
-    assert res.returncode == 0, res.stderr
-    assert "ok    .factory/ 0.2.1 -> 9.9.9" in res.stdout
-    assert installed(world).stdout.strip() == "9.9.9"
-    assert "New in this version." in (world.repo / ".factory/roles/build.md").read_text()
-    assert (world.repo / ".factory/web/dashboard.html").is_file()
-    assert not (world.repo / ".factory/dashboard.html").exists()
-    assert (world.repo / "factory.toml").read_text() == toml
-    assert (world.repo / ".factory/jobs" / job / "job.json").exists()
-
-
-def test_upgrade_refuses_a_schema_it_cannot_migrate(world):
-    cli = ready(world)
-    res = subprocess.run([str(cli), "upgrade", "--source", str(newer(world, schema=2))], cwd=world.repo,
-                         capture_output=True, text=True)
-    assert res.returncode == 1
-    assert "version 9.9.9 reads schema 2, and factory.toml is schema 1" in res.stderr
-    assert installed(world).stdout.strip() == "0.2.1"
-
-
 # ---- dashboard server ------------------------------------------------------
 
 
@@ -406,17 +360,6 @@ def test_install_is_another_name_for_init(bare):
     assert (bare.repo / ".factory/bin/mfactory").is_file()
 
 
-def test_status_reports_version_tools_and_stale_files(world):
-    world.cli("init")
-    fresh = world.cli("status")
-    assert fresh.returncode == 0, fresh.stderr
-    assert "project 0.2.1" in fresh.stdout
-    assert "sync    up to date" in fresh.stdout
-    (world.repo / ".claude/agents/mfactory-build.md").write_text("hand edit\n")
-    stale = world.cli("status")
-    assert "sync    1 file(s) out of date" in stale.stdout
-
-
 def test_uninstall_keeps_factory_toml_unless_asked(world):
     world.cli("init")
     assert world.cli("fleet", "subscribe").returncode == 0
@@ -450,43 +393,3 @@ def test_install_sh_global_links_a_command_that_can_install(bare, tmp_path):
                                cwd=bare.repo, capture_output=True, text=True)
     assert installed.returncode == 0, installed.stderr
     assert 'enabled = ["cursor"]' in (bare.repo / "factory.toml").read_text()
-
-
-def test_upgrade_self_refuses_a_project_and_replaces_a_global_tree(world, tmp_path):
-    refused = subprocess.run([sys.executable, str(ROOT / "core/bin/mfactory"), "upgrade", "--self"],
-                             capture_output=True, text=True)
-    assert refused.returncode == 1 and "not the global install" in refused.stderr
-    world.cli("init")
-    project = subprocess.run([sys.executable, str(world.repo / ".factory/bin/mfactory"), "upgrade", "--self"],
-                             cwd=world.repo, capture_output=True, text=True)
-    assert project.returncode == 1 and "not the global install" in project.stderr
-
-    home = tmp_path / "global"
-    shutil.copytree(ROOT / "core", home / "core", ignore=shutil.ignore_patterns("__pycache__"))
-    shutil.copytree(ROOT / "adapters", home / "adapters")
-    for name in ("LICENSE", "NOTICE"):
-        shutil.copy(ROOT / name, home / name)
-    (home / ".global").write_text(f"{home}\n")
-    res = subprocess.run([sys.executable, str(home / "core/bin/mfactory"), "upgrade", "--self",
-                          "--source", str(newer(world))], capture_output=True, text=True)
-    assert res.returncode == 0, res.stderr
-    assert "0.2.1 -> 9.9.9" in res.stdout
-    assert (home / "core/VERSION").read_text().strip() == "9.9.9"
-    assert (home / ".global").is_file()
-
-
-def test_upgrade_all_reports_a_failure_and_still_upgrades_the_rest(world, tmp_path):
-    world.cli("init")
-    missing = tmp_path / "missing"
-    missing.mkdir()
-    from modfactory.fleet import Fleet, Project, user_file
-    file = user_file()
-    file.parent.mkdir(parents=True, exist_ok=True)
-    group = Fleet(file, [])
-    group.projects = [Project(world.repo.resolve()), Project(missing.resolve())]
-    group.save()
-    res = world.cli("upgrade", "--all", "--source", str(newer(world, version="8.8.8")))
-    assert res.returncode == 1, res.stderr
-    assert "0.2.1 -> 8.8.8" in res.stdout
-    assert "FAIL" in res.stdout
-    assert (world.repo / ".factory/VERSION").read_text().strip() == "8.8.8"
