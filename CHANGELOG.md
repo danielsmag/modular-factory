@@ -6,6 +6,10 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.2.4
+
+- fix: name the GitHub release with the version.
+
 ## 0.2.3
 
 - fix: pass the GitHub token to the release job.
