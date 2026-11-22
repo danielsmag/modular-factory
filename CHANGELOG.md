@@ -6,6 +6,10 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.3.1
+
+- ci: deploy Pages after the artifact upload finishes.
+
 ## 0.3.0
 
 - feat(dashboard): add an overview.
