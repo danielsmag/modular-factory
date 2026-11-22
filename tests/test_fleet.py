@@ -143,6 +143,7 @@ def write_jobs(repo: Path, job: dict[str, object], index: bool) -> None:
     if index:
         payload: dict = {
             "project": {"description": "A test project"},
+            "concurrency": 3,
             "jobs": [dict(job, files=[{"path": "note.md", "size": 11, "first_line": "STATUS: ok"}])],
         }
         (folder.parent / "index.json").write_text(json.dumps(payload))
@@ -197,6 +198,7 @@ def test_the_fleet_dashboard_serves_both_projects(served):
     assert page == dashboard_page().decode()
     assert 'aria-label="Projects"' in page
     assert 'data-view="pipeline"' in page
+    assert 'data-view="overview"' in page
     assert "default-src 'none'" in headers["Content-Security-Policy"]
     body: dict = json.loads(fetch(base + "/projects.json")[0])
     by_name: dict = {item["name"]: item for item in body["projects"]}
@@ -204,6 +206,8 @@ def test_the_fleet_dashboard_serves_both_projects(served):
     assert by_name["two"]["config"] is None
     assert by_name["one"]["jobs"][0]["title"] == "Alpha"
     assert by_name["one"]["description"] == "A test project"
+    assert by_name["one"]["concurrency"] == 3
+    assert by_name["two"]["concurrency"] is None
     assert by_name["two"]["jobs"][0]["title"] == "Beta"
     assert by_name["two"]["jobs"][0]["files"][0]["path"] == "note.md"
     text, kind = fetch(base + "/projects/one/jobs/001-a/note.md")

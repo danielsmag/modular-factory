@@ -58,14 +58,6 @@ def test_queue_explains_jobs_that_need_nothing(world):
     assert world.queue() == []
 
 
-def test_summary_is_a_table(world):
-    job = world.start(config_text=AUTO_MERGE)
-    lines = world.factory().summary([]).splitlines()
-    assert lines[0].split() == ["job", "issue", "step", "round", "pr", "cost", "time"]
-    assert lines[1].split() == [job, "#1", "done", "1", "#2", "-", "0m"]
-    assert world.factory().summary(["1"]).splitlines()[1].startswith(job)
-
-
 def test_two_commands_cannot_work_on_one_job(world):
     job = world.start(until="spec")
     res = world.cli("next", job)                            # this test's process still holds the job's lock

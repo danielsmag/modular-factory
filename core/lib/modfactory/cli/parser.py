@@ -12,7 +12,7 @@ install and maintain
 see the configuration
   config show | graph | models | skills
 run jobs (the orchestrator skill uses these)
-  queue | create <issue> | next <job> | done <job> | answer <job> <outcome> | summary
+  queue | create <issue> | next <job> | done <job> | answer <job> <outcome>
 other
   checks | dashboard | start dashboard | stop | version
 several projects
@@ -76,8 +76,6 @@ def parser() -> argparse.ArgumentParser:
     answer.add_argument("job")
     answer.add_argument("outcome", help="approve, changes, feedback, answer or reject, as the step allows")
     answer.add_argument("text", nargs="*", help="your words; or pass them on standard input")
-    summary: argparse.ArgumentParser = sub.add_parser("summary", help="a table of jobs")
-    summary.add_argument("jobs", nargs="*")
     route: argparse.ArgumentParser = sub.add_parser("route", help="show which agents a job uses")
     route.add_argument("job")
 

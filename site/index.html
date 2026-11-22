@@ -123,6 +123,15 @@ h2 { font: 500 14px var(--sans); margin: 0; }
 .bar .fill { height: 100%; background: var(--accent); border-radius: 2px; }
 .bar .pct { text-align: right; font: 10px var(--mono); color: var(--muted); margin-top: 3px; }
 .empty { color: var(--muted); font-size: 13px; padding: 26px 0; text-align: center; }
+.kanban { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
+.kcol { flex: 0 0 200px; width: 200px; }
+.kcol-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 8px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.kcol-head h3 { margin: 0; font: 600 13px var(--sans); }
+.kcol-head .count { margin-left: auto; font: 11px var(--mono); color: var(--muted); }
+a.kcard { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 10px; margin-bottom: 8px; text-decoration: none; color: inherit; }
+a.kcard:hover { border-color: var(--line-2); }
+a.kcard .feature { font-size: 13px; line-height: 1.4; margin: 0 0 6px; }
+a.kcard .meta { font: 11px var(--mono); color: var(--muted); }
 
 /* ---- tables ---- */
 .scroll { overflow-x: auto; }
@@ -263,6 +272,7 @@ footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--m
     <a href="#/board" data-view="board">Board</a>
     <a href="#/pipeline" data-view="pipeline">Pipeline</a>
     <a href="#/jobs" data-view="jobs">Jobs</a>
+    <a href="#/overview" data-view="overview">Overview</a>
     <a href="#/config" data-view="config">Config</a>
   </nav>
   <div class="tools">
@@ -290,6 +300,7 @@ footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--m
         <a href="#/board" data-view="board" title="Board" aria-label="Board"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg></a>
         <a href="#/pipeline" data-view="pipeline" title="Pipeline" aria-label="Pipeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.5 6h9M6.5 8l4.3 7.7M17.5 8l-4.3 7.7"/></svg></a>
         <a href="#/jobs" data-view="jobs" title="Jobs" aria-label="Jobs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg></a>
+        <a href="#/overview" data-view="overview" title="Overview" aria-label="Overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16"/><path d="M7 15l4-4 3 3 5-6"/></svg></a>
         <hr>
         <a href="#/config" data-view="config" title="Config" aria-label="Config"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></a>
       </nav>
@@ -499,6 +510,24 @@ function jobTable(list) {
     el("thead", {}, el("tr", {}, ["Job", "Title", "Step", "Round", "PR", "Cost", "Updated"].map((t) => el("th", { scope: "col", text: t })))), body));
 }
 function board() {
+  const all = jobs(), shown = all.filter(matches);
+  const names = state.graph ? order(state.graph) : [];
+  const present = names.filter((name) => shown.some((job) => job.step === name));
+  shown.forEach((job) => { if (job.step && !present.includes(job.step)) present.push(job.step); });
+  return [
+    el("h1", { text: "Board" }),
+    el("p", { class: "sub", text: "Jobs by step" }),
+    present.length ? el("div", { class: "kanban" }, present.map((name) => {
+      const mine = shown.filter((job) => job.step === name);
+      return el("section", { class: "kcol", "aria-label": name },
+        el("div", { class: "kcol-head" }, el("h3", { text: name }), el("span", { class: "count", text: String(mine.length) })),
+        mine.map((job) => el("a", { class: "kcard", href: "#/jobs/" + encodeURIComponent(job.id) },
+          el("p", { class: "feature", text: job.title || job.id }),
+          el("div", { class: "meta" }, el("span", { text: "#" + job.issue })))));
+    })) : el("div", { class: "empty", text: state.query ? "No job matches the search." : "No jobs yet." }),
+  ];
+}
+function overview() {
   const all = jobs(), idx = state.index;
   const running = all.filter((j) => { const s = stepOf(j.step); return s && RUNNING.has(s.type) && !j.waiting; });
   const merged = all.filter((j) => j.step === "done");
@@ -507,9 +536,9 @@ function board() {
   const authors = waiting.filter((j) => j.waiting.who === "author").length;
   const named = waiting.filter((j) => Array.isArray(j.waiting.who)).length;
   const rest = waiting.length - authors - named;
-  const waitingNote = named
-    ? [`${authors} author`, `${rest} maintainer`, `${named} named`].filter((part) => !part.startsWith("0 ")).join(" · ")
-    : `${authors} author · ${rest} maintainer`;
+  const waitingParts = [`${authors} author`, `${rest} maintainer`];
+  if (named) waitingParts.push(`${named} named`);
+  const waitingNote = waitingParts.filter((part) => !part.startsWith("0 ")).join(" · ");
   const split = byStep(all);
   const total = all.reduce((a, j) => a + (j.cost_usd || 0), 0);
   const finished = all.filter((j) => j.finished_at && j.step === "done").map((j) => (time(j.finished_at) - time(j.created_at)) / 1000).sort((a, b) => a - b);
@@ -518,8 +547,8 @@ function board() {
   const rangeTab = (key, text) => el("button", { type: "button", "aria-pressed": String(state.range === key), text, onclick: () => { state.range = key; render(); } });
 
   return [
-    el("h1", { text: "Board" }),
-    el("p", { class: "sub", text: idx.project.description || "Every job at a glance" }),
+    el("h1", { text: "Overview" }),
+    el("p", { class: "sub", text: idx.project.description || "Running slots, merged jobs, and every job" }),
     el("div", { class: "cards" },
       card("Running", String(running.length), `of ${idx.concurrency} slots`, "M5 3l14 9-14 9z", true),
       card("Merged", String(merged.length), week ? `+${week} this week` : "none this week", "M5 12l5 5L20 7", false, week ? "" : "flat"),
@@ -800,7 +829,7 @@ function configView() {
 // ---- shell ----
 function route() {
   const parts = location.hash.replace(/^#\/?/, "").split("/");
-  return { view: ["board", "pipeline", "jobs", "config"].includes(parts[0]) ? parts[0] : "board", id: parts[1] ? decodeURIComponent(parts[1]) : null };
+  return { view: ["board", "pipeline", "jobs", "overview", "config"].includes(parts[0]) ? parts[0] : "board", id: parts[1] ? decodeURIComponent(parts[1]) : null };
 }
 function render() {
   const { view, id } = route();
@@ -822,7 +851,7 @@ function render() {
     document.getElementById("address").textContent = `${state.index.repo}/.factory/jobs`;
     document.getElementById("foot-right").textContent = `factory ${state.index.version} · ${state.index.tools.join(", ")}`;
     document.title = `factory · ${state.index.repo}`;
-    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id) : view === "config" ? configView() : board();
+    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id) : view === "overview" ? overview() : view === "config" ? configView() : board();
   }
   target.replaceChildren(...content);
   [...target.querySelectorAll(".joblist, pre.file")].forEach((n, i) => { if (scroll[i]) n.scrollTop = scroll[i]; });

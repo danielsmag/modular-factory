@@ -47,7 +47,7 @@ core/lib/modfactory/      the factory's code
   engine.py               next and done: entering steps, following edges, limits
   scripted.py             the merge step and the verify step
   checks.py               [checks].commands and protected paths
-  queue.py                queue, create, summary
+  queue.py                queue, create
   sync.py                 agent and skill files for each tool
   install.py              copy, init, upgrade, doctor
   fleet/                  several projects: fleet.toml, one queue, the dashboard
@@ -213,9 +213,10 @@ each tool allows.
   applies `[fleet].concurrency` from this factory's `defaults.toml`.
   `concurrency` in `fleet.toml`, or `--concurrency` on `fleet queue`, overrides
   that fleet cap.
-- **The board's chart is a running total** of merged jobs with a steady-pace
-  line, not jobs per day: with a few merges a week, a per-day chart is mostly
-  zeros.
+- **Overview is the job table.** Running slots, a running total of merged jobs
+  with a steady-pace line, and cost or time by step. Not jobs per day: with a
+  few merges a week, a per-day chart is mostly zeros. The board stays jobs by
+  step.
 - **The pipeline view is a column of steps** with forward edges on the right
   and back edges on the left. A left-to-right drawing of twelve steps was too
   small to read.
@@ -297,6 +298,6 @@ project's `factory/bin/job`, `factory/bin/gate`, `factory/bin/route` and
   tool can do it. `done` deletes `progress.md` once the build outcome is
   accepted.
 - **The stop hook and the cost** are optional and Claude Code only.
-- **The dashboard was rewritten** with four views, a new look, and a local
+- **The dashboard was rewritten** with board, pipeline, jobs, overview and config, a new look, and a local
   server that confines what it serves.
 - **Tests.** A suite that runs whole jobs against a stand-in for GitHub.

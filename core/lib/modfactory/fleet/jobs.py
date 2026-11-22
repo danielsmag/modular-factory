@@ -135,6 +135,10 @@ def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) 
             for key, value in labels_raw.items():
                 if isinstance(key, str) and isinstance(value, str):
                     labels[key] = value
+        concurrency_raw: object = body.get("concurrency")
+        concurrency: int | None = None
+        if isinstance(concurrency_raw, int) and not isinstance(concurrency_raw, bool) and concurrency_raw >= 1:
+            concurrency = concurrency_raw
         config_rows: list[dict[str, object]] | None
         config_error: str | None
         config_rows, config_error = read_config(project)
@@ -151,6 +155,7 @@ def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) 
             "generated_at": generated_at,
             "tools": tools,
             "labels": labels,
+            "concurrency": concurrency,
             "config": config_rows,
         }
         graph: dict[str, object] | None = read_graph(project)

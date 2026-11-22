@@ -181,9 +181,9 @@ skills = ["testing"]          # only the builder
 .factory/bin/mfactory dashboard
 ```
 
-It serves a read-only page on your machine: every job and its current step, the
-pipeline with the number of jobs in each step, what each job wrote, and the
-merged configuration with the source of each value. It changes nothing;
+It serves a read-only page on your machine: jobs by step, the pipeline, what
+each job wrote, an overview with the job table, and the merged configuration
+with the source of each value. It changes nothing;
 approvals and feedback go through `/mfactory` or an issue comment.
 
 ![The dashboard's pipeline view, showing made-up sample jobs](docs/dashboard-pipeline.png?v=2)
@@ -206,7 +206,7 @@ mfactory fleet dashboard
 mfactory install | upgrade | uninstall | doctor | status | sync
 mfactory config show | graph | models | skills     see the configuration
 mfactory queue | create | next | done | answer     run jobs (the /mfactory skill uses these)
-mfactory summary | checks | dashboard | start dashboard | stop | version
+mfactory checks | dashboard | start dashboard | stop | version
 mfactory fleet subscribe | unsubscribe | list | queue | dashboard
 ```
 

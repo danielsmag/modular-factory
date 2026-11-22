@@ -161,8 +161,6 @@ def run(args: argparse.Namespace) -> int:
             factory.done(args.job, reply=sys.stdin.read() if args.reply else None)
         elif command == "answer":
             factory.answer(args.job, args.outcome, " ".join(args.text) or _stdin_text())
-        elif command == "summary":
-            print(factory.summary(args.jobs))
         elif command == "route":
             job = factory.store.read(factory.store.find(args.job))
             print(json.dumps(job["agents"] or factory.route(dict(job)), indent=1))
