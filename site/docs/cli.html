@@ -27,7 +27,7 @@
   </div>
   <div class="def">
     <div class="def-h"><code>upgrade</code> <span class="chip">--version</span> <span class="chip">--source</span> <span class="chip">--self</span> <span class="chip">--all</span></div>
-    <p>Replace <code>.factory/</code> and re-sync. Leaves <code>factory.toml</code> and <code>.factory/jobs/</code> alone. <code>--version</code> is a tag such as <code>v0.2.0</code> (default <code>latest</code>). <code>--source</code> is a local copy. <code>--self</code> updates the global CLI. <code>--all</code> upgrades every project in the fleet.</p>
+    <p>Upgrade the global CLI, every subscribed project, and the checkout you are in when that checkout is installed and not subscribed. Leaves <code>factory.toml</code> and <code>.factory/jobs/</code> alone. <code>--version</code> is a tag such as <code>v0.2.0</code> (default <code>latest</code>). <code>--source</code> is a local copy. <code>--self</code> updates only the global CLI. <code>--all</code> upgrades only subscribed projects. One project failing does not stop the others.</p>
   </div>
   <div class="def">
     <div class="def-h"><code>uninstall</code> <span class="chip">--config</span> <span class="chip">--labels</span></div>

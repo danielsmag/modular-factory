@@ -15,8 +15,6 @@ else
 endif
 
 MFACTORY := $(PYTHON) core/bin/mfactory
-FACTORY_HOME ?= $(HOME)/.mfactory
-GLOBAL_MFACTORY := $(FACTORY_HOME)/core/bin/mfactory
 TOOL ?= claude
 
 .DEFAULT_GOAL := help
@@ -48,9 +46,10 @@ help: ## list checks and mfactory targets
 	@echo "  make version"
 	@echo "  make install               TOOL=claude  or  TOOLS=\"claude cursor\""
 	@echo "  make init                  same command as install"
-	@echo "  make upgrade               this tree has no .factory/"
-	@echo "                             SELF=1 SOURCE=.   global CLI from this tree"
-	@echo "                             ALL=1 SOURCE=.    every fleet project"
+	@echo "  make upgrade               global CLI and every subscribed project"
+	@echo "                             SOURCE=.          install from this tree"
+	@echo "                             SELF=1            global CLI only"
+	@echo "                             ALL=1             subscribed projects only"
 	@echo "  make uninstall             CONFIG=1 LABELS=1"
 	@echo "  make doctor                SKIP_CHECKS=1"
 	@echo "  make status                ALL=1"
@@ -107,24 +106,8 @@ install: ## mfactory install. TOOL=claude or TOOLS="claude cursor"
 init: ## mfactory init (same as install)
 	$(MFACTORY) init $(foreach t,$(if $(TOOLS),$(TOOLS),$(TOOL)),--tool $(t)) $(ARGS)
 
-upgrade: ## SELF=1 updates the global CLI. ALL=1 updates the fleet. SOURCE=. uses this tree
-	@if [ -n "$(SELF)" ] && [ -n "$(ALL)" ]; then \
-		echo "pass either SELF=1 or ALL=1"; exit 1; \
-	fi; \
-	if [ -n "$(SELF)" ]; then \
-		test -x "$(GLOBAL_MFACTORY)" || { echo "no global install at $(GLOBAL_MFACTORY)"; exit 1; }; \
-		"$(GLOBAL_MFACTORY)" upgrade --self $(if $(REF),--version $(REF)) $(if $(SOURCE),--source $(SOURCE)) $(ARGS); \
-	elif [ -n "$(ALL)" ]; then \
-		$(MFACTORY) upgrade --all $(if $(REF),--version $(REF)) $(if $(SOURCE),--source $(SOURCE)) $(ARGS); \
-	elif [ ! -e .factory/bin/mfactory ] && [ ! -e .factory/bin/factory ]; then \
-		echo "no .factory/ in this directory. This tree is the factory source."; \
-		echo "  global CLI:     make upgrade SELF=1 SOURCE=."; \
-		echo "  one project:    cd <project> && mfactory upgrade --source $(CURDIR)"; \
-		echo "  every project:  make upgrade ALL=1 SOURCE=."; \
-		exit 1; \
-	else \
-		$(MFACTORY) upgrade $(if $(REF),--version $(REF)) $(if $(SOURCE),--source $(SOURCE)) $(ARGS); \
-	fi
+upgrade: ## global CLI and every subscribed project. SELF=1 only the CLI. ALL=1 only projects. SOURCE=. uses this tree
+	$(MFACTORY) upgrade $(if $(SELF),--self) $(if $(ALL),--all) $(if $(REF),--version $(REF)) $(if $(SOURCE),--source $(SOURCE)) $(ARGS)
 
 uninstall: ## mfactory uninstall. CONFIG=1 LABELS=1
 	$(MFACTORY) uninstall $(if $(CONFIG),--config) $(if $(LABELS),--labels) $(ARGS)

@@ -16,12 +16,34 @@ from .. import config
 from .. import fleet as fleet_mod
 from .. import sync as syncer
 from ..install import fetch_release, layout, project_cli, upgrade
-from ..util import CORE, SOURCE_REPO, ConfigError, FactoryError, Refused, is_generated, run, version
+from ..util import (
+    CORE,
+    SOURCE_REPO,
+    ConfigError,
+    FactoryError,
+    Refused,
+    find_repo,
+    is_generated,
+    run,
+    user_dir,
+    version,
+)
 
 
 def global_home() -> Path | None:
     """The directory `install.sh --global` wrote, when this process is that copy."""
     home: Path = CORE.parent
+    if (home / ".global").is_file() and (home / "core" / "bin" / "mfactory").is_file():
+        return home
+    return None
+
+
+def global_install() -> Path | None:
+    """The global CLI tree: this process when it is that copy, otherwise the user directory."""
+    here: Path | None = global_home()
+    if here is not None:
+        return here
+    home: Path = user_dir()
     if (home / ".global").is_file() and (home / "core" / "bin" / "mfactory").is_file():
         return home
     return None
@@ -248,12 +270,12 @@ def uninstall(repo: Path, remove_config: bool = False, labels: bool = False,
 
 
 def upgrade_self(ref: str = "latest", source: str | None = None, say: Callable[[str], None] = print) -> None:
-    """Replace the global CLI tree. Refuses a project copy and a source checkout."""
-    home: Path | None = global_home()
+    """Replace the global CLI tree from `install.sh --global`."""
+    home: Path | None = global_install()
     if home is None:
-        raise Refused("this is not the global install. Inside a project, run `mfactory upgrade`. "
-                      "`mfactory upgrade --self` updates the CLI installed with `install.sh --global`.")
-    before: str = version()
+        raise Refused("no global install. `install.sh --global` installs mfactory for your user.")
+    installed_version: Path = home / "core" / "VERSION"
+    before: str = installed_version.read_text().strip() if installed_version.is_file() else version()
     with tempfile.TemporaryDirectory() as tmp:
         root: Path = Path(source).resolve() if source else fetch_release(ref, tmp)
         core, adapters, web, licence = layout(root)
@@ -306,5 +328,62 @@ def upgrade_all(ref: str = "latest", source: str | None = None, say: Callable[[s
             upgrade(project.path, ref, source, say=report)
         except FactoryError as error:
             say(f"{label}  FAIL  {error}")
+            failed += 1
+    return 1 if failed else 0
+
+
+def _installed_checkout() -> Path | None:
+    """The checkout you are in, when the factory is installed there."""
+    try:
+        repo: Path = find_repo()
+    except Refused:
+        return None
+    if project_cli(repo).is_file():
+        return repo
+    return None
+
+
+def _fleet() -> fleet_mod.Fleet | None:
+    """The fleet in effect. None when nobody has subscribed a project yet."""
+    try:
+        return fleet_mod.Fleet.find()
+    except Refused as error:
+        if str(error).startswith("no fleet"):
+            return None
+        raise
+
+
+def upgrade_everything(ref: str = "latest", source: str | None = None, say: Callable[[str], None] = print) -> int:
+    """Upgrade the global CLI, every subscribed project, and this checkout when it is not subscribed.
+
+    One failure does not stop the others. A missing global install or an empty fleet is reported
+    and the rest still runs.
+    """
+    home: Path | None = global_install()
+    group: fleet_mod.Fleet | None = _fleet()
+    projects: list[fleet_mod.Project] = group.projects if group is not None else []
+    checkout: Path | None = _installed_checkout()
+    covered: set[Path] = {project.path for project in projects}
+    extra: Path | None = None if checkout is None or checkout.resolve() in covered else checkout.resolve()
+    if home is None and not projects and extra is None:
+        raise Refused("nothing to upgrade. Install the factory in a project, or run `install.sh --global`.")
+    failed: int = 0
+    if home is None:
+        say("warn  no global install. `install.sh --global` installs mfactory for your user.")
+    else:
+        try:
+            upgrade_self(ref, source, say)
+        except FactoryError as error:
+            say(f"FAIL  {error}")
+            failed += 1
+    if projects:
+        failed += upgrade_all(ref, source, say)
+    else:
+        say("no subscribed projects. Run `mfactory fleet subscribe` inside a project.")
+    if extra is not None:
+        try:
+            upgrade(extra, ref, source, say)
+        except FactoryError as error:
+            say(f"FAIL  {error}")
             failed += 1
     return 1 if failed else 0

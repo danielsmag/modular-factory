@@ -8,6 +8,7 @@ import sys
 import threading
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import pytest
 from conftest import ROOT, git
@@ -351,6 +352,37 @@ def test_the_dashboard_script_parses(tmp_path):
     (tmp_path / "page.js").write_text(script)
     result = subprocess.run(["node", "--check", str(tmp_path / "page.js")], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_upgrade_updates_the_global_cli_and_every_subscribed_project(world):
+    installed = world.cli("install", "--tool", "cursor")
+    assert installed.returncode == 0, installed.stderr
+    other: Path = world.tmp / "other"
+    shutil.copytree(world.repo, other)
+    for repo in (world.repo, other):
+        subscribed = world.cli("fleet", "subscribe", repo)
+        assert subscribed.returncode == 0, subscribed.stderr
+        (repo / ".factory" / "VERSION").write_text("0.0.0\n")
+    home: Path = Path(os.environ["FACTORY_HOME"])
+    (home / "core" / "bin").mkdir(parents=True)
+    (home / "core" / "bin" / "mfactory").write_text("")
+    (home / "core" / "VERSION").write_text("0.0.0\n")
+    (home / ".global").write_text(f"{home}\n")
+    result = world.cli("upgrade", "--source", str(ROOT), cwd=world.tmp)
+    assert result.returncode == 0, result.stderr + result.stdout
+    expected: str = (ROOT / "core" / "VERSION").read_text().strip()
+    assert (home / "core" / "VERSION").read_text().strip() == expected
+    assert (world.repo / ".factory" / "VERSION").read_text().strip() == expected
+    assert (other / ".factory" / "VERSION").read_text().strip() == expected
+    assert "global install 0.0.0 ->" in result.stdout
+    assert str(world.repo.resolve()) in (home / "fleet.toml").read_text()
+    assert str(other.resolve()) in (home / "fleet.toml").read_text()
+
+
+def test_upgrade_with_nothing_installed_refuses(world):
+    result = world.cli("upgrade", "--source", str(ROOT), cwd=world.tmp)
+    assert result.returncode == 1
+    assert "nothing to upgrade" in result.stderr
 
 
 def test_install_is_another_name_for_init(bare):

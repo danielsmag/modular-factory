@@ -16,7 +16,7 @@ from ..fleet import service as fleet_http
 from ..fleet.command import fleet_command
 from ..store import Store
 from ..util import ConfigError, FactoryError, Refused, find_repo, version
-from .maintain import status, status_all, uninstall, upgrade_all, upgrade_self
+from .maintain import status, status_all, uninstall, upgrade_all, upgrade_everything, upgrade_self
 from .parser import parser
 
 
@@ -84,13 +84,13 @@ def run(args: argparse.Namespace) -> int:
         repo = find_repo(os.environ.get("CLAUDE_PROJECT_DIR"))
         cfg = config.load(repo)
         return checks.hook(cfg, Store(cfg))
-    if command == "upgrade" and args.self and args.all:
-        raise Refused("pass either --self or --all")
-    if command == "upgrade" and args.self:
+    if command == "upgrade" and args.self and not args.all:
         upgrade_self(args.ref, args.source)
         return 0
-    if command == "upgrade" and args.all:
+    if command == "upgrade" and args.all and not args.self:
         return upgrade_all(args.ref, args.source)
+    if command == "upgrade":
+        return upgrade_everything(args.ref, args.source)
     if command == "status" and (args.all or not _inside_repo()):
         return status_all()
     if command == "dashboard" and (args.all or _project_repo() is None):
@@ -101,9 +101,6 @@ def run(args: argparse.Namespace) -> int:
     repo = find_repo()
     if command in ("init", "install"):
         install.init(repo, args.tool)
-        return 0
-    if command == "upgrade":
-        install.upgrade(repo, args.ref, args.source)
         return 0
     if command == "uninstall":
         uninstall(repo, remove_config=args.config, labels=args.labels)
