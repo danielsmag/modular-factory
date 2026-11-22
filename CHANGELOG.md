@@ -6,6 +6,10 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.3.0
+
+- feat(dashboard): add an overview.
+
 ## 0.2.5
 
 - test: drop install tests pinned to 0.2.1.
