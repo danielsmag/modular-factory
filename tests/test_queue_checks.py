@@ -114,13 +114,18 @@ def test_no_commands_means_nothing_passes(world):
     assert "[checks].commands in factory.toml is empty" in (world.dir(job) / "round-1" / "checks.log").read_text()
 
 
-@pytest.mark.parametrize("path", [
-    "factory.toml", ".factory/roles/build.md", ".claude/agents/mfactory-approve.md",
-    ".cursor/agents/mfactory-build.md", ".codex/agents/mfactory-build.toml", ".agents/skills/mfactory/SKILL.md"])
-def test_a_job_cannot_change_the_factory_that_judges_it(world, path):
+def test_a_job_cannot_change_the_factory_that_judges_it(world):
+    paths = (
+        "factory.toml", ".factory/roles/build.md", ".claude/agents/mfactory-approve.md",
+        ".cursor/agents/mfactory-build.md", ".codex/agents/mfactory-build.toml",
+        ".agents/skills/mfactory/SKILL.md",
+    )
     job = world.start(until="build")
-    verdict, report = gate(world, job, {path: "mine now\n"})
-    assert verdict == "FAIL" and f"- {'M' if path == 'factory.toml' else 'A'} {path}" in report
+    verdict, report = gate(world, job, {path: "mine now\n" for path in paths})
+    assert verdict == "FAIL"
+    assert "- M factory.toml" in report
+    for path in paths[1:]:
+        assert f"- A {path}" in report
 
 
 def test_project_protected_paths_may_gain_files_but_not_lose_or_change_them(world):

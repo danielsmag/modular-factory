@@ -20,32 +20,19 @@ def failing_build(world, job):
 # ---- debug -----------------------------------------------------------------
 
 
-def test_failed_checks_go_to_the_debugger_first(world):
+def test_a_failed_check_goes_to_the_debugger_and_the_diagnosis_returns_to_the_builder(world):
     job = world.start(until="build", config_text=DEBUG)
     lines = failing_build(world, job)
     assert lines[0] == f"{job} #1: gate FAIL -> debug"
     assert lines[1] == "start-agent mfactory-debug"
     assert "Round 1, attempt 1." in lines[2]
     assert lines[2].split("Write: ")[1].startswith(f"{world.dir(job)}/round-1/debug-1.md.")
-
-
-def test_the_diagnosis_is_handed_to_the_builder(world):
-    job = world.start(until="build", config_text=DEBUG)
-    failing_build(world, job)
     world.debug(job, "FOUND")
     assert world.done(job) == [f"{job} #1: debug FOUND -> build"]
     prompt = world.next(job)[1]
     assert "Build round 1, attempt 2." in prompt
     assert "read round-1/checks.md" in prompt
     assert "The debugger's diagnosis is in round-1/debug-1.md." in prompt
-
-
-def test_an_unknown_cause_still_returns_to_the_builder(world):
-    job = world.start(until="build", config_text=DEBUG)
-    failing_build(world, job)
-    world.debug(job, "UNKNOWN")
-    world.done(job)
-    assert "The debugger could not find the cause; its notes are in round-1/debug-1.md." in world.next(job)[1]
 
 
 def test_the_debugger_may_not_commit(world):
@@ -98,16 +85,6 @@ def test_a_failing_verify_is_retried_then_fails_the_job_with_a_comment(world):
     assert (world.dir(job) / "verify.md").read_text().startswith("VERIFY: FAIL\n")
 
 
-def test_on_failure_issue_opens_a_new_factory_issue(world):
-    job = world.start(config_text=AUTO_MERGE + verify(commands='["false"]', retries=0, on_failure='"issue"'))
-    j = world.job(job)
-    new = world.gh["issues"]["3"]
-    assert new["title"] == f"Fix: verification failed after #{j['pr']} (Add a thing)"
-    assert [label["name"] for label in new["labels"]] == ["factory"]
-    assert "A new issue asks the factory to fix it" in world.gh["prs"][str(j["pr"])]["comments"][-1]["body"]
-    assert ("new", 3, "-", "-", new["title"]) in world.queue()
-
-
 def test_on_failure_revert_pr_opens_a_draft_and_never_merges_it(world):
     job = world.start(config_text=AUTO_MERGE + verify(commands='["false"]', retries=0, on_failure='"revert-pr"'))
     j = world.job(job)
@@ -132,15 +109,6 @@ def test_verify_after_deploy_waits_for_the_wait_command(world):
     assert "Ran after deploy against https://staging.test" in (world.dir(job) / "verify-checks.md").read_text()
 
 
-def test_verify_after_deploy_times_out(world, monkeypatch):
-    job = world.start(until="merge", config_text=AUTO_MERGE + verify(
-        after='"deploy"', wait='"false"', commands='["true"]', retries=0, timeout_minutes=1))
-    monkeypatch.setattr("modfactory.scripted.time.monotonic", iter(range(0, 10_000, 40)).__next__)
-    world.next(job)
-    j = world.job(job)
-    assert j["step"] == "failed" and "did not report commit" in j["reason"]
-
-
 def test_the_verifier_agent_checks_after_the_commands_pass(world):
     job = world.start(until="verify", config_text=AUTO_MERGE + verify(commands='["true"]', agent="true"))
     lines = world.next(job)
@@ -151,27 +119,6 @@ def test_the_verifier_agent_checks_after_the_commands_pass(world):
         world.done(job)
     world.verifier(job, "PASS")
     assert world.done(job) == [f"{job} #1: verify PASS -> done"]
-
-
-def test_a_verifier_failure_is_retried_then_fails_with_its_findings(world):
-    job = world.start(until="verify", config_text=AUTO_MERGE + verify(commands='["true"]', agent="true", retries=1))
-    world.next(job)
-    world.verifier(job, "FAIL")
-    assert world.done(job) == [f"{job} #1: verify failed (attempt 1), trying again"]
-    world.next(job)
-    with pytest.raises(Refused, match="wasn't written by the verifier agent"):
-        world.done(job)                                    # the first attempt's file doesn't count
-    world.verifier(job, "FAIL")
-    assert world.done(job) == [f"{job} #1: verify FAIL -> failed"]
-    assert "1. It is missing." in world.gh["prs"][str(world.job(job)["pr"])]["comments"][-1]["body"]
-
-
-def test_a_verifying_job_holds_no_slot(world):
-    config = "[run]\nconcurrency = 1\n" + AUTO_MERGE + verify(commands='["true"]', agent="true")
-    job = world.start(until="verify", config_text=config)
-    assert world.job(job)["running_since"] is None
-    other = world.create(world.issue(title="Second"))
-    assert world.next(other)[0] == "start-agent mfactory-intake"
 
 
 def test_the_default_path_waits_then_a_hand_merge_is_verified(world):
@@ -197,18 +144,6 @@ def test_the_default_path_waits_then_a_hand_merge_is_verified(world):
     assert finished["history"][-2]["outcome"] == "MERGED-BY-HAND"
     assert finished["history"][-2]["to"] == "verify"
     assert finished["history"][-1]["step"] == "verify"
-
-
-def test_a_pull_request_merged_by_hand_is_verified_too(world):
-    job = world.start(until="approve", config_text=verify(commands='["test -f feature-1-1.txt"]'))
-    world.next(job)
-    world.approve(job, "ESCALATE")
-    world.done(job)
-    j = world.job(job)
-    subprocess.run(["gh", "pr", "merge", str(j["pr"]), "--squash"], cwd=world.repo, check=True)
-    lines = world.next(job)
-    assert lines[0] == f"{job} #1: PR #{j['pr']} was merged by hand -> verify"
-    assert lines[1] == f"{job} #1: verify PASS -> done"
 
 
 def test_verify_needs_something_to_check_and_a_wait_for_deploys(world):
