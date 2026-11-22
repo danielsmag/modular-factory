@@ -343,7 +343,8 @@ enabled = true
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `who` | `"maintainer"` | Who may reply. `author`: the issue's author. `maintainer`: anyone with write access to the repository. |
+| `who` | `"maintainer"` | Who may reply on GitHub. `author`: the issue's author (the operator may also reply). `maintainer`: anyone with write access. `operator`: only the signed-in user running the factory. A list of logins, such as `["ada", "grace"]`: only those accounts. The operator is not added to the list. |
+| `replies` | `"any"` | `any`: a GitHub comment from someone `who` allows, or `mfactory answer`. `tool`: ignore GitHub comments. Only `mfactory answer` counts. |
 | `ask` | | The heading of the comment. |
 | `shows` | | A file from the job folder to include in the comment, such as `spec.md`. |
 | `pr_ready` | `false` | Mark the draft pull request ready for review when asking. The comment then says that merging the pull request continues the job. |
@@ -362,6 +363,10 @@ or with a comment on the issue or pull request, without the number:
 /mfactory changes Use the existing Money type instead of a new one.
 ```
 
+`mfactory answer` is the person running the factory. `who` does not filter it.
+With `replies = "tool"`, the question says a comment does not count, and the
+commands in it include the issue number.
+
 The word after `/mfactory` is the outcome's name in lower case, so a step with
 `on = { SHIP = "merge", HOLD = "build" }` takes `/mfactory ship` and
 `/mfactory hold <what to change>`.
@@ -371,7 +376,7 @@ The word after `/mfactory` is the outcome's name in lower case, so a step with
 - `REJECT` ends the job as `rejected`. It needs a reason.
 - On a step with an `ANSWER` outcome, such as `ask-author`, any comment from
   the author counts as the answer.
-- Comments from anyone else are ignored.
+- Comments from anyone else are ignored. With `replies = "tool"`, every comment is ignored.
 - Merging the job's pull request by hand continues the job from the merge
   step's `MERGED` edge, including when that step is off. On the default path
   this does not sync the base branch or run the checks again.
@@ -564,7 +569,7 @@ step = 10
 | --- | --- |
 | `[labels] queue` | Issues with this label are built. |
 | `[labels] needs_info` | Put on an issue while its author is being asked. |
-| `[labels] needs_human` | Put on an issue while a maintainer is being asked. |
+| `[labels] needs_human` | Put on an issue while a maintainer, the operator, or a named login is being asked. |
 | `[paths] worktrees` | Where each job's worktree goes, relative to the repository. Keep it ignored by git. |
 | `[paths] protected` | Patterns of files no job may change or delete. `*` also matches `/`. A job may add new files that match. |
 | `[ports] base`, `step` | Job number `n` gets ports from `base + step * (n % 100)`, so dev servers of parallel jobs do not collide. |

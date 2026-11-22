@@ -10,12 +10,43 @@ NEEDS_TEXT = {"CHANGES", "FEEDBACK", "REJECT", "ANSWER"}
 COMMENT_LIMIT = 60000
 
 
+def audience(who: str | list[str], author: str, operator: str) -> str:
+    """Who a human step is waiting for, as a sentence fragment."""
+    if who == "author":
+        return f"the author (@{author})"
+    if who == "operator":
+        return f"the operator (@{operator})"
+    if isinstance(who, list):
+        names: list[str] = [f"@{login}" for login in who]
+        if len(names) == 1:
+            return names[0]
+        if len(names) == 2:
+            return f"{names[0]} or {names[1]}"
+        return ", ".join(names[:-1]) + ", or " + names[-1]
+    return "a maintainer"
+
+
+def ask_title(who: str | list[str], asked: str) -> str:
+    """The comment heading when the step does not set `ask`."""
+    if asked:
+        return asked
+    if who == "author":
+        return "this job needs an answer from its author"
+    if who == "operator":
+        return "this job needs the operator"
+    if isinstance(who, list):
+        return "this job needs " + audience(who, "", "")
+    return "this job needs a maintainer"
+
+
 class Humans:
     # ---- Asking ------------------------------------------------------------
 
     def _who(self, job):
         waiting = job["waiting"]
-        return f"the author (@{job['author']})" if waiting["who"] == "author" else "a maintainer"
+        who: str | list[str] = waiting["who"]
+        operator: str = self.gh.operator() if who == "operator" else ""
+        return audience(who, job["author"], operator)
 
     def _commands(self, job, step, slash=True):
         rows = []
@@ -27,23 +58,31 @@ class Humans:
 
     def _ask(self, job, name, step):
         """Post the question where the person will see it, label the issue, and park the job."""
-        who = step.get("who", "maintainer")
+        who: str | list[str] = step.get("who", "maintainer")
         labels = self.cfg["labels"]
         label = labels["needs_info"] if who == "author" else labels["needs_human"]
         kind, number = ("pr", job["pr"]) if job["pr"] and not job["merge_sha"] else ("issue", job["issue"])
+        tool_only: bool = step.get("replies") == "tool"
+        operator: str = self.gh.operator() if who == "operator" else ""
 
-        title = step.get("ask") or ("this job needs an answer from its author" if who == "author"
-                                    else "this job needs a maintainer")
+        title: str = ask_title(who, step.get("ask") or "")
         parts = [f"### Factory: {title}", f"Step `{name}` of job `{job['id']}`."]
+        if who == "operator" or isinstance(who, list):
+            parts.append(f"Waiting for {audience(who, job['author'], operator)}.")
         if job.get("reason"):
             parts.append(job["reason"])
         shows = step.get("shows") or job.get("last_file")
         if shows and (self.dir(job) / shows).exists():
             parts.append(f"**{shows}**\n\n{body(self.dir(job) / shows)}")
-        how = [f"To reply, comment on this {'pull request' if kind == 'pr' else 'issue'}:"]
-        how += [f"- {c}" for c in self._commands(job, step, slash=False)]
-        if "ANSWER" in step["on"]:
-            how.append("- or answer in plain words")
+        how: list[str]
+        if tool_only:
+            how = ["Reply in your coding tool. A comment here does not count:"]
+            how += [f"- {c}" for c in self._commands(job, step, slash=True)]
+        else:
+            how = [f"To reply, comment on this {'pull request' if kind == 'pr' else 'issue'}:"]
+            how += [f"- {c}" for c in self._commands(job, step, slash=False)]
+            if "ANSWER" in step["on"]:
+                how.append("- or answer in plain words")
         if kind == "pr" and name == self.cfg["run"]["escalate_to"]:
             how.append("- or merge this pull request to approve it as it is")
         elif kind == "pr" and step.get("pr_ready"):
@@ -54,7 +93,12 @@ class Humans:
             self.gh.call("pr", "ready", job["pr"])
         self.gh.comment(kind, number, text)
         self.gh.label(job["issue"], add=label)
-        job["waiting"] = {"step": name, "who": who, "label": label, "since": now(), "asked_on": kind}
+        waiting: dict[str, object] = {"step": name, "who": who, "label": label, "since": now(), "asked_on": kind}
+        if who == "operator":
+            waiting["operator"] = operator
+        if tool_only:
+            waiting["replies"] = "tool"
+        job["waiting"] = waiting
 
     def _waiting_line(self, job, name, step):
         return (f"wait {self.tag(job)}: {name} is waiting for {self._who(job)}. "
@@ -63,16 +107,23 @@ class Humans:
     # ---- Reading replies ---------------------------------------------------
 
     def _may_reply(self, job, step, login):
-        if step.get("who", "maintainer") == "author":
+        who: str | list[str] = step.get("who", "maintainer")
+        if who == "author":
             return login == job["author"] or login == self.gh.operator()
+        if who == "operator":
+            return login == self.gh.operator()
+        if isinstance(who, list):
+            return login in who
         return self.gh.can_write(login)
 
     def _find_reply(self, job, step):
         """The first comment after the factory's last one that answers this step, or None.
 
         `/mfactory <outcome> [text]` picks an outcome. A `/factory` comment still counts. On a step with an ANSWER
-        outcome, any other comment from an allowed person is the answer.
+        outcome, any other comment from an allowed person is the answer. `replies = "tool"` ignores comments.
         """
+        if step.get("replies") == "tool":
+            return None
         threads = [("issue", job["issue"])]
         if job["pr"] and not job["merge_sha"]:
             threads.append(("pr", job["pr"]))

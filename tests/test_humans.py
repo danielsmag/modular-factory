@@ -1,7 +1,7 @@
 """Human steps: asking, waiting, and replies from the CLI and from GitHub comments."""
 
 import pytest
-from modfactory.util import MARKER, Refused
+from modfactory.util import MARKER, ConfigError, Refused
 
 SPEC_APPROVAL = "[steps.spec-approval]\nenabled = true\n"
 
@@ -152,6 +152,62 @@ def test_a_blocked_build_before_any_spec_change_returns_to_the_builder(world):
     assert "The builder could not finish this job" in asked and "Needs a decision." in asked
     world.answer(job, "feedback", "Use option A.")
     assert world.job(job)["step"] == "build"
+
+
+def test_only_the_operator_may_comment_when_who_is_operator(world):
+    job = world.start(until="spec-approval", config_text=SPEC_APPROVAL + 'who = "operator"\n')
+    assert world.job(job)["waiting"]["operator"] == "operator"
+    assert "Waiting for the operator (@operator)." in world.comments(1)[-1]
+    assert "factory:needs-human" in world.labels(1)
+    world.comment(1, "/mfactory approve", "maintainer")
+    assert world.next(job)[0].startswith("wait ")
+    assert "waiting for the operator (@operator)" in world.next(job)[0]
+    assert world.queue() == [("wait", 1, job, "spec-approval", "waiting for the operator (@operator)")]
+    world.comment(1, "/mfactory approve", "operator")
+    assert world.next(job)[0] == f"{job} #1: spec-approval APPROVE -> build"
+
+
+def test_a_named_login_ignores_other_writers_and_the_operator(world):
+    job = world.start(until="spec-approval", config_text=SPEC_APPROVAL + 'who = ["maintainer"]\n')
+    world.comment(1, "/mfactory approve", "operator")
+    waited = world.next(job)[0]
+    assert waited.startswith("wait ") and "waiting for @maintainer" in waited
+    assert world.queue() == [("wait", 1, job, "spec-approval", "waiting for @maintainer")]
+    world.comment(1, "/mfactory approve", "maintainer")
+    assert world.next(job)[0] == f"{job} #1: spec-approval APPROVE -> build"
+
+
+def test_either_named_login_can_reply(world):
+    text = SPEC_APPROVAL + 'who = ["alice", "maintainer"]\n'
+    first = world.start(until="spec-approval", config_text=text)
+    assert "@alice or @maintainer" in world.next(first)[0]
+    world.comment(1, "/mfactory approve", "alice")
+    assert world.next(first)[0] == f"{first} #1: spec-approval APPROVE -> build"
+    second = world.start(until="spec-approval", config_text=text, title="Other")
+    world.comment(2, "/mfactory approve", "maintainer")
+    assert world.next(second)[0] == f"{second} #2: spec-approval APPROVE -> build"
+
+
+def test_the_operator_can_answer_a_named_step_from_the_tool(world):
+    job = world.start(until="spec-approval", config_text=SPEC_APPROVAL + 'who = ["alice"]\n')
+    assert world.answer(job, "approve") == [f"{job} #1: spec-approval APPROVE -> build"]
+
+
+def test_replies_tool_ignores_comments(world):
+    job = world.start(until="spec-approval", config_text=SPEC_APPROVAL + 'replies = "tool"\n')
+    asked = world.comments(1)[-1]
+    assert "A comment here does not count" in asked
+    assert "- /mfactory approve 1" in asked
+    world.comment(1, "/mfactory approve", "maintainer")
+    assert world.next(job)[0].startswith("wait ")
+    assert world.answer(job, "approve") == [f"{job} #1: spec-approval APPROVE -> build"]
+
+
+def test_who_must_name_a_role_or_logins(world):
+    for text in ('who = "admin"\n', "who = []\n", 'who = ["-x"]\n', 'replies = "email"\n'):
+        world.configure(SPEC_APPROVAL + text)
+        with pytest.raises(ConfigError, match=r"\[steps.spec-approval\]\.(who|replies)"):
+            world.factory()
 
 
 def test_a_custom_human_step_is_only_configuration(world):

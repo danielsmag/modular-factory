@@ -6,6 +6,7 @@ from typing import Any, Protocol
 from . import graph
 from .config import Config
 from .service import GitHub
+from .service.human import audience
 from .store import Store
 from .util import Refused, now, parse_time
 
@@ -103,8 +104,10 @@ class Queue:
                 if self._find_reply(j, step):
                     replied.append(("resume", n, j["id"], name, "a reply is waiting"))
                 else:
-                    who = "the author" if step.get("who") == "author" else "a maintainer"
-                    waiting.append(("wait", n, j["id"], name, f"waiting for {who}"))
+                    who_value: str | list[str] = step.get("who", "maintainer")
+                    operator_login: str = self.gh.operator() if who_value == "operator" else ""
+                    who_phrase: str = audience(who_value, j["author"], operator_login)
+                    waiting.append(("wait", n, j["id"], name, f"waiting for {who_phrase}"))
             elif step["type"] == "verify":
                 rows.append(("resume", n, j["id"], name, "validating after " + step["after"]))
             elif n not in open_numbers and not j["pr"]:

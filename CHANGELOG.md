@@ -6,6 +6,7 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- A human step can limit GitHub replies to the operator (`who = "operator"`) or to named logins (`who = ["login-a", "login-b"]`). `replies = "tool"` ignores comments and accepts only `mfactory answer`. `author` and `maintainer` are unchanged. Schema stays 1.
 - `[project] pr_title` and `[project] pr_title_pattern` set the pull request title. The builder and intake are told the format. `done` refuses a READY build whose title does not match the pattern. Empty means the spec title and no check. Schema stays 1.
 - The dashboard has an Overview tab, between Jobs and Config: running slots, merged jobs with a steady-pace line, cost or time by step, and the job table. Board stays the jobs-by-step view.
 - A merge to `master` whose pull request title starts with a conventional prefix (`feat`, `fix`, `hotfix`, and the other usual types) publishes the next `vX.Y.Z` tag and GitHub release after CI passes. The release commit updates `core/VERSION` and this file.
