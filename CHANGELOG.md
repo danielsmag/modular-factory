@@ -6,6 +6,10 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.2.3
+
+- fix: pass the GitHub token to the release job.
+
 ## 0.2.2
 
 - A human step can limit GitHub replies to the operator (`who = "operator"`) or to named logins (`who = ["login-a", "login-b"]`). `replies = "tool"` ignores comments and accepts only `mfactory answer`. `author` and `maintainer` are unchanged. Schema stays 1.
