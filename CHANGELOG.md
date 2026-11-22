@@ -6,6 +6,9 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- `[project] pr_title` and `[project] pr_title_pattern` set the pull request title. The builder and intake are told the format. `done` refuses a READY build whose title does not match the pattern. Empty means the spec title and no check. Schema stays 1.
+- The docs are easier to read: larger type, more space, and a little color in headings, code, and the welcome cards. The README links to the docs at the top.
+
 ## 0.2.1
 
 - A docs site at <https://danielsmag.github.io/modular-factory/docs/>, in the dashboard's look: sidebar, search, and a page for each guide. The dashboard's DOCS button opens it.

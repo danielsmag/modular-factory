@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="docs.css">
 </head>
 <body data-page="welcome">
-<article class="doc" id="doc">
+<article class="doc home" id="doc">
   <h1>factory</h1>
   <p class="lede">A software factory you install into any repository. You label a GitHub issue. Agents decide whether it is worth building, write a spec, build it on a branch, and review it. By default a maintainer merges the pull request.</p>
   <p>It runs inside the coding tool you already use: Claude Code, Cursor, or Codex. Everything a project changes lives in one file, <code>factory.toml</code>.</p>
@@ -24,14 +24,14 @@ mfactory install --tool claude</code></pre>
   <p>Use <code>--tool cursor</code> or <code>--tool codex</code> instead, or repeat <code>--tool</code> for several. Then, in the coding tool, <code>/mfactory setup</code>. The <a href="install.html">install guide</a> has each step, and what to do when <code>mfactory doctor</code> reports a problem.</p>
 
   <h2 id="why-a-factory">Why a factory</h2>
-  <ul>
-    <li><strong>One file.</strong> Steps, checks, models, reviewers, and skills are <code>factory.toml</code>, merged key by key over the defaults. A mistake names the key.</li>
-    <li><strong>The pipeline is data.</strong> No prompt describes the graph. Changing an edge changes no prompt. The <a href="concepts.html">orchestrator</a> works the same for any graph.</li>
-    <li><strong>The script decides.</strong> Which step a job is in, where an outcome leads, whether a limit is reached, whether the checks pass, when to merge. Agents write the content of one step.</li>
-    <li><strong>Three tools, one set of prompts.</strong> <code>mfactory sync</code> writes each tool's agent files from the same roles. See <a href="tools.html">Tools</a>.</li>
-    <li><strong>Nothing added to the project.</strong> Python's standard library, <code>git</code>, and the GitHub CLI. No package to pin.</li>
-    <li><strong>The label is the trust boundary.</strong> Only issues with the <code>factory</code> label run. Adding a label needs triage or write access. See <a href="guards.html">Guards</a>.</li>
-  </ul>
+  <div class="why">
+    <a href="configuration.html"><strong>One file</strong><span>Steps, checks, models, reviewers, and skills live in <code>factory.toml</code>. A mistake names the key.</span></a>
+    <a href="concepts.html"><strong>The pipeline is data</strong><span>No prompt describes the graph. Changing an edge changes no prompt.</span></a>
+    <a href="concepts.html#three-parts"><strong>The script decides</strong><span>Step, edge, limit, checks, merge. Agents write one step.</span></a>
+    <a href="tools.html"><strong>Three tools</strong><span>Claude Code, Cursor, and Codex. One set of prompts. <code>mfactory sync</code> writes each tool's files.</span></a>
+    <a href="install.html#what-you-need"><strong>Nothing to pin</strong><span>Python's standard library, <code>git</code>, and the GitHub CLI. No package added to the project.</span></a>
+    <a href="guards.html"><strong>The label is the gate</strong><span>Only issues with the <code>factory</code> label run. Adding a label needs triage or write access.</span></a>
+  </div>
 
   <h2 id="one-job-two-commands">One job, two commands</h2>
   <p>The orchestrator repeats two commands. It does not choose the next step.</p>

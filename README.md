@@ -1,5 +1,7 @@
 # modular-factory
 
+**[Documentation](https://danielsmag.github.io/modular-factory/docs/)**
+
 A software factory you install into any repository. You label a GitHub issue;
 agents decide whether it is worth building, write a spec, build it on a branch
 and review it. By default a maintainer merges the pull request. A project can
@@ -212,7 +214,7 @@ Run them as `.factory/bin/mfactory <command>` from anywhere in the repository.
 
 ## Documentation
 
-The docs site is <https://danielsmag.github.io/modular-factory/docs/>: sidebar,
+**[Read the docs](https://danielsmag.github.io/modular-factory/docs/).** Sidebar,
 search, and a page for each guide, in the same look as the dashboard. The same
 material is in the repository:
 
