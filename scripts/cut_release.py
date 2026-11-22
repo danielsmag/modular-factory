@@ -38,6 +38,7 @@ from release_version import (  # noqa: E402
 _WORKFLOW: str = ".github/workflows/release.yml"
 _BOT_NAME: str = "github-actions[bot]"
 _BOT_EMAIL: str = "41898282+github-actions[bot]@users.noreply.github.com"
+_GH_TRANSIENT: tuple[str, ...] = ("HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504")
 
 
 @dataclass(frozen=True)
@@ -60,22 +61,33 @@ class CommandRunner:
         check: bool = True,
         env: dict[str, str] | None = None,
     ) -> CommandResult:
-        completed: subprocess.CompletedProcess[str] = subprocess.run(
-            args,
-            cwd=self._root,
-            check=False,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-        result: CommandResult = CommandResult(
-            code=completed.returncode,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-        )
-        if check and result.code != 0:
+        attempts: int = 4 if args and args[0] == "gh" else 1
+        result: CommandResult = CommandResult(code=1, stdout="", stderr="")
+        for attempt in range(attempts):
+            completed: subprocess.CompletedProcess[str] = subprocess.run(
+                args,
+                cwd=self._root,
+                check=False,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            result = CommandResult(
+                code=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+            if result.code == 0:
+                return result
             detail: str = result.stderr.strip() or result.stdout.strip()
-            raise ReleaseError(f"{args[0]} failed ({result.code}): {detail}")
+            transient: bool = any(token in detail for token in _GH_TRANSIENT)
+            if transient and attempt + 1 < attempts:
+                time.sleep(2 * (attempt + 1))
+                continue
+            if check:
+                shown: str = " ".join(args[:4])
+                raise ReleaseError(f"{shown} failed ({result.code}): {detail}")
+            return result
         return result
 
 
@@ -347,7 +359,7 @@ class GitHubRepository:
                     "--target",
                     sha,
                     "--title",
-                    tag,
+                    str(version),
                     "--notes-file",
                     notes_path,
                 ]
