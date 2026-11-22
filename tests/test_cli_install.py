@@ -276,7 +276,7 @@ def test_upgrade_replaces_the_core_and_leaves_factory_toml_and_jobs(world):
     res = subprocess.run([str(cli), "upgrade", "--source", str(newer(world))], cwd=world.repo,
                          capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
-    assert "ok    .factory/ 0.2.0 -> 9.9.9" in res.stdout
+    assert "ok    .factory/ 0.2.1 -> 9.9.9" in res.stdout
     assert installed(world).stdout.strip() == "9.9.9"
     assert "New in this version." in (world.repo / ".factory/roles/build.md").read_text()
     assert (world.repo / ".factory/web/dashboard.html").is_file()
@@ -291,7 +291,7 @@ def test_upgrade_refuses_a_schema_it_cannot_migrate(world):
                          capture_output=True, text=True)
     assert res.returncode == 1
     assert "version 9.9.9 reads schema 2, and factory.toml is schema 1" in res.stderr
-    assert installed(world).stdout.strip() == "0.2.0"
+    assert installed(world).stdout.strip() == "0.2.1"
 
 
 # ---- dashboard server ------------------------------------------------------
@@ -408,7 +408,7 @@ def test_status_reports_version_tools_and_stale_files(world):
     world.cli("init")
     fresh = world.cli("status")
     assert fresh.returncode == 0, fresh.stderr
-    assert "project 0.2.0" in fresh.stdout
+    assert "project 0.2.1" in fresh.stdout
     assert "sync    up to date" in fresh.stdout
     (world.repo / ".claude/agents/mfactory-build.md").write_text("hand edit\n")
     stale = world.cli("status")
@@ -468,7 +468,7 @@ def test_upgrade_self_refuses_a_project_and_replaces_a_global_tree(world, tmp_pa
     res = subprocess.run([sys.executable, str(home / "core/bin/mfactory"), "upgrade", "--self",
                           "--source", str(newer(world))], capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
-    assert "0.2.0 -> 9.9.9" in res.stdout
+    assert "0.2.1 -> 9.9.9" in res.stdout
     assert (home / "core/VERSION").read_text().strip() == "9.9.9"
     assert (home / ".global").is_file()
 
@@ -485,6 +485,6 @@ def test_upgrade_all_reports_a_failure_and_still_upgrades_the_rest(world, tmp_pa
     group.save()
     res = world.cli("upgrade", "--all", "--source", str(newer(world, version="8.8.8")))
     assert res.returncode == 1, res.stderr
-    assert "0.2.0 -> 8.8.8" in res.stdout
+    assert "0.2.1 -> 8.8.8" in res.stdout
     assert "FAIL" in res.stdout
     assert (world.repo / ".factory/VERSION").read_text().strip() == "8.8.8"

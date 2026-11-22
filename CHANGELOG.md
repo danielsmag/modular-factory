@@ -6,6 +6,10 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.2.1
+
+- A docs site at <https://danielsmag.github.io/modular-factory/docs/>, in the dashboard's look: sidebar, search, and a page for each guide. The dashboard's DOCS button opens it.
+
 ## 0.2.0
 
 The factory no longer merges by default. After approval it marks the pull

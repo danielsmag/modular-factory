@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>factory.toml · factory</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body data-page="configuration">
+<article class="doc" id="doc">
+  <h1>factory.toml</h1>
+  <p class="lede"><code>factory.toml</code>, at the root of the repository, is the only file you edit. It holds what your project changes. Everything else comes from <code>.factory/defaults.toml</code> and from each tool's adapter in <code>.factory/adapters/</code>.</p>
+
+  <h2 id="how-values-merge">How values merge</h2>
+  <p>The files merge key by key. To change one value you write only that value:</p>
+  <pre data-lang="toml"><code>[steps.review]
+on = { CHANGES = { max = 3 } }   # the other edge, and its target, stay as they are</code></pre>
+  <p>After a change, <code>mfactory sync</code> rewrites the generated agent files and <code>mfactory doctor</code> checks the result. To see what is in effect:</p>
+  <pre data-lang="bash"><code>.factory/bin/mfactory config show   # every setting and which file set it
+.factory/bin/mfactory graph         # the pipeline
+.factory/bin/mfactory models        # model and effort of every agent, per tool
+.factory/bin/mfactory skills        # the project's skills and who reads them</code></pre>
+  <p>A mistake is reported with the key to fix, and nothing runs until it is fixed:</p>
+  <pre data-lang="text"><code>mfactory: factory.toml has 2 problem(s):
+  - [steps.review].on.CHANGES points at unknown step "biuld". Steps: intake, ask-author, spec, ...; end states: done, failed, rejected
+  - [models.claude].build.effort = "extreme" is not an effort level claude documents. Known: low, medium, high, xhigh, max</code></pre>
+  <p><code>schema</code> is the version of this file's format. <code>mfactory upgrade</code> refuses a release that needs another. It is <code>1</code> today. Behavior of who merges changed in 0.2.0 without a schema change. See <a href="pipeline.html#who-merges">who merges</a>.</p>
+
+  <h2 id="project-tools-and-run">Project, tools and run</h2>
+  <pre data-lang="toml"><code>schema = 1
+
+[project]
+description = "Invoicing app for small clinics. Not a general accounting tool."
+base_branch = "main"
+merge_method = "squash"
+
+[tools]
+enabled = ["claude", "cursor"]
+
+[run]
+concurrency = 3</code></pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">schema</td><td><code>1</code></td><td>The version of this file's format.</td></tr>
+        <tr><td class="mono">[project] description</td><td><code>""</code></td><td>What the project is for, and what does not belong. Intake judges issues against it.</td></tr>
+        <tr><td class="mono">[project] base_branch</td><td><code>master</code></td><td>Jobs branch from <code>origin/&lt;base_branch&gt;</code> and merge into it.</td></tr>
+        <tr><td class="mono">[project] merge_method</td><td><code>squash</code></td><td><code>merge</code>, <code>squash</code>, or <code>rebase</code>.</td></tr>
+        <tr><td class="mono">[tools] enabled</td><td><code>["claude"]</code></td><td><code>claude</code>, <code>cursor</code>, <code>codex</code>.</td></tr>
+        <tr><td class="mono">[tools.claude] stop_hook</td><td><code>false</code></td><td>Run the checks when the build agent stops, and send it back if they fail. Claude Code only.</td></tr>
+        <tr><td class="mono">[tools.claude] cost</td><td><code>true</code></td><td>Work out each job's cost from Claude Code's transcripts. Other tools record no cost.</td></tr>
+        <tr><td class="mono">[tools.codex] intake_shell</td><td><code>false</code></td><td>Let the Codex intake agent run commands. See <a href="guards.html#intake-has-no-shell">intake</a>.</td></tr>
+        <tr><td class="mono">[run] concurrency</td><td><code>3</code></td><td>Jobs this project works on at once. A job waiting for a person, or being validated after merge, does not count.</td></tr>
+        <tr><td class="mono">[fleet] concurrency</td><td><code>3</code></td><td><code>new</code> and <code>resume</code> rows across every project. <code>fleet.toml</code> or <code>--concurrency</code> overrides it. A project's <code>factory.toml</code> cannot.</td></tr>
+        <tr><td class="mono">[run] start</td><td><code>intake</code></td><td>The step a new job starts in.</td></tr>
+        <tr><td class="mono">[run] escalate_to</td><td><code>escalated</code></td><td>The human step a job goes to when a loop limit is reached.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="checks">Checks</h2>
+  <pre data-lang="toml"><code>[checks]
+commands = ["npm ci --prefer-offline", "npm run lint", "npm test -- --run"]
+timeout_minutes = 30</code></pre>
+  <p>The commands run in order in the job's worktree with <code>bash -c</code>. The first one that exits non-zero stops the run and fails the step. They run at <code>gate</code>, and again in <code>merge</code> after the base branch is merged in, when that step is on. A command must not rewrite files. Run them yourself with <code>mfactory checks</code>. Protected paths fail the branch even when every command exits 0. See <a href="#labels-paths-and-ports">paths</a>.</p>
+
+  <h2 id="steps">Steps</h2>
+  <p>Each step is a <code>[steps.&lt;name&gt;]</code> table with a <code>type</code> and an <code>on</code> table. An edge is a step name, or <code>{ to = "&lt;step&gt;", max = &lt;n&gt; }</code>. End states: <code>done</code>, <code>rejected</code>, <code>failed</code>. How each type behaves is on the <a href="pipeline.html#steps-and-edges">pipeline</a> page.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">type</td><td><code>agent</code>, <code>checks</code>, <code>review</code>, <code>human</code>, <code>merge</code>, or <code>verify</code>.</td></tr>
+        <tr><td class="mono">on</td><td>The edges. Every outcome the step can return needs one.</td></tr>
+        <tr><td class="mono">enabled</td><td><code>false</code> switches the step off. Jobs pass through as if it had returned <code>skip</code>.</td></tr>
+        <tr><td class="mono">skip</td><td>The outcome a switched-off step counts as.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="loop-limits">Loop limits</h2>
+  <p>A <code>max</code> on an edge is how many times in a row a step may send a job that way. The count starts again on a different outcome. When it is used up, the job goes to <code>[run].escalate_to</code>. A bare step name keeps the default <code>max</code> and changes only the target. The rules are on <a href="pipeline.html#loop-limits">loop limits</a>.</p>
+  <pre data-lang="toml"><code>[steps.review]
+on = { CHANGES = { max = 2 } }</code></pre>
+
+  <h2 id="who-merges">Who merges</h2>
+  <p>By default <code>merge</code> is off and <code>approve</code> leads to <code>ready-to-merge</code>. A hand merge continues from the merge step's <code>MERGED</code> edge and does not sync the base branch or run the checks again. To let the factory merge, set all three:</p>
+  <pre data-lang="toml"><code>[steps.approve]
+on = { APPROVE = "merge" }
+
+[steps.ready-to-merge]
+enabled = false
+skip = "REJECT"
+
+[steps.merge]
+enabled = true</code></pre>
+  <p>Do that only when a merge to the base branch does not publish a release. Enabling <code>merge</code> alone leaves it unreachable.</p>
+
+  <h2 id="optional-steps">Optional steps</h2>
+  <pre data-lang="toml"><code>[steps.spec-approval]
+enabled = true
+
+[steps.debug]
+enabled = true
+
+[steps.verify]
+enabled = true
+commands = ["npm run test:smoke"]</code></pre>
+  <p><code>spec-approval</code>, <code>debug</code>, and <code>verify</code> ship off. The debugger writes a diagnosis and changes no code. With it off, failing checks go straight back to the builder.</p>
+
+  <h2 id="adding-a-step">Adding a step</h2>
+  <pre data-lang="toml"><code>[steps.docs]
+type = "agent"
+instructions = "Update docs/ for the change on this branch."
+on = { DONE = "gate" }
+
+[steps.build]
+on = { READY = "docs" }</code></pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">instructions</td><td>What the agent must do. Required for a step you add.</td></tr>
+        <tr><td class="mono">writes</td><td>The file in the job folder. Default: <code>&lt;step&gt;.md</code>.</td></tr>
+        <tr><td class="mono">context</td><td>Project facts added to the prompt. Works on built-in steps too.</td></tr>
+        <tr><td class="mono">skills</td><td>Project skills this agent reads.</td></tr>
+        <tr><td class="mono">port</td><td><code>true</code> gives the agent a port for a dev server.</td></tr>
+        <tr><td class="mono">role</td><td>Use a built-in prompt under another name: <code>intake</code>, <code>spec</code>, <code>build</code>, <code>debug</code>, or <code>approve</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="human-steps">Human steps</h2>
+  <pre data-lang="toml"><code>[steps.release-approval]
+type = "human"
+who = "maintainer"
+ask = "approve the release"
+shows = "decision.md"
+on = { APPROVE = "merge", CHANGES = { to = "build", max = 2 }, REJECT = "rejected" }</code></pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">who</td><td><code>maintainer</code></td><td><code>author</code> or <code>maintainer</code> (write access).</td></tr>
+        <tr><td class="mono">ask</td><td></td><td>The heading of the comment.</td></tr>
+        <tr><td class="mono">shows</td><td></td><td>A file from the job folder to include.</td></tr>
+        <tr><td class="mono">pr_ready</td><td><code>false</code></td><td>Mark the draft pull request ready. The comment says that merging continues the job.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The reply is <code>/mfactory</code> plus the outcome in lower case. See <a href="first-job.html#answer-a-person">answering</a>.</p>
+
+  <h2 id="validation">Validation</h2>
+  <p>Keys of the <code>verify</code> step. The factory never deploys. A job being validated holds no slot.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">after</td><td><code>merge</code></td><td><code>merge</code>: validate the merge commit now. <code>deploy</code>: first run <code>wait</code> until it exits 0.</td></tr>
+        <tr><td class="mono">wait</td><td><code>""</code></td><td>For <code>deploy</code>: a command that exits 0 once the merge commit is live. Run again every 15 seconds until <code>timeout_minutes</code>.</td></tr>
+        <tr><td class="mono">timeout_minutes</td><td><code>20</code></td><td>How long to wait for the deploy.</td></tr>
+        <tr><td class="mono">commands</td><td><code>[]</code></td><td>Commands in a clean checkout of the merge commit. All must exit 0. <code>[checks] timeout_minutes</code> limits them.</td></tr>
+        <tr><td class="mono">agent</td><td><code>false</code></td><td>After the commands pass, a verifier checks the spec against the running result and writes <code>verify.md</code>.</td></tr>
+        <tr><td class="mono">url</td><td><code>""</code></td><td>Where the deployed result is. Passed to the commands and the agent.</td></tr>
+        <tr><td class="mono">retries</td><td><code>1</code></td><td>How many times to run failing commands again.</td></tr>
+        <tr><td class="mono">on_failure</td><td><code>comment</code></td><td><code>comment</code>, <code>issue</code>, or <code>revert-pr</code>. The factory never merges a revert.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Commands and <code>wait</code> get <code>FACTORY_JOB</code>, <code>FACTORY_MERGE_SHA</code>, <code>FACTORY_PR</code>, and <code>FACTORY_DEPLOY_URL</code>.</p>
+
+  <h2 id="reviewers-and-surfaces">Reviewers and surfaces</h2>
+  <p>The <code>review</code> step runs every reviewer the job needs, in parallel. <code>code</code> runs on every job. <code>security</code> runs on the <code>security</code> surface. <code>ux</code> and <code>ui</code> run on the <code>ui</code> surface. A new reviewer is a table with a <code>focus</code>. No prompt file is needed.</p>
+  <pre data-lang="toml"><code>[reviewers.migrations]
+focus = "Database migrations: reversibility, locks on large tables, data loss."
+
+[surfaces.database]
+when = "it adds or changes a migration or a table"
+reviewers = ["migrations"]</code></pre>
+  <p>Intake reads each <code>when</code> and names the surfaces a job touches. A reviewer that no surface lists runs on every job. To add a reviewer to a surface that exists, restate the list.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[reviewers.&lt;name&gt;] focus</td><td>What this reviewer looks for. Required for a reviewer you add.</td></tr>
+        <tr><td class="mono">context</td><td>Project facts added to its prompt.</td></tr>
+        <tr><td class="mono">skills</td><td>Project skills it reads.</td></tr>
+        <tr><td class="mono">port</td><td><code>true</code> gives it a port, for reviewers that look at the running app.</td></tr>
+        <tr><td class="mono">[surfaces.&lt;name&gt;] when</td><td>One line telling intake when a change touches this surface.</td></tr>
+        <tr><td class="mono">[surfaces.&lt;name&gt;] reviewers</td><td>The reviewers that run on jobs with this surface.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Each reviewer writes <code>round-N/review-&lt;name&gt;.md</code> with <code>VERDICT: PASS</code> or <code>VERDICT: CHANGES</code> on its first line.</p>
+
+  <h2 id="models-and-effort">Models and effort</h2>
+  <pre data-lang="toml"><code>[models.claude]
+build = { model = "opus", effort = "high" }
+spec = { effort = "high" }
+reviewer-code = { model = "sonnet", effort = "medium", low = { model = "haiku", effort = "low" } }
+
+[models.cursor]
+default = { model = "gpt-5.6-sol", effort = "medium" }
+build = { model = "claude-opus-5-5", effort = "high" }
+
+[models.codex]
+default = { model = "gpt-5.6-sol" }</code></pre>
+  <ul>
+    <li>The key is the step's name, or <code>reviewer-&lt;name&gt;</code>.</li>
+    <li><code>default</code> applies to every agent of that tool that names no value of its own. A step's entry sits on top of it, key by key.</li>
+    <li><code>low</code>, <code>medium</code>, and <code>high</code> inside an entry apply to jobs of that risk. The factory writes one extra agent file per variant.</li>
+    <li><code>model = "inherit"</code> uses the model of the session that runs <code>/mfactory run</code>.</li>
+  </ul>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Tool</th><th>Models</th><th>Effort</th></tr></thead>
+      <tbody>
+        <tr><td>Claude Code</td><td><code>opus</code> for spec, build, debug, approve, and the security reviewer. <code>sonnet</code> for the code and UX reviewers and verify. <code>haiku</code> for the UI reviewer and low-risk code review. <code>fable</code> for intake.</td><td>Set per step</td></tr>
+        <tr><td>Cursor</td><td><code>inherit</code> for every step</td><td>Not set</td></tr>
+        <tr><td>Codex</td><td><code>inherit</code> for every step</td><td>Set per step</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Cursor and Codex default to <code>inherit</code> because the names you can use depend on your plan. Cursor takes an effort only together with a named model. Effort levels the factory accepts: <code>low</code>, <code>medium</code>, <code>high</code>, <code>xhigh</code>, <code>max</code> for Claude Code. Those and <code>none</code>, <code>minimal</code> for Cursor and Codex. The factory does not check model names.</p>
+
+  <h2 id="project-skills">Project skills</h2>
+  <p>The factory finds skills in <code>.claude/skills</code>, <code>.cursor/skills</code>, <code>.agents/skills</code>, and <code>.codex/skills</code>. Nothing is read unless you list it.</p>
+  <pre data-lang="toml"><code>[skills]
+all = ["code-style"]
+
+[steps.build]
+skills = ["testing", "migrations"]
+
+[reviewers.security]
+skills = ["auth-rules"]</code></pre>
+  <p>Each agent's prompt names the <code>SKILL.md</code> files to read. This works the same in every tool. In Claude Code, a skill in <code>.claude/skills</code> is also loaded up front. <code>mfactory sync</code> refuses a name that matches no skill and says where it looked.</p>
+
+  <h2 id="labels-paths-and-ports">Labels, paths and ports</h2>
+  <pre data-lang="toml"><code>[labels]
+queue = "factory"
+needs_info = "factory:needs-info"
+needs_human = "factory:needs-human"
+
+[paths]
+worktrees = ".worktrees"
+protected = [".github/workflows/*", "infra/*"]
+
+[ports]
+base = 5100
+step = 10</code></pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[labels] queue</td><td>Issues with this label are built.</td></tr>
+        <tr><td class="mono">[labels] needs_info</td><td>Put on an issue while its author is being asked.</td></tr>
+        <tr><td class="mono">[labels] needs_human</td><td>Put on an issue while a maintainer is being asked.</td></tr>
+        <tr><td class="mono">[paths] worktrees</td><td>Where each job's worktree goes, relative to the repository. Keep it ignored by git.</td></tr>
+        <tr><td class="mono">[paths] protected</td><td>Patterns of files no job may change or delete. <code>*</code> also matches <code>/</code>. A job may add new files that match.</td></tr>
+        <tr><td class="mono">[ports] base, step</td><td>Job number <code>n</code> gets ports from <code>base + step * (n % 100)</code>, so dev servers of parallel jobs do not collide.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>No job may add, change, or delete <code>factory.toml</code>, anything under <code>.factory/</code>, or a generated <code>mfactory-*</code> agent or skill file, whatever <code>protected</code> says.</p>
+</article>
+<script src="docs.js"></script>
+</body>
+</html>

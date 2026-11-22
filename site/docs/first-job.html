@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>First job · factory</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body data-page="first-job">
+<article class="doc" id="doc">
+  <h1>First job</h1>
+  <p class="lede">Label a GitHub issue <code>factory</code>. In your coding tool, run the factory. A job that needs a person stops and says so. Other jobs keep running.</p>
+  <p>Install and <code>/mfactory setup</code> come first. See <a href="install.html">Install</a>. The first real run should be on a throwaway repository.</p>
+
+  <h2 id="label-an-issue">Label an issue</h2>
+  <p>Only issues with the <code>factory</code> label run. Adding a label needs triage or write access, so the label decides whose issues the factory builds. <code>mfactory install</code> creates three labels:</p>
+  <ul>
+    <li><code>factory</code> — the queue.</li>
+    <li><code>factory:needs-info</code> — the author is being asked something.</li>
+    <li><code>factory:needs-human</code> — a maintainer is being asked something.</li>
+  </ul>
+  <p>The names are <a href="configuration.html#labels-paths-and-ports">keys</a>. A <code>/factory</code> comment on an issue or pull request still counts. The command you type is <code>/mfactory</code>.</p>
+
+  <h2 id="run">Run</h2>
+  <pre data-lang="text"><code>/mfactory run                  work through every issue labeled factory
+/mfactory run 12               run issue 12 now
+/mfactory approve 12           answer a job that is waiting for you
+/mfactory setup                fill in factory.toml, once after installing
+/mfactory &lt;anything else&gt;      ask about jobs, or describe a feature to file as an issue</code></pre>
+  <p>In Codex, mention the skill with <code>$factory</code>, or ask in words.</p>
+  <p>A job is named by its id (<code>004-dark-mode</code>), the number in that id (<code>004</code>), or its issue (<code>12</code> or <code>#12</code>). Commands that take a job accept any of those.</p>
+
+  <h2 id="what-the-orchestrator-does">What the orchestrator does</h2>
+  <p>The orchestrator asks <code>.factory/bin/mfactory</code> what to do, starts the agents the script names, and reports back. It never writes code, specs, reviews, or decisions, and it never edits <code>.factory/jobs/</code>.</p>
+  <p><code>next</code> prints one of these:</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>It prints</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">start-agent</td><td>Start that subagent, in the background, with the printed prompt unchanged.</td></tr>
+        <tr><td class="mono">parallel</td><td>Start every named agent in one message so they run together. Reviewers do this.</td></tr>
+        <tr><td class="mono">then</td><td>When the agent has finished, run this command. Usually <code>done</code>.</td></tr>
+        <tr><td class="mono">stdin</td><td>Pipe the agent's whole reply to <code>done --reply</code>. Intake on Cursor and Codex works this way.</td></tr>
+        <tr><td class="mono">wait</td><td>The job is waiting for a person. Leave it.</td></tr>
+        <tr><td class="mono">hold</td><td>No free slot. Run <code>next</code> again after another job finishes.</td></tr>
+        <tr><td class="mono">finished</td><td>The job is over: <code>done</code>, <code>rejected</code>, or <code>failed</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>After every <code>done</code>, the orchestrator runs <code>next</code> for that job again, until it prints <code>wait</code>, <code>hold</code>, or <code>finished</code>. A checks, merge, or verify step can run for a long time. Let it finish.</p>
+  <p>The agent name carries the model and effort from <code>factory.toml</code>. The orchestrator does not pick a model, and it does not paste issue text into a prompt. Issue text reaches agents only inside the job's <code>issue.md</code>.</p>
+
+  <h2 id="answer-a-person">Answer a person</h2>
+  <p>A job that needs a person stops and says so on the issue or the pull request. You answer there with a comment, or in your tool. Nothing else waits: other jobs keep running.</p>
+  <pre data-lang="text"><code>/mfactory approve 12
+/mfactory changes 12 Use the existing Money type instead of a new one.
+/mfactory reject 12 Out of scope for this quarter.</code></pre>
+  <p>On the issue or pull request, leave the number off:</p>
+  <pre data-lang="text"><code>/mfactory changes Use the existing Money type instead of a new one.</code></pre>
+  <p>The word after <code>/mfactory</code> is the outcome's name in lower case. A step with <code>on = { SHIP = "merge", HOLD = "build" }</code> takes <code>/mfactory ship</code> and <code>/mfactory hold</code>. Words that come with the reply are saved, and the next agent is told to act on them. <code>REJECT</code> needs a reason. Who may reply depends on the step: the issue's author, or someone with write access. See <a href="pipeline.html#human-steps">human steps</a>.</p>
+  <p>Merging the job's pull request by hand continues the job from the merge step's <code>MERGED</code> edge, including when that step is off. On the default path this does not sync the base branch or run the checks again.</p>
+
+  <h2 id="watch">Watch</h2>
+  <pre data-lang="bash"><code>.factory/bin/mfactory dashboard
+mfactory start dashboard
+mfactory stop
+mfactory summary</code></pre>
+  <p><code>dashboard</code> stays in the foreground until Ctrl C. <code>start dashboard</code> serves the same page and returns. <code>stop</code> ends that process. The page is read-only. Approvals and feedback go through <code>/mfactory</code> or an issue comment. See <a href="fleet.html">Fleet and dashboard</a>.</p>
+
+  <h2 id="permissions">Permissions</h2>
+  <p>The orchestrator runs <code>.factory/bin/mfactory</code>. The agents it starts run <code>git</code>, <code>gh</code>, and your project's check commands inside the job's worktree. If your tool asks before each command, allow these for the repository, or a run stops at every step waiting for you.</p>
+</article>
+<script src="docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install · factory</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body data-page="install">
+<article class="doc" id="doc">
+  <h1>Install</h1>
+  <p class="lede">Install <code>mfactory</code> once for your user, then install the factory into each repository. Setup fills in <code>factory.toml</code>. Doctor checks that a run can start.</p>
+
+  <h2 id="what-you-need">What you need</h2>
+  <ul>
+    <li>A git repository with a GitHub remote named <code>origin</code>.</li>
+    <li>Python 3.11 or later as <code>python3</code>.</li>
+    <li><code>git</code>, and the GitHub CLI <code>gh</code>, signed in (<code>gh auth login</code>) with write access to the repository.</li>
+    <li>One of Claude Code, Cursor, or Codex.</li>
+  </ul>
+  <p>The factory adds nothing to your project's dependencies. It is a folder of Python files that use only the standard library. macOS, Linux, or WSL. The script uses <code>fcntl</code> and <code>bash</code>.</p>
+
+  <h2 id="install-the-command">Install the command</h2>
+  <pre data-lang="bash"><code>curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --global</code></pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>--global</code></td><td>Install <code>mfactory</code> for your user. Do not combine it with <code>--tool</code>.</td></tr>
+        <tr><td><code>--version v0.2.0</code></td><td>Install that release. Default: the latest release, or the <code>master</code> branch before the first release.</td></tr>
+        <tr><td><code>--source DIR</code></td><td>Install from a local copy of this repository instead of downloading.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>This creates <code>~/.mfactory</code> (<code>FACTORY_HOME</code> when set) and links <code>~/.local/bin/mfactory</code>. The fleet list is <code>~/.mfactory/fleet.toml</code>.</p>
+  <p>To read the script before running it, download it first:</p>
+  <pre data-lang="bash"><code>curl -fsSL -o install.sh https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh
+less install.sh
+bash install.sh --global</code></pre>
+
+  <h2 id="install-into-a-repository">Install into a repository</h2>
+  <p>From the repository:</p>
+  <pre data-lang="bash"><code>mfactory install --tool claude</code></pre>
+  <p>To install straight into the repository you are in, without a command on <code>PATH</code>:</p>
+  <pre data-lang="bash"><code>curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --tool claude</code></pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>--tool claude|cursor|codex</code></td><td>The tool to generate agents for. Repeat it, or separate names with commas. Default: <code>claude</code>.</td></tr>
+        <tr><td><code>--version v0.2.0</code></td><td>Install that release.</td></tr>
+        <tr><td><code>--source DIR</code></td><td>Install from a local copy instead of downloading.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The installer prints each step. The version numbers below are an example:</p>
+  <pre data-lang="text"><code>ok    .factory/ installed (version 0.2.0)
+ok    factory.toml written
+ok    .gitignore gained /.factory/jobs/, /.worktrees/
+ok    generated files for claude
+ok    GitHub labels: factory, factory:needs-info, factory:needs-human</code></pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Path</th><th>What it is</th><th>Commit it?</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">factory.toml</td><td>Your configuration. The only file you edit.</td><td>Yes</td></tr>
+        <tr><td class="mono">.factory/</td><td>The factory: its CLI, prompts, and defaults.</td><td>Yes</td></tr>
+        <tr><td class="mono">.factory/jobs/</td><td>The state and files of each job.</td><td>No, ignored</td></tr>
+        <tr><td class="mono">.worktrees/</td><td>One git worktree per running job.</td><td>No, ignored</td></tr>
+        <tr><td class="mono">.claude/agents/mfactory-*.md</td><td>One small agent file per step, generated from <code>factory.toml</code>. Cursor and Codex use their own folders.</td><td>Yes</td></tr>
+        <tr><td class="mono">.claude/skills/mfactory/</td><td>The <code>/mfactory</code> skill. Codex uses <code>.agents/skills/mfactory/</code>.</td><td>Yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Running the installer again is safe: it never overwrites <code>factory.toml</code>.</p>
+
+  <h2 id="set-up">Set up</h2>
+  <p>In your coding tool, in the repository:</p>
+  <pre data-lang="text"><code>/mfactory setup</code></pre>
+  <p>In Codex, mention the skill with <code>$factory setup</code>, or ask in words: "set up the factory".</p>
+  <p>The agent reads your README, package manifest, and CI workflows, then edits <code>factory.toml</code>:</p>
+  <ul>
+    <li><code>[project] description</code>: what the project is for. Intake judges issues against this.</li>
+    <li><code>[checks] commands</code>: the commands that install dependencies and run lint, tests, and the build. These decide whether a build may be reviewed.</li>
+    <li><code>[skills]</code>: which of your project's skills agents read.</li>
+  </ul>
+  <p>It asks before turning on any optional step. By default a maintainer merges the pull request and the factory does not. Ask whether a merge to the base branch publishes a release. Only when it does not, and you want the factory to merge, turn the merge step on. See <a href="pipeline.html#who-merges">who merges</a>. You can also edit <code>factory.toml</code> by hand. The <a href="configuration.html">reference</a> lists every key.</p>
+  <p>After any change to <code>factory.toml</code>:</p>
+  <pre data-lang="bash"><code>.factory/bin/mfactory sync</code></pre>
+  <p>This rewrites the generated agent files to match.</p>
+
+  <h2 id="check">Check</h2>
+  <pre data-lang="bash"><code>.factory/bin/mfactory doctor</code></pre>
+  <pre data-lang="text"><code>ok    factory 0.2.0, Python 3.12.3
+ok    git: git version 2.43.0
+ok    gh: gh version 2.60.0
+ok    gh is signed in
+ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, merge, verify
+ok    Claude Code: claude 2.1.0
+ok    generated agent and skill files match factory.toml
+ok    origin/main can be fetched
+ok    .factory/jobs/ is ignored by git
+ok    GitHub labels exist
+...   running the checks on origin/main
+ok    the checks pass on origin/main (41s)
+
+Everything a run needs is in place.</code></pre>
+  <p>The version numbers above are examples. Doctor runs your checks on a clean copy of the base branch, which can take as long as your CI. Pass <code>--skip-checks</code> to leave that out.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>It reports</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td>A problem in <code>factory.toml</code>, naming the key</td><td>Fix that key. <code>mfactory graph</code> shows the pipeline in effect.</td></tr>
+        <tr><td><code>[checks].commands is empty</code></td><td>Run <code>/mfactory setup</code>, or list the commands yourself.</td></tr>
+        <tr><td>Generated files differ from <code>factory.toml</code></td><td>Run <code>.factory/bin/mfactory sync</code>. Edit <code>factory.toml</code>, never the generated files.</td></tr>
+        <tr><td><code>factory.toml</code> and <code>.factory/</code> are not on <code>origin/&lt;base&gt;</code> yet</td><td>Commit and push them. Jobs build from that branch.</td></tr>
+        <tr><td>The checks fail on the base branch</td><td>Fix the base branch first. Otherwise every job fails for a reason it did not cause.</td></tr>
+        <tr><td>A label is missing</td><td><code>mfactory install</code> creates them. It needs write access to the repository.</td></tr>
+        <tr><td><code>&lt;tool&gt; isn't on PATH</code></td><td>A warning only. It is fine if you run the tool as an app.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="commit">Commit</h2>
+  <pre data-lang="bash"><code>git add factory.toml .factory .gitignore .claude .cursor .codex .agents 2&gt;/dev/null
+git commit -m "Add the software factory"
+git push</code></pre>
+  <p>Then <a href="first-job.html">run a job</a>.</p>
+
+  <h2 id="more-than-one-tool">More than one tool</h2>
+  <pre data-lang="toml"><code>[tools]
+enabled = ["claude", "cursor"]</code></pre>
+  <p><code>mfactory sync</code> writes agent files for each. Any one of the tools can run <code>/mfactory run</code>. They share the same job state in <code>.factory/jobs/</code>, so do not run two orchestrators on the same checkout at the same time.</p>
+  <p>Cursor also reads <code>.claude/skills</code>. With Claude Code and Cursor enabled, the factory writes the skill only to <code>.claude/skills/mfactory</code>, so Cursor lists it once. With all three tools enabled it also writes <code>.agents/skills/mfactory</code> for Codex, and Cursor may list the skill twice. The copies are identical. See <a href="tools.html">Tools</a>.</p>
+
+  <h2 id="upgrade">Upgrade</h2>
+  <pre data-lang="bash"><code>.factory/bin/mfactory upgrade
+.factory/bin/mfactory upgrade --version v0.2.0
+mfactory upgrade --self
+mfactory upgrade --all</code></pre>
+  <p>Upgrade replaces <code>.factory/</code> (not <code>.factory/jobs/</code>), runs <code>sync</code>, and leaves <code>factory.toml</code> alone. It refuses a release whose <code>schema</code> number differs from your <code>factory.toml</code>. The <a href="changelog.html">changelog</a> says what to change when that number moves. Commit the result.</p>
+  <p><code>--self</code> updates the user install from <code>install.sh --global</code>. <code>--all</code> upgrades every project in the fleet. A project that fails does not stop the others.</p>
+
+  <h2 id="remove">Remove</h2>
+  <pre data-lang="bash"><code>mfactory uninstall
+mfactory uninstall --config
+mfactory uninstall --labels</code></pre>
+  <p><code>uninstall</code> removes <code>.factory/</code>, the generated agent and skill files, the job worktrees, and the checkout from the fleet list. <code>factory.toml</code> stays unless you pass <code>--config</code>. <code>--labels</code> deletes the three factory labels on GitHub. It needs <code>factory.toml</code> still readable, so pass <code>--labels</code> together with <code>--config</code> or before deleting the file yourself.</p>
+</article>
+<script src="docs.js"></script>
+</body>
+</html>
