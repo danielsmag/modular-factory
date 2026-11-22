@@ -359,7 +359,7 @@ class GitHubRepository:
                     "--target",
                     sha,
                     "--title",
-                    str(version),
+                    tag,
                     "--notes-file",
                     notes_path,
                 ]

@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- The GitHub release title is the tag, such as `v0.3.2`.
+
 ## 0.3.1
 
 - ci: deploy Pages after the artifact upload finishes.
