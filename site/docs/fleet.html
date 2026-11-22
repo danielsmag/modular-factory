@@ -17,11 +17,12 @@ mfactory start dashboard
 mfactory stop
 mfactory dashboard --port 4747 --no-open</code></pre>
   <p><code>dashboard</code> stays in the foreground until Ctrl C. <code>start dashboard</code> serves the same page and returns. <code>stop</code> ends that process. The default port is <code>4747</code>.</p>
-  <p>The page has four views:</p>
+  <p>The page has five views:</p>
   <ul>
-    <li><strong>Board.</strong> Jobs by step, and a running total of merged jobs with a steady-pace line. With a few merges a week, a per-day chart is mostly zeros.</li>
+    <li><strong>Board.</strong> Jobs by step.</li>
     <li><strong>Pipeline.</strong> A column of steps. Forward edges on the right, back edges on the left, and how many jobs sit in each step.</li>
     <li><strong>Jobs.</strong> What each job wrote: spec, build, checks, reviews.</li>
+    <li><strong>Overview.</strong> Running slots, a running total of merged jobs with a steady-pace line, cost or time by step, and the job table. With a few merges a week, a per-day chart is mostly zeros.</li>
     <li><strong>Config.</strong> The merged configuration, and which file set each value.</li>
   </ul>
   <p>It changes nothing. Approvals and feedback go through <code>/mfactory</code> or an issue comment. It answers only on <code>127.0.0.1</code>, refuses another <code>Host</code>, and serves only <code>.md</code> and <code>.log</code> files from the jobs folder. See <a href="guards.html#the-dashboard">why</a>.</p>

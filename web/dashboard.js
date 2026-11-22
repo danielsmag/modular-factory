@@ -55,7 +55,7 @@ function writeSplit(px) {
   try { localStorage.setItem(SPLIT_KEY, String(px)); } catch (error) {}
 }
 const state = {
-  index: null, graph: null, config: null, error: null, query: "", file: null, source: "all", drawer: null,
+  index: null, graph: null, config: null, error: null, query: "", range: "30", file: null, source: "all", drawer: null,
   fleet: false, projects: [], selected: readChoice(), queueRows: [], queueErrors: [], queueStale: false,
   split: readSplit(),
 };
@@ -85,6 +85,11 @@ function svg(tag, attrs, ...kids) {
 function link(url, text) {
   // Only real web addresses become links; anything else is shown as plain text.
   return /^https:\/\//.test(url || "") ? el("a", { class: "ext", href: url, target: "_blank", rel: "noopener noreferrer", text }) : el("span", { class: "mono", text });
+}
+function icon(path) {
+  const node = svg("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2, "aria-hidden": "true" });
+  node.append(svg("path", { d: path }));
+  return node;
 }
 
 // ---- data helpers ----
@@ -710,6 +715,161 @@ function board() {
   if (panel) nodes.push(panel);
   return nodes;
 }
+
+// ---- overview ----
+function stepSeconds(job) {
+  const out = {};
+  for (const h of job.history || []) {
+    const a = time(h.entered_at), b = time(h.at);
+    if (a && b) out[h.step] = (out[h.step] || 0) + (b - a) / 1000;
+  }
+  return out;
+}
+function statCard(label, value, delta, path, accent, deltaClass) {
+  return el("div", { class: "card" + (accent ? " accent" : "") },
+    el("div", { class: "row" }, el("span", { class: "icon" }, icon(path)), delta ? el("span", { class: "delta " + (deltaClass || ""), text: delta }) : null),
+    el("div", { class: "label", text: label }),
+    el("div", { class: "value", text: value }));
+}
+function days(count) {
+  const out = [], today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = count - 1; i >= 0; i--) out.push(new Date(today.getTime() - i * 86400000));
+  return out;
+}
+function slotNote() {
+  const caps = state.fleet
+    ? visibleProjects().map((project) => Number(project.concurrency)).filter((n) => n > 0)
+    : [Number(state.index && state.index.concurrency)].filter((n) => n > 0);
+  if (!caps.length) return "no cap";
+  const cap = caps.reduce((sum, n) => sum + n, 0);
+  const projects = state.fleet ? visibleProjects().length : 1;
+  return projects > 1 ? "of " + cap + " slots · " + projects + " projects" : "of " + cap + " slots";
+}
+function areaChart(all) {
+  const done = all.filter((j) => j.step === "done" && j.finished_at);
+  let count = Number(state.range);
+  if (state.range === "all") {
+    const first = Math.min(...done.map((j) => time(j.finished_at)), Date.now());
+    count = Math.min(365, Math.max(7, Math.ceil((Date.now() - first) / 86400000) + 1));
+  }
+  const axis = days(count);
+  const daily = axis.map((day) => done.filter((j) => { const t = time(j.finished_at); return t >= day.getTime() && t < day.getTime() + 86400000; }).length);
+  let sum = 0;
+  const values = daily.map((v) => (sum += v));
+  const total = sum;
+  const W = 640, H = 230, L = 34, R = 8, T = 10, B = 26;
+  const ticks = total <= 4 ? Math.max(2, total) : 4, top = Math.max(2, Math.ceil(total / ticks) * ticks);
+  const x = (i) => L + (axis.length === 1 ? 0 : (i * (W - L - R)) / (axis.length - 1));
+  const y = (v) => T + (1 - v / top) * (H - T - B);
+  const root = svg("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Jobs merged over " + count + " days, as a running total: " + total });
+  const grad = svg("linearGradient", { id: "merged-fill", x1: 0, y1: 0, x2: 0, y2: 1 },
+    svg("stop", { offset: "0", "stop-color": "#ff4a26", "stop-opacity": ".55" }), svg("stop", { offset: "1", "stop-color": "#ff4a26", "stop-opacity": ".04" }));
+  root.append(svg("defs", {}, grad));
+  for (let i = 0; i <= ticks; i++) {
+    const v = Math.round((top * i) / ticks);
+    root.append(svg("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: "#232323" }), svg("text", { x: L - 8, y: y(v) + 3, "text-anchor": "end", text: v }));
+  }
+  const line = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  root.append(svg("path", { d: `${line} L${x(values.length - 1)},${y(0)} L${x(0)},${y(0)} Z`, fill: "url(#merged-fill)" }), svg("path", { d: line, fill: "none", stroke: "#ff4a26", "stroke-width": 1.6 }));
+  if (total) root.append(svg("line", { x1: x(0), x2: x(values.length - 1), y1: y(0), y2: y(total), stroke: "#d8d8d8", "stroke-dasharray": "4 4", "stroke-width": 1 }));
+  const every = Math.max(1, Math.ceil(axis.length / 8));
+  axis.forEach((day, i) => {
+    const last = axis.length - 1;
+    if (i !== last && (i % every || last - i < every * 0.7)) return;
+    root.append(svg("text", { x: x(i), y: H - 8, "text-anchor": i === 0 ? "start" : i === axis.length - 1 ? "end" : "middle", text: day.toLocaleDateString(undefined, { month: "short", day: "numeric" }) }));
+  });
+  return { root, total, mean: total / values.length };
+}
+function byStep(all) {
+  const priced = all.some((j) => j.cost_usd !== null && j.cost_usd !== undefined);
+  const totals = {};
+  for (const job of all) {
+    const source = priced ? job.cost_by_step || {} : stepSeconds(job);
+    for (const [step, v] of Object.entries(source)) {
+      const info = stepOf(step, job);
+      if (!priced && info && info.type === "human") continue;
+      totals[step] = (totals[step] || 0) + v;
+    }
+  }
+  const rows = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const sum = Object.values(totals).reduce((a, b) => a + b, 0);
+  return { priced, rows, sum };
+}
+function jobTable(list) {
+  if (!list.length) return el("div", { class: "empty", text: state.query ? "No job matches the search." : "No jobs yet. Label an issue and run /mfactory run." });
+  const body = el("tbody", {}, list.map((job) => el("tr", {
+    class: "link", tabindex: 0,
+    onclick: () => { location.hash = jobHref(job); },
+    onkeydown: (e) => { if (e.key === "Enter") location.hash = jobHref(job); },
+  },
+    el("td", { class: "mono", text: state.fleet && state.selected === "all" && job.projectName ? job.projectName + " · " + job.id : job.id }),
+    el("td", { class: "wrap", text: job.title || "" }),
+    el("td", {}, chip(job)),
+    el("td", { class: "mono dim", text: job.round || "-" }),
+    el("td", { class: "mono dim", text: job.pr ? "#" + job.pr : "-" }),
+    el("td", { class: "mono dim", text: job.cost_usd !== null && job.cost_usd !== undefined ? money(job.cost_usd) : "-" }),
+    el("td", { class: "mono dim", text: elapsed(job) }))));
+  return el("div", { class: "scroll" }, el("table", {},
+    el("thead", {}, el("tr", {}, ["Job", "Title", "Step", "Round", "PR", "Cost", "Time"].map((t) => el("th", { scope: "col", text: t })))), body));
+}
+function overviewSub() {
+  if (!state.fleet) return (state.index.project && state.index.project.description) || "Running slots, merged jobs, and every job";
+  const projects = visibleProjects();
+  if (!projects.length) return "No projects yet";
+  if (projects.length === 1) return projects[0].description || projects[0].path || "Running slots, merged jobs, and every job";
+  return projects.length + " projects";
+}
+function overview() {
+  const all = jobs();
+  const running = all.filter((j) => { const s = stepOf(j.step, j); return s && RUNNING.has(s.type) && !j.waiting; });
+  const merged = all.filter((j) => j.step === "done");
+  const week = merged.filter((j) => time(j.finished_at) > Date.now() - 7 * 86400000).length;
+  const waiting = all.filter((j) => j.waiting);
+  const authors = waiting.filter((j) => j.waiting.who === "author").length;
+  const named = waiting.filter((j) => Array.isArray(j.waiting.who)).length;
+  const rest = waiting.length - authors - named;
+  const waitingParts = [authors + " author", rest + " maintainer"];
+  if (named) waitingParts.push(named + " named");
+  const waitingNote = waitingParts.filter((part) => !part.startsWith("0 ")).join(" · ");
+  const split = byStep(all);
+  const total = all.reduce((sum, j) => sum + (Number(j.cost_usd) || 0), 0);
+  const finished = all.filter((j) => j.finished_at && j.step === "done").map((j) => (time(j.finished_at) - time(j.created_at)) / 1000).sort((a, b) => a - b);
+  const median = finished.length ? finished[Math.floor(finished.length / 2)] : null;
+  const chart = areaChart(all);
+  const rangeTab = (key, text) => el("button", { type: "button", "aria-pressed": String(state.range === key), text, onclick: () => { state.range = key; render(); } });
+  const shown = all.filter(matches);
+  return [
+    el("div", { class: "head" },
+      el("div", {}, el("h1", { text: "Overview" }), el("p", { class: "sub", text: overviewSub() })),
+      el("span", { class: "src", text: shown.length + " of " + all.length })),
+    ...problemLines(),
+    el("div", { class: "cards" },
+      statCard("Running", String(running.length), slotNote(), "M5 3l14 9-14 9z", true),
+      statCard("Merged", String(merged.length), week ? "+" + week + " this week" : "none this week", "M5 12l5 5L20 7", false, week ? "" : "flat"),
+      statCard("Needs you", String(waiting.length), waiting.length ? waitingNote : "nothing waiting", "M12 8v5M12 17h.01M12 3a9 9 0 100 18 9 9 0 000-18z", false, waiting.length ? "hot" : "flat"),
+      split.priced ? statCard("Cost", money(total), "Claude Code", "M12 3v18M16 7H10a3 3 0 000 6h4a3 3 0 010 6H7", false, "flat")
+        : statCard("Median time to merge", span(median), merged.length + " merged", "M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z", false, "flat")),
+    el("div", { class: "split" },
+      el("div", { class: "panel" },
+        el("div", { class: "head" }, el("div", {}, el("h2", { text: "Jobs merged" }), el("p", { class: "sub", text: "Running total for the period. Dashed line: a steady pace" })),
+          el("div", { class: "tabs", role: "group", "aria-label": "Period" }, rangeTab("7", "7D"), rangeTab("30", "30D"), rangeTab("all", "ALL"))),
+        chart.root,
+        el("div", { class: "figures" },
+          el("div", {}, "Merged in period", el("b", { text: String(chart.total) })),
+          el("div", {}, "Per day", el("b", { text: chart.mean.toFixed(1) })),
+          el("div", {}, "Merged of finished", el("b", { class: "good", text: all.some((j) => j.finished_at) ? Math.round((100 * merged.length) / all.filter((j) => j.finished_at).length) + "%" : "-" })))),
+      el("div", { class: "panel" },
+        el("h2", { text: split.priced ? "Cost by step" : "Time by step" }),
+        el("p", { class: "sub", text: split.priced ? "API-equivalent, all jobs" : "Agents and scripts, all jobs" }),
+        split.rows.length ? el("div", { class: "bars" }, split.rows.map(([step, v]) => el("div", { class: "bar" },
+          el("div", { class: "row" }, el("span", { class: "name", text: step }), el("span", { class: "num", text: split.priced ? money(v) : span(v) })),
+          el("div", { class: "track" }, el("div", { class: "fill", style: "width:" + Math.max(2, (100 * v) / split.rows[0][1]).toFixed(1) + "%" })),
+          el("div", { class: "pct", text: ((100 * v) / split.sum).toFixed(1) + "%" }))))
+          : el("div", { class: "empty", text: "Nothing has run yet." }))),
+    el("div", { class: "panel" }, el("div", { class: "head" }, el("h2", { text: "Jobs" }), el("span", { class: "src", text: shown.length + " of " + all.length })), jobTable(shown)),
+  ];
+}
 // ---- pipeline ----
 function order(graph) {
   // The first edge of each step is its normal way on; that chain is the spine.
@@ -1031,7 +1191,7 @@ function configView() {
 // ---- shell ----
 function route() {
   const parts = location.hash.replace(/^#\/?/, "").split("/").filter((part) => part.length);
-  const view = ["board", "pipeline", "jobs", "config"].includes(parts[0]) ? parts[0] : "board";
+  const view = ["board", "pipeline", "jobs", "overview", "config"].includes(parts[0]) ? parts[0] : "board";
   if (view === "jobs" && state.fleet && parts.length >= 3) {
     return { view, project: decodeURIComponent(parts[1]), id: decodeURIComponent(parts[2]) };
   }
@@ -1114,20 +1274,20 @@ function render() {
     document.getElementById("foot-right").textContent = "";
   } else if (state.fleet) {
     const totals = boardTotals(jobs());
-    document.getElementById("foot-left").textContent = view === "board"
+    document.getElementById("foot-left").textContent = view === "board" || view === "overview"
       ? totals.running + " running · " + money(totals.cost) + " · " + FOOT_NOTE
       : FOOT_NOTE;
     document.getElementById("foot-right").textContent = fleetFoot();
     document.title = "factory · " + fleetTitle();
-    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id, project) : view === "config" ? configView() : board();
+    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id, project) : view === "overview" ? overview() : view === "config" ? configView() : board();
   } else {
     const totals = boardTotals(jobs());
-    document.getElementById("foot-left").textContent = view === "board"
+    document.getElementById("foot-left").textContent = view === "board" || view === "overview"
       ? totals.running + " running · " + money(totals.cost) + " · " + FOOT_NOTE
       : FOOT_NOTE;
     document.getElementById("foot-right").textContent = `factory ${state.index.version} · ${state.index.tools.join(", ")}`;
     document.title = `factory · ${state.index.repo}`;
-    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id, project) : view === "config" ? configView() : board();
+    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id, project) : view === "overview" ? overview() : view === "config" ? configView() : board();
   }
   target.replaceChildren(...content);
   [...target.querySelectorAll(scrollers)].forEach((n, i) => { if (scroll[i]) n.scrollTop = scroll[i]; });

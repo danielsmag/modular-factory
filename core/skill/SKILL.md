@@ -97,9 +97,9 @@ refuses a second time, stop that job and tell the user what the script said.
    yourself; every new issue goes through the pipeline's first step.
 3. Each time a job prints `wait` or `finished`, run `queue` again and start
    any `new` or `resume` line you aren't already running.
-4. When nothing is running and `queue` has no `new` or `resume` line, print
-   `.factory/bin/mfactory summary` and then list what is waiting for a person,
-   with the command that answers each (from the `wait` lines).
+4. When nothing is running and `queue` has no `new` or `resume` line, list what
+   is waiting for a person, with the command that answers each (from the `wait`
+   lines). The dashboard's Overview tab is the job table.
 
 State is on disk, so a new session picks up where an old one stopped: `queue`
 lists unfinished jobs as `resume`, and `next` says what each needs.
@@ -107,7 +107,8 @@ lists unfinished jobs as `resume`, and `next` says what each needs.
 ## /mfactory run <n>
 
 The same for one issue. If `queue` shows a job for it, resume that job;
-otherwise `create <n>`. Finish with `.factory/bin/mfactory summary <n>`.
+otherwise `create <n>`. Finish by naming the job's step, from `queue` or from
+`.factory/jobs/<job>/job.json`.
 
 ## Answering a job that waits for a person
 
@@ -189,8 +190,8 @@ script. When it isn't clear which job they mean, or whether they are giving
 feedback or asking for something new, ask.
 
 - **A question** (status, cost, why a job stopped, what a reviewer said):
-  answer from `.factory/bin/mfactory summary`, the job's `job.json` and its
-  files in `.factory/jobs/<job>/`. Here you may read a file in full.
+  answer from the job's `job.json` and its files in `.factory/jobs/<job>/`.
+  Here you may read a file in full. The dashboard's Overview tab lists every job.
 - **What needs them**: run `queue` and explain each `wait` line.
 - **The pipeline or its settings**: `.factory/bin/mfactory graph`,
   `.factory/bin/mfactory models` and `.factory/bin/mfactory config show`.
@@ -204,9 +205,10 @@ feedback or asking for something new, ask.
   ```
 
 - **The dashboard**: `.factory/bin/mfactory dashboard` serves a read-only view
-  of every job on this machine and prints its address. When this checkout is
-  in the fleet, that page includes the other subscribed projects and can
-  filter to one of them.
+  of every job on this machine and prints its address. Overview is the job
+  table, running slots, and merged jobs. Board is jobs by step. When this
+  checkout is in the fleet, that page includes the other subscribed projects
+  and can filter to one of them.
 - **Several projects**: `mfactory fleet` reads `~/.mfactory/fleet.toml`.
   `mfactory fleet subscribe` adds the repository you are in. It does not build.
   `[run].concurrency` caps one project. `[fleet].concurrency` caps `new` and

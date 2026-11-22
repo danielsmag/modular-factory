@@ -1,6 +1,5 @@
-"""What to run: new jobs, the queue of labeled issues, and the summary table."""
+"""What to run: new jobs and the queue of labeled issues."""
 
-from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from . import graph
@@ -8,7 +7,7 @@ from .config import Config
 from .service import GitHub
 from .service.human import audience
 from .store import Store
-from .util import Refused, now, parse_time
+from .util import Refused, now
 
 
 class _QueueHost(Protocol):
@@ -126,23 +125,3 @@ class Queue:
             else:
                 rows.append(("hold",) + row[1:4] + (f"concurrency {limit} reached",))
         return rows + waiting + other
-
-    def summary(self, refs):
-        jobs = [self.store.read(self.store.find(r)) for r in refs] if refs else self.store.all()
-        rows = [("job", "issue", "step", "round", "pr", "cost", "time")]
-        for j in jobs:
-            cost = f"${j['cost_usd']:.2f}" if j.get("cost_usd") is not None else "-"
-            rows.append((j["id"], f"#{j['issue']}", j["step"], str(j["round"]),
-                         f"#{j['pr']}" if j["pr"] else "-", cost, elapsed(j)))
-        widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
-        lines = ["  ".join(c.ljust(w) for c, w in zip(r, widths, strict=True)).rstrip() for r in rows]
-        costs = [j["cost_usd"] for j in jobs if j.get("cost_usd") is not None]
-        if costs:
-            lines.append(f"total ${sum(costs):.2f} (API-equivalent, factory agents on Claude Code only)")
-        return "\n".join(lines)
-
-
-def elapsed(job):
-    end = parse_time(job["finished_at"]) if job.get("finished_at") else datetime.now(UTC)
-    minutes = int((end - parse_time(job["created_at"])).total_seconds() // 60)
-    return f"{minutes // 60}h{minutes % 60:02d}m" if minutes >= 60 else f"{minutes}m"

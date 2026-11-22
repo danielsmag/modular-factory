@@ -63,9 +63,8 @@
   <h2 id="watch">Watch</h2>
   <pre data-lang="bash"><code>.factory/bin/mfactory dashboard
 mfactory start dashboard
-mfactory stop
-mfactory summary</code></pre>
-  <p><code>dashboard</code> stays in the foreground until Ctrl C. <code>start dashboard</code> serves the same page and returns. <code>stop</code> ends that process. The page is read-only. Approvals and feedback go through <code>/mfactory</code> or an issue comment. See <a href="fleet.html">Fleet and dashboard</a>.</p>
+mfactory stop</code></pre>
+  <p><code>dashboard</code> stays in the foreground until Ctrl C. <code>start dashboard</code> serves the same page and returns. <code>stop</code> ends that process. The page is read-only. Overview is the job table. Approvals and feedback go through <code>/mfactory</code> or an issue comment. See <a href="fleet.html">Fleet and dashboard</a>.</p>
 
   <h2 id="permissions">Permissions</h2>
   <p>The orchestrator runs <code>.factory/bin/mfactory</code>. The agents it starts run <code>git</code>, <code>gh</code>, and your project's check commands inside the job's worktree. If your tool asks before each command, allow these for the repository, or a run stops at every step waiting for you.</p>

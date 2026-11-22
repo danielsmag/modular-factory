@@ -131,7 +131,8 @@ def test_a_job_runs_from_the_command_line(world):
     assert world.cli("done", "#1", "--reply", input=reply).stdout == "001-add-search #1: intake ACCEPT -> spec\n"
     assert world.cli("route", "1").stdout.strip() == json.dumps(
         {"reviewers": {"code": "mfactory-reviewer-code-low"}}, indent=1)
-    assert "001-add-search  #1     spec" in world.cli("summary").stdout
+    missing = world.cli("summary")
+    assert missing.returncode != 0 and "invalid choice" in missing.stderr
 
 
 def test_answer_takes_its_words_from_arguments_or_standard_input(world):
