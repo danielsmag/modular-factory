@@ -148,7 +148,21 @@ h2 { font: 500 14px var(--sans); margin: 0; }
 .close { position: absolute; top: 14px; right: 14px; font: 12px var(--mono); border: 1px solid var(--line-2); padding: 4px 8px; }
 .close:hover { border-color: var(--text); }
 .d-body { display: grid; grid-template-columns: var(--split, 220px) 12px minmax(0, 1fr); min-height: 0; }
-.d-files { overflow: auto; padding: 10px 4px 20px 8px; }
+.d-tabs { margin-top: 10px; }
+.d-files, .d-runs { overflow: auto; padding: 10px 4px 20px 8px; }
+.d-activity { padding: 22px 28px; }
+.d-run { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; text-align: left; padding: 8px; border-radius: 3px; font: 12px var(--mono); color: var(--muted); }
+.d-run.on, .d-run:hover { background: var(--panel-2); color: var(--text); }
+.d-run.on { box-shadow: inset 2px 0 var(--accent); }
+.d-run .who { color: var(--text); font-size: 13px; }
+.d-run-meta { display: flex; align-items: center; gap: 6px; }
+.d-timeline { overflow: auto; padding: 22px 28px 48px; }
+.ev { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 2px 12px; margin: 0 0 14px; }
+.ev-time { font: 12px var(--mono); color: var(--muted); }
+.ev-text, .ev-tool { margin: 0; font: 13px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ev-out { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px var(--mono); color: var(--muted); }
+.ev-link { font: 13px var(--mono); color: var(--accent); text-align: left; }
+.ev-link:hover { text-decoration: underline; }
 .d-group { font: 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 12px 8px 4px; }
 .d-group:first-child { margin-top: 0; }
 .d-file { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; text-align: left; padding: 7px 8px; border-radius: 3px; font: 13px var(--mono); color: var(--muted); }
@@ -282,7 +296,8 @@ footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--m
   .steps li { grid-template-columns: 16px minmax(0, 1fr) auto; }
   .steps .what { grid-column: 2 / -1; }
   .d-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
-  .d-files { border-right: 0; border-bottom: 1px solid var(--line); display: flex; gap: 4px; overflow-x: auto; max-height: 132px; }
+  .d-files, .d-runs { border-right: 0; border-bottom: 1px solid var(--line); max-height: 160px; }
+  .d-files { display: flex; gap: 4px; overflow-x: auto; max-height: 132px; }
   .d-group { display: none; }
   .d-file { width: auto; white-space: nowrap; }
 }

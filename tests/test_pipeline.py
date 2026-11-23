@@ -56,7 +56,8 @@ def test_next_prints_the_agent_and_a_prompt_with_the_job_header(world):
     job = world.start(until="spec")
     lines = world.next(job)
     assert lines[0] == "start-agent mfactory-spec"
-    assert lines[1].startswith(f"prompt: Job: {job}. Step: spec. Job folder: {world.dir(job)}/. "
+    assert lines[1].startswith(f"prompt: Job: {job}. Step: spec. Agent: mfactory-spec. "
+                               f"Round: 0. Attempt: 0. Job folder: {world.dir(job)}/. "
                                f"Main checkout: {world.repo}. Worktree: {world.repo}/.worktrees/{job}. "
                                f"Branch: factory/{job}. Base: origin/main. Issue: #1.")
     assert lines[1].endswith(f"Write: {world.dir(job)}/spec.md.")

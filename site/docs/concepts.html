@@ -42,6 +42,7 @@ $ .factory/bin/mfactory done 004-dark-mode
 .factory/roles/*.md           one prompt per agent step and reviewer
 .factory/skill/SKILL.md       the orchestrator
 .factory/defaults.toml        the default pipeline and settings
+.factory/templates/factory.toml  the factory.toml written on first install
 .factory/adapters/*.toml      per tool: folders, agent file format, default models
 .factory/web/                 the dashboard, inlined when it is served</code></pre>
   <p>You edit <code>factory.toml</code> at the repository root. <code>mfactory sync</code> writes the agent files the tool actually loads. See <a href="tools.html#where-each-tool-writes">where each tool writes</a>.</p>

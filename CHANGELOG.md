@@ -6,6 +6,9 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- The job drawer has an Agent activity tab. It shows what each Claude Code agent did, from its transcripts, with secrets redacted. The prompt names the agent, round, and attempt so a run can be matched to the step.
+- A new install writes `factory.toml` from `core/templates/factory.toml`. Each setting has a short explanation and a link to the configuration reference. An existing `factory.toml` is still left as it is.
+
 ## 0.6.1
 
 - The GitHub Actions run that publishes a release is named with the version, such as `v0.6.1`.
