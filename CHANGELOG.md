@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.6.0
+
 - `ready-to-verify` waits until a person says the deploy is live, then runs verify. It ships off, so a merge still goes straight to verify. `VERIFY: BLOCKED` returns to that step instead of failing the job. The fourth `BLOCKED` in a row goes to `escalated`. When verify is on, `spec.md` needs a `## Verify after deploy` section. Schema stays 1. A project that replaces `[steps.verify].on` must include a `BLOCKED` edge.
 
 ## 0.5.0
