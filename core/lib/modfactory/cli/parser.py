@@ -52,6 +52,7 @@ def parser() -> argparse.ArgumentParser:
     upgrade.add_argument("--source", help="a local copy of the factory to install from, instead of downloading")
     upgrade.add_argument("--self", action="store_true", help="update only the global CLI")
     upgrade.add_argument("--all", action="store_true", help="upgrade only subscribed projects")
+    upgrade.add_argument("--dry-run", action="store_true", help="print the plan and change nothing")
     remove: argparse.ArgumentParser = sub.add_parser("uninstall", help="remove the factory from this repository")
     remove.add_argument("--config", action="store_true", help="also delete factory.toml")
     remove.add_argument("--labels", action="store_true", help="also delete the factory labels on GitHub")

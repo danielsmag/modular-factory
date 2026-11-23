@@ -71,7 +71,7 @@ concurrency = 3
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `schema` | `1` | The version of this file's format. `mfactory upgrade` refuses a release that needs another. |
+| `schema` | `1` | The version of this file's format. A release that needs another schema is skipped until this number matches. |
 | `[project] description` | `""` | What the project is for and what does not belong in it. Intake judges issues against it. |
 | `[project] base_branch` | `"master"` | Jobs branch from `origin/<base_branch>` and merge into it. |
 | `[project] merge_method` | `"squash"` | `merge`, `squash` or `rebase`. With `squash`, the pull request title becomes the commit on the base branch. |

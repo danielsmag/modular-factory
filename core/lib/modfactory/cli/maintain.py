@@ -9,13 +9,16 @@ import sys
 import tempfile
 import urllib.error
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from .. import config
 from .. import fleet as fleet_mod
 from .. import sync as syncer
-from ..install import fetch_release, layout, project_cli, upgrade
+from ..install import fetch_release, is_personal, layout, project_cli, upgrade
 from ..util import (
     CORE,
     SOURCE_REPO,
@@ -128,6 +131,7 @@ def status_all(say: Callable[[str], None] = print) -> int:
         say("no projects yet. Run `mfactory fleet subscribe` inside a project.")
         return 0
     latest: str | None = latest_release()
+    behind: bool = False
     for project in group.projects:
         summary: str = project_summary(project.path)
         installed: str = summary.split("  ", 1)[0]
@@ -138,9 +142,12 @@ def status_all(say: Callable[[str], None] = print) -> int:
             release = f"latest {latest}"
         elif installed != latest:
             release = f"latest {latest} (upgrade available)"
+            behind = True
         else:
             release = f"latest {latest}"
         say(f"{group.label(project)}  {summary}  {release}")
+    if behind:
+        say("run `mfactory upgrade`")
     return 0
 
 
@@ -269,23 +276,171 @@ def uninstall(repo: Path, remove_config: bool = False, labels: bool = False,
     _forget(repo, say)
 
 
-def upgrade_self(ref: str = "latest", source: str | None = None, say: Callable[[str], None] = print) -> None:
-    """Replace the global CLI tree from `install.sh --global`."""
-    home: Path | None = global_install()
-    if home is None:
-        raise Refused("no global install. `install.sh --global` installs mfactory for your user.")
-    installed_version: Path = home / "core" / "VERSION"
-    before: str = installed_version.read_text().strip() if installed_version.is_file() else version()
+@dataclass(frozen=True)
+class Target:
+    """One CLI tree or checkout the upgrade plan knows about."""
+
+    kind: Literal["global", "project"]
+    label: str
+    path: Path
+    before: str
+    after: str
+    action: Literal["upgrade", "current", "schema", "fail"]
+    personal: bool = False
+    base: str = ""
+    have: object = None
+    need: object = None
+    reason: str = ""
+
+
+@contextmanager
+def _release_root(ref: str, source: str | None) -> Iterator[Path]:
+    """Yield one factory tree. A source path is used as given; otherwise the release is downloaded once."""
+    if source is not None:
+        yield Path(source).resolve()
+        return
+    temporary: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+    try:
+        yield fetch_release(ref, temporary.name)
+    finally:
+        temporary.cleanup()
+
+
+def _release_facts(root: Path) -> tuple[str, object]:
+    """The version and schema of a factory tree."""
+    located: tuple[Path, Path, Path, Path] = layout(root)
+    core: Path = located[0]
+    after: str = (core / "VERSION").read_text().strip()
+    need: object = config.read_toml(core / "defaults.toml")["schema"]
+    return after, need
+
+
+def _global_target(home: Path, after: str) -> Target:
+    version_file: Path = home / "core" / "VERSION"
+    before: str = version_file.read_text().strip() if version_file.is_file() else ""
+    action: Literal["upgrade", "current"] = "current" if before and before == after else "upgrade"
+    return Target("global", "global", home, before, after, action)
+
+
+def _project_base(repo: Path) -> str:
+    try:
+        loaded: config.Config = config.load(repo)
+    except FactoryError:
+        return ""
+    return str(loaded.base)
+
+
+def _project_target(repo: Path, label: str, after: str, need: object) -> Target:
+    if not project_cli(repo).is_file():
+        return Target(
+            "project", label, repo, "", after, "fail",
+            reason="the factory isn't installed here. Run `mfactory install` first.",
+        )
+    version_file: Path = repo / ".factory" / "VERSION"
+    if not version_file.is_file():
+        return Target("project", label, repo, "", after, "fail", reason=f"{version_file} is missing")
+    before: str = version_file.read_text().strip()
+    config_file: Path = repo / config.FILE
+    try:
+        have: object = need if not config_file.is_file() else config.read_toml(config_file).get("schema")
+    except FactoryError as error:
+        return Target("project", label, repo, before, after, "fail", reason=str(error))
+    if have != need:
+        return Target("project", label, repo, before, after, "schema", have=have, need=need)
+    if before == after:
+        return Target("project", label, repo, before, after, "current")
+    return Target(
+        "project", label, repo, before, after, "upgrade",
+        personal=is_personal(repo), base=_project_base(repo),
+    )
+
+
+def _plan_detail(target: Target) -> str:
+    shown: str = target.before or "unknown"
+    if target.action == "upgrade":
+        detail: str = f"{shown} -> {target.after}"
+        if target.kind == "project":
+            detail += "   personal" if target.personal else "   team"
+        return detail
+    if target.action == "current":
+        return f"{target.after}            current"
+    if target.action == "schema":
+        return f"{shown}            schema {target.have}, release needs {target.need}"
+    return f"FAIL  {target.reason}"
+
+
+def _plan_rows(targets: list[Target]) -> list[str]:
+    width: int = max(len(target.label) for target in targets)
+    return [f"{target.label:<{width}}  {_plan_detail(target)}" for target in targets]
+
+
+def _changelog_note(root: Path, version: str) -> str:
+    """The changelog section for one version, at most 12 lines."""
+    located: tuple[Path, Path, Path, Path] = layout(root)
+    path: Path = located[3] / "CHANGELOG.md"
+    if not path.is_file():
+        return ""
+    heading: str = f"## {version.lstrip('v')}"
+    lines: list[str] = path.read_text().splitlines()
+    start: int | None = None
+    for index, line in enumerate(lines):
+        if line.strip() == heading:
+            start = index + 1
+            break
+    if start is None:
+        return ""
+    body: list[str] = []
+    for line in lines[start:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    while body and not body[0].strip():
+        body.pop(0)
+    while body and not body[-1].strip():
+        body.pop()
+    return "\n".join(body[:12])
+
+
+def _count_line(upgraded: int, current: int, skipped: int, failed: int) -> str:
+    parts: list[str] = [f"{upgraded} upgraded", f"{current} current"]
+    if skipped:
+        parts.append(f"{skipped} skipped")
+    if failed:
+        parts.append(f"{failed} failed")
+    return ", ".join(parts)
+
+
+def _project_followup(target: Target) -> str:
+    if target.personal:
+        return (
+            f"{target.label}  run `.factory/bin/mfactory doctor`. "
+            "Leave factory.toml, .factory/ and the generated files untracked."
+        )
+    if target.base:
+        return (
+            f"{target.label}  commit .factory/ and the generated files, push origin/{target.base}, "
+            "then `.factory/bin/mfactory doctor`"
+        )
+    return (
+        f"{target.label}  commit .factory/ and the generated files, then push the base branch, "
+        "then `.factory/bin/mfactory doctor`"
+    )
+
+
+def _replace_global(home: Path, root: Path, before: str, after: str, say: Callable[[str], None]) -> None:
+    """Replace the global CLI tree with root, keeping fleet.toml."""
+    located: tuple[Path, Path, Path, Path] = layout(root)
+    core: Path = located[0]
+    adapters: Path = located[1]
+    web: Path = located[2]
+    licence: Path = located[3]
     with tempfile.TemporaryDirectory() as tmp:
-        root: Path = Path(source).resolve() if source else fetch_release(ref, tmp)
-        core, adapters, web, licence = layout(root)
-        after: str = (core / "VERSION").read_text().strip()
         tree: Path = Path(tmp) / "next"
         tree.mkdir()
-        skip = shutil.ignore_patterns("__pycache__", "*.pyc")
-        shutil.copytree(core, tree / "core", ignore=skip)
-        shutil.copytree(adapters, tree / "adapters", ignore=skip)
-        shutil.copytree(web, tree / "web", ignore=skip)
+        ignored: Callable[..., set[str]] = shutil.ignore_patterns("__pycache__", "*.pyc")
+        shutil.copytree(core, tree / "core", ignore=ignored)
+        shutil.copytree(adapters, tree / "adapters", ignore=ignored)
+        shutil.copytree(web, tree / "web", ignore=ignored)
         for name in ("LICENSE", "NOTICE"):
             src: Path = licence / name
             if src.is_file():
@@ -308,28 +463,79 @@ def upgrade_self(ref: str = "latest", source: str | None = None, say: Callable[[
                 previous.rename(home)
             raise
         shutil.rmtree(previous, ignore_errors=True)
-    say(f"ok    global install {before} -> {after}  {home}")
+    shown: str = before or "unknown"
+    say(f"ok    global install {shown} -> {after}  {home}")
 
 
-def upgrade_all(ref: str = "latest", source: str | None = None, say: Callable[[str], None] = print) -> int:
-    """Upgrade every subscribed project. One failure does not stop the others."""
-    group: fleet_mod.Fleet = fleet_mod.Fleet.find()
-    if not group.projects:
-        say("no projects yet. Run `mfactory fleet subscribe` inside a project.")
+def _apply(
+    target: Target, root: Path, say: Callable[[str], None],
+) -> Literal["upgraded", "current", "schema", "failed"]:
+    if target.action == "current":
+        say(f"skip  {target.label}  already {target.after}")
+        return "current"
+    if target.action == "schema":
+        say(f"skip  {target.label}  schema {target.have}, release needs {target.need}")
+        return "schema"
+    if target.action == "fail":
+        say(f"{target.label}  FAIL  {target.reason}")
+        return "failed"
+
+    def report(line: str, label: str = target.label) -> None:
+        say(f"{label}  {line}")
+
+    try:
+        if target.kind == "global":
+            _replace_global(target.path, root, target.before, target.after, say)
+        else:
+            upgrade(target.path, source=str(root), say=report)
+    except FactoryError as error:
+        say(f"{target.label}  FAIL  {error}")
+        return "failed"
+    return "upgraded"
+
+
+def _run_upgrade(targets: list[Target], root: Path, dry_run: bool, say: Callable[[str], None]) -> int:
+    """Print the plan, then upgrade every row that can move. A dry run stops after the plan."""
+    if not targets:
         return 0
+    say(targets[0].after)
+    for row in _plan_rows(targets):
+        say(row)
+    if dry_run:
+        return 0
+    say("")
+    upgraded: int = 0
+    current: int = 0
+    skipped: int = 0
     failed: int = 0
-    for project in group.projects:
-        label: str = group.label(project)
-
-        def report(line: str, label: str = label) -> None:
-            say(f"{label}  {line}")
-
-        try:
-            upgrade(project.path, ref, source, say=report)
-        except FactoryError as error:
-            say(f"{label}  FAIL  {error}")
+    upgraded_projects: list[Target] = []
+    schema_targets: list[Target] = []
+    for target in targets:
+        outcome: Literal["upgraded", "current", "schema", "failed"] = _apply(target, root, say)
+        if outcome == "upgraded":
+            upgraded += 1
+            if target.kind == "project":
+                upgraded_projects.append(target)
+        elif outcome == "current":
+            current += 1
+        elif outcome == "schema":
+            skipped += 1
+            schema_targets.append(target)
+        else:
             failed += 1
-    return 1 if failed else 0
+    say("")
+    say(_count_line(upgraded, current, skipped, failed))
+    for target in upgraded_projects:
+        say(_project_followup(target))
+    noted: bool = False
+    for target in schema_targets:
+        say(f"{target.label}  set schema = {target.need} in {config.FILE}, then `mfactory upgrade`")
+        if not noted:
+            note: str = _changelog_note(root, target.after)
+            if note:
+                say(note)
+            noted = True
+    return 1 if failed or skipped else 0
 
 
 def _installed_checkout() -> Path | None:
@@ -353,11 +559,56 @@ def _fleet() -> fleet_mod.Fleet | None:
         raise
 
 
-def upgrade_everything(ref: str = "latest", source: str | None = None, say: Callable[[str], None] = print) -> int:
+def upgrade_self(
+    ref: str = "latest",
+    source: str | None = None,
+    say: Callable[[str], None] = print,
+    *,
+    dry_run: bool = False,
+) -> int:
+    """Replace the global CLI tree from `install.sh --global`."""
+    home: Path | None = global_install()
+    if home is None:
+        raise Refused("no global install. `install.sh --global` installs mfactory for your user.")
+    with _release_root(ref, source) as root:
+        facts: tuple[str, object] = _release_facts(root)
+        after: str = facts[0]
+        return _run_upgrade([_global_target(home, after)], root, dry_run, say)
+
+
+def upgrade_all(
+    ref: str = "latest",
+    source: str | None = None,
+    say: Callable[[str], None] = print,
+    *,
+    dry_run: bool = False,
+) -> int:
+    """Upgrade every subscribed project. One failure does not stop the others."""
+    group: fleet_mod.Fleet = fleet_mod.Fleet.find()
+    if not group.projects:
+        say("no projects yet. Run `mfactory fleet subscribe` inside a project.")
+        return 0
+    with _release_root(ref, source) as root:
+        facts: tuple[str, object] = _release_facts(root)
+        after: str = facts[0]
+        need: object = facts[1]
+        targets: list[Target] = [
+            _project_target(project.path, group.label(project), after, need) for project in group.projects
+        ]
+        return _run_upgrade(targets, root, dry_run, say)
+
+
+def upgrade_everything(
+    ref: str = "latest",
+    source: str | None = None,
+    say: Callable[[str], None] = print,
+    *,
+    dry_run: bool = False,
+) -> int:
     """Upgrade the global CLI, every subscribed project, and this checkout when it is not subscribed.
 
-    One failure does not stop the others. A missing global install or an empty fleet is reported
-    and the rest still runs.
+    One download covers every target. One failure does not stop the others. A missing global install
+    or an empty fleet is reported and the rest still runs.
     """
     home: Path | None = global_install()
     group: fleet_mod.Fleet | None = _fleet()
@@ -367,23 +618,20 @@ def upgrade_everything(ref: str = "latest", source: str | None = None, say: Call
     extra: Path | None = None if checkout is None or checkout.resolve() in covered else checkout.resolve()
     if home is None and not projects and extra is None:
         raise Refused("nothing to upgrade. Install the factory in a project, or run `install.sh --global`.")
-    failed: int = 0
     if home is None:
         say("warn  no global install. `install.sh --global` installs mfactory for your user.")
-    else:
-        try:
-            upgrade_self(ref, source, say)
-        except FactoryError as error:
-            say(f"FAIL  {error}")
-            failed += 1
-    if projects:
-        failed += upgrade_all(ref, source, say)
-    else:
+    if not projects:
         say("no subscribed projects. Run `mfactory fleet subscribe` inside a project.")
-    if extra is not None:
-        try:
-            upgrade(extra, ref, source, say)
-        except FactoryError as error:
-            say(f"FAIL  {error}")
-            failed += 1
-    return 1 if failed else 0
+    with _release_root(ref, source) as root:
+        facts: tuple[str, object] = _release_facts(root)
+        after: str = facts[0]
+        need: object = facts[1]
+        targets: list[Target] = []
+        if home is not None:
+            targets.append(_global_target(home, after))
+        if group is not None:
+            for project in projects:
+                targets.append(_project_target(project.path, group.label(project), after, need))
+        if extra is not None:
+            targets.append(_project_target(extra, extra.name, after, need))
+        return _run_upgrade(targets, root, dry_run, say)

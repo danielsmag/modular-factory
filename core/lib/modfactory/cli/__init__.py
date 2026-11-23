@@ -85,12 +85,11 @@ def run(args: argparse.Namespace) -> int:
         cfg = config.load(repo)
         return checks.hook(cfg, Store(cfg))
     if command == "upgrade" and args.self and not args.all:
-        upgrade_self(args.ref, args.source)
-        return 0
+        return upgrade_self(args.ref, args.source, dry_run=args.dry_run)
     if command == "upgrade" and args.all and not args.self:
-        return upgrade_all(args.ref, args.source)
+        return upgrade_all(args.ref, args.source, dry_run=args.dry_run)
     if command == "upgrade":
-        return upgrade_everything(args.ref, args.source)
+        return upgrade_everything(args.ref, args.source, dry_run=args.dry_run)
     if command == "status" and (args.all or not _inside_repo()):
         return status_all()
     if command == "dashboard" and (args.all or _project_repo() is None):

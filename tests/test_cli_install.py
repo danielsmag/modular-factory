@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 from conftest import ROOT, git
+from modfactory.cli.maintain import _changelog_note, status_all, upgrade_everything
 from modfactory.fleet.service import DashboardServer, one_handler
 from modfactory.util import dashboard_page
 
@@ -428,6 +429,7 @@ def test_upgrade_updates_the_global_cli_and_every_subscribed_project(world):
     assert (world.repo / ".factory" / "VERSION").read_text().strip() == expected
     assert (other / ".factory" / "VERSION").read_text().strip() == expected
     assert "global install 0.0.0 ->" in result.stdout
+    assert "3 upgraded, 0 current" in result.stdout
     assert str(world.repo.resolve()) in (home / "fleet.toml").read_text()
     assert str(other.resolve()) in (home / "fleet.toml").read_text()
 
@@ -436,6 +438,127 @@ def test_upgrade_with_nothing_installed_refuses(world):
     result = world.cli("upgrade", "--source", str(ROOT), cwd=world.tmp)
     assert result.returncode == 1
     assert "nothing to upgrade" in result.stderr
+
+
+def _global_home(version: str = "0.0.0\n") -> Path:
+    home: Path = Path(os.environ["FACTORY_HOME"])
+    (home / "core" / "bin").mkdir(parents=True, exist_ok=True)
+    (home / "core" / "bin" / "mfactory").write_text("")
+    (home / "core" / "VERSION").write_text(version)
+    (home / ".global").write_text(f"{home}\n")
+    return home
+
+
+def test_upgrade_downloads_the_release_once(world, monkeypatch):
+    installed = world.cli("install", "--tool", "cursor")
+    assert installed.returncode == 0, installed.stderr
+    repos: list[Path] = [world.repo]
+    for name in ("other", "third"):
+        copy: Path = world.tmp / name
+        shutil.copytree(world.repo, copy)
+        repos.append(copy)
+    for repo in repos:
+        subscribed = world.cli("fleet", "subscribe", repo)
+        assert subscribed.returncode == 0, subscribed.stderr
+        (repo / ".factory" / "VERSION").write_text("0.0.0\n")
+    _global_home()
+    calls: list[str] = []
+
+    def fake_fetch(ref: str, into: str) -> Path:
+        calls.append(ref)
+        return ROOT
+
+    monkeypatch.chdir(world.tmp)
+    monkeypatch.setattr("modfactory.cli.maintain._installed_checkout", lambda: None)
+    monkeypatch.setattr("modfactory.cli.maintain.fetch_release", fake_fetch)
+    lines: list[str] = []
+    code: int = upgrade_everything(say=lines.append)
+    assert code == 0, "\n".join(lines)
+    assert calls == ["latest"]
+    expected: str = (ROOT / "core" / "VERSION").read_text().strip()
+    for repo in repos:
+        assert (repo / ".factory" / "VERSION").read_text().strip() == expected
+    assert "4 upgraded, 0 current" in lines
+
+
+def test_upgrade_dry_run_writes_nothing(world):
+    installed = world.cli("install", "--tool", "cursor")
+    assert installed.returncode == 0, installed.stderr
+    assert world.cli("fleet", "subscribe").returncode == 0
+    (world.repo / ".factory" / "VERSION").write_text("0.0.0\n")
+    home: Path = _global_home()
+    result = world.cli("upgrade", "--dry-run", "--source", str(ROOT), cwd=world.tmp)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (world.repo / ".factory" / "VERSION").read_text().strip() == "0.0.0"
+    assert (home / "core" / "VERSION").read_text().strip() == "0.0.0"
+    assert "0.0.0 ->" in result.stdout
+    assert "ok    .factory/" not in result.stdout
+    assert "ok    global install" not in result.stdout
+
+
+def test_upgrade_skips_a_project_whose_schema_differs(world):
+    installed = world.cli("install", "--tool", "cursor")
+    assert installed.returncode == 0, installed.stderr
+    other: Path = world.tmp / "other"
+    shutil.copytree(world.repo, other)
+    for repo in (world.repo, other):
+        subscribed = world.cli("fleet", "subscribe", repo)
+        assert subscribed.returncode == 0, subscribed.stderr
+        (repo / ".factory" / "VERSION").write_text("0.0.0\n")
+    config_path: Path = other / "factory.toml"
+    config_path.write_text(config_path.read_text().replace("schema = 1", "schema = 99", 1))
+    expected: str = (ROOT / "core" / "VERSION").read_text()
+    _global_home(expected)
+    result = world.cli("upgrade", "--source", str(ROOT), cwd=world.tmp)
+    assert result.returncode == 1, result.stderr + result.stdout
+    assert "schema 99, release needs 1" in result.stdout
+    assert "set schema = 1" in result.stdout
+    assert (other / ".factory" / "VERSION").read_text().strip() == "0.0.0"
+    assert (world.repo / ".factory" / "VERSION").read_text().strip() == expected.strip()
+    assert "1 upgraded, 1 current, 1 skipped" in result.stdout
+
+
+def test_upgrade_leaves_a_current_project_in_place(world):
+    installed = world.cli("install", "--tool", "cursor")
+    assert installed.returncode == 0, installed.stderr
+    assert world.cli("fleet", "subscribe").returncode == 0
+    expected: str = (ROOT / "core" / "VERSION").read_text()
+    (world.repo / ".factory" / "VERSION").write_text(expected)
+    _global_home(expected)
+    binary: Path = world.repo / ".factory" / "bin" / "mfactory"
+    before: int = binary.stat().st_mtime_ns
+    result = world.cli("upgrade", "--source", str(ROOT), cwd=world.tmp)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert binary.stat().st_mtime_ns == before
+    assert "already" in result.stdout
+    assert "0 upgraded, 2 current" in result.stdout
+
+
+def test_status_all_points_at_upgrade_when_a_project_is_behind(world, monkeypatch):
+    installed = world.cli("install", "--tool", "cursor")
+    assert installed.returncode == 0, installed.stderr
+    assert world.cli("fleet", "subscribe").returncode == 0
+    (world.repo / ".factory" / "VERSION").write_text("0.0.0\n")
+    monkeypatch.chdir(world.tmp)
+    monkeypatch.setattr("modfactory.cli.maintain.latest_release", lambda: "9.9.9")
+    lines: list[str] = []
+    assert status_all(say=lines.append) == 0
+    assert lines[-1] == "run `mfactory upgrade`"
+    monkeypatch.setattr("modfactory.cli.maintain.latest_release", lambda: "0.0.0")
+    current: list[str] = []
+    assert status_all(say=current.append) == 0
+    assert "run `mfactory upgrade`" not in current
+
+
+def test_changelog_note_is_one_version(tmp_path: Path) -> None:
+    root: Path = tmp_path / "factory"
+    (root / "core" / "bin").mkdir(parents=True)
+    (root / "core" / "bin" / "mfactory").write_text("")
+    bullets: list[str] = [f"- line {number}" for number in range(15)]
+    (root / "CHANGELOG.md").write_text("## 1.2.3\n\n" + "\n".join(bullets) + "\n\n## 1.2.2\n\n- old\n")
+    note: str = _changelog_note(root, "1.2.3")
+    assert note.splitlines() == bullets[:12]
+    assert _changelog_note(root, "9.9.9") == ""
 
 
 def test_install_is_another_name_for_init(bare):
