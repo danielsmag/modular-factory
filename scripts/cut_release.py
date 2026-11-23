@@ -6,7 +6,8 @@ that commit and creates the GitHub release. The squash message starts with
 ``Release vX.Y.Z.`` and names the feature pull request, which is not a
 conventional prefix, so the release merge does not cut another release.
 
-Runs only on GitHub Actions, after ``ci`` succeeds on master.
+Runs only on GitHub Actions. CI on master plans the version and dispatches
+this workflow so the Actions run is named ``vX.Y.Z``.
 """
 
 import json
@@ -30,8 +31,10 @@ from release_version import (  # noqa: E402
     ReleaseError,
     Version,
     parse_release_commit,
+    publish_versions,
     release_body,
     release_commit_message,
+    release_run_name,
     release_subject,
 )
 
@@ -334,13 +337,17 @@ class GitHubRepository:
             raise ReleaseError(f"pull request #{number} was not an object")
         return self._listed_pull_request(payload)
 
-    def ensure_release(self, version: Version, sha: str, notes: str) -> None:
+    def release_exists(self, version: Version) -> bool:
         tag: str = f"v{version}"
         existing: CommandResult = self._runner.run(
             ["gh", "release", "view", tag, "--repo", self._repository],
             check=False,
         )
-        if existing.code == 0:
+        return existing.code == 0
+
+    def ensure_release(self, version: Version, sha: str, notes: str) -> None:
+        tag: str = f"v{version}"
+        if self.release_exists(version):
             print(f"{tag} already published")
             return
         notes_path: str = ""
@@ -442,6 +449,14 @@ def _integer(row: dict[str, object], key: str) -> int:
     return value
 
 
+@dataclass(frozen=True)
+class ReleaseWork:
+    """Release commits already on master, and pull requests still waiting for one."""
+
+    released: dict[int, tuple[Version, str]]
+    pending: list[tuple[str, MergedPullRequest]]
+
+
 class ReleaseCutter:
     """Turn conventional merges on master into tags."""
 
@@ -452,11 +467,37 @@ class ReleaseCutter:
         self._classifier: ReleaseClassifier = ReleaseClassifier()
 
     def cut(self, expected_sha: str) -> None:
+        work: ReleaseWork | None = self._work(expected_sha)
+        if work is None:
+            return
+        self._publish_existing(work.released)
+        if not work.pending and not work.released:
+            print("no pull request to release")
+            return
+        pull: MergedPullRequest
+        for _landing, pull in work.pending:
+            self._publish_new(pull)
+
+    def plan(self, expected_sha: str) -> list[Version]:
+        """Versions this SHA will publish. Empty when a newer master should do it."""
+        work: ReleaseWork | None = self._work(expected_sha)
+        if work is None:
+            return []
+        missing: list[Version] = []
+        version: Version
+        for _number, (version, _sha) in work.released.items():
+            if not self._github.release_exists(version):
+                missing.append(version)
+        current: Version = Version.parse((self._root / "core" / "VERSION").read_text(encoding="utf-8"))
+        pending: list[tuple[str, str]] = [(item.title, item.body) for _landing, item in work.pending]
+        return publish_versions(current, pending, missing)
+
+    def _work(self, expected_sha: str) -> ReleaseWork | None:
         self._git.fetch_master()
         head: str = self._git.master_sha()
         if head != expected_sha:
             print(f"master is {head}, CI ran on {expected_sha}; a newer run will release")
-            return
+            return None
         commits: list[str] = self._git.commits_since_workflow()
         commit_set: set[str] = set(commits)
         released: dict[int, tuple[Version, str]] = {}
@@ -471,14 +512,8 @@ class ReleaseCutter:
                 released[number] = (version, sha)
                 continue
             pulls_by_sha[sha] = self._github.pulls_for_commit(sha)
-        self._publish_existing(released)
         pending: list[tuple[str, MergedPullRequest]] = self._pending(commits, commit_set, pulls_by_sha, released)
-        if not pending and not released:
-            print("no pull request to release")
-            return
-        pull: MergedPullRequest
-        for _landing, pull in pending:
-            self._publish_new(pull)
+        return ReleaseWork(released=released, pending=pending)
 
     def _publish_existing(self, released: dict[int, tuple[Version, str]]) -> None:
         number: int
@@ -561,7 +596,21 @@ class ReleaseCutter:
         self._github.ensure_release(version, merge_sha, promoted.notes)
 
 
+def _set_output(name: str, value: str) -> None:
+    path: str = os.environ.get("GITHUB_OUTPUT", "")
+    if path == "":
+        return
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(f"{name}={value}\n")
+
+
 def main() -> int:
+    plan_only: bool = False
+    if sys.argv[1:] == ["--plan"]:
+        plan_only = True
+    elif len(sys.argv) > 1:
+        print(f"release: unknown arguments: {' '.join(sys.argv[1:])}", file=sys.stderr)
+        return 2
     if os.environ.get("GITHUB_ACTIONS") != "true":
         print("release: refusing to publish outside GitHub Actions", file=sys.stderr)
         return 2
@@ -575,7 +624,13 @@ def main() -> int:
         return 2
     root: Path = Path(__file__).resolve().parents[1]
     try:
-        ReleaseCutter(root, repository, CommandRunner(root)).cut(expected)
+        cutter: ReleaseCutter = ReleaseCutter(root, repository, CommandRunner(root))
+        if plan_only:
+            title: str = release_run_name(cutter.plan(expected))
+            print(title if title else "no release")
+            _set_output("version", title)
+        else:
+            cutter.cut(expected)
     except ReleaseError as error:
         print(f"release: {error}", file=sys.stderr)
         return 1
