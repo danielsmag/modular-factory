@@ -9,7 +9,7 @@ reads the first line of that file to decide where the job goes next.
 Your prompt is one line of facts about the job:
 
 ```text
-Job: <id>. Step: <step>. Job folder: <path>/. Main checkout: <repo>. Worktree: <path>. Branch: <branch>. Base: origin/<base>. Issue: #<n>. ... Write: <file>.
+Job: <id>. Step: <step>. Agent: <agent>. Round: <round>. Attempt: <attempt>. Job folder: <path>/. Main checkout: <repo>. Worktree: <path>. Branch: <branch>. Base: origin/<base>. Issue: #<n>. ... Write: <file>.
 ```
 
 - **Job folder**: the job's files, in the main checkout. Earlier steps wrote

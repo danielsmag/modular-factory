@@ -22,6 +22,9 @@ from pathlib import Path
 from typing import TextIO
 from urllib.parse import quote, unquote, urlsplit
 
+from .. import activity
+from ..config import Config
+from ..config import load as load_config
 from ..util import FactoryError, Refused, dashboard_page, user_dir
 from .paths import FILE, SERVED
 from .project import Project
@@ -114,6 +117,13 @@ def _handler(load: Callable[[], Fleet]) -> type[BaseHTTPRequestHandler]:
                     rest: str = path.removeprefix("/projects/")
                     ident, separator, job_path = rest.partition("/jobs/")
                     project: Project | None = fleet.project(ident) if separator else None
+                    if project is not None and job_path.endswith("/activity"):
+                        body: dict[str, object] | None = job_activity_response(project, job_path[: -len("/activity")])
+                        if body is None:
+                            self.send("not found", "text/plain", HTTPStatus.NOT_FOUND)
+                            return
+                        self.send(json.dumps(body), "application/json")
+                        return
                     if project is not None:
                         root: Path = project.jobs_dir.resolve()
                         target: Path = (root / job_path).resolve()
@@ -126,6 +136,24 @@ def _handler(load: Callable[[], Fleet]) -> type[BaseHTTPRequestHandler]:
             self.send("not found", "text/plain", HTTPStatus.NOT_FOUND)
 
     return Handler
+
+
+def job_activity_response(project: Project, job_id: str) -> dict[str, object] | None:
+    """Redacted agent activity for one job. None when the job id leaves the jobs folder."""
+    if not job_id or "/" in job_id or job_id in {".", ".."}:
+        return None
+    root: Path = project.jobs_dir.resolve()
+    job_dir: Path = (project.jobs_dir / job_id).resolve()
+    if not job_dir.is_relative_to(root) or not (job_dir / "job.json").is_file():
+        return None
+    try:
+        loaded: object = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"runs": [], "error": "job.json unreadable"}
+    if not isinstance(loaded, dict):
+        return {"runs": [], "error": "job.json unreadable"}
+    cfg: Config = load_config(project.path)
+    return activity.job_activity(cfg, loaded, job_dir)
 
 
 def handler(file: Path) -> type[BaseHTTPRequestHandler]:

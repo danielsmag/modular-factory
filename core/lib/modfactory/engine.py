@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import checks, cost, graph
+from . import activity, checks, cost, graph
 from .config import RISKS, shown_agent
 from .queue import Queue
 from .scripted import Scripted
@@ -216,10 +216,11 @@ class Factory(Humans, Scripted, Queue):
             notes.append("waiting for " + self._who(job))
         return f"{self.tag(job)}: {name} {outcome} -> {landed}" + (f" ({'; '.join(notes)})" if notes else "")
 
-    def _update_cost(self, job):
+    def _update_cost(self, job: dict[str, Any]) -> None:
         found = cost.job_cost(self.cfg, job, self.dir(job))
         if found:
             job["cost_usd"], job["cost_by_step"], job["cost_unpriced_models"] = found
+        activity.write_snapshot(self.cfg, job, self.dir(job))
 
     # ---- Routing -----------------------------------------------------------
 
@@ -233,9 +234,12 @@ class Factory(Humans, Scripted, Queue):
 
     # ---- Prompts -----------------------------------------------------------
 
-    def _header(self, job, name):
-        worktree = job["worktree"] if Path(job["worktree"]).exists() else "not created yet"
-        return (f"Job: {job['id']}. Step: {name}. Job folder: {self.dir(job)}/. "
+    def _header(self, job: dict[str, Any], name: str, agent: str | None = None) -> str:
+        who: str = shown_agent(agent or self.cfg.agent_name(name, self.risk(job)))
+        worktree: str = job["worktree"] if Path(job["worktree"]).exists() else "not created yet"
+        return (f"Job: {job['id']}. Step: {name}. Agent: {who}. "
+                f"Round: {job['round']}. Attempt: {job['attempt']}. "
+                f"Job folder: {self.dir(job)}/. "
                 f"Main checkout: {self.cfg.repo}. Worktree: {worktree}. Branch: {job['branch']}. "
                 f"Base: origin/{self.cfg.base}. Issue: #{job['issue']}.")
 
@@ -297,7 +301,8 @@ class Factory(Humans, Scripted, Queue):
 
     def _reviewer_prompt(self, job, name, reviewer, index):
         out = self.round_dir(job) / f"review-{reviewer}.md"
-        parts = [self._header(job, name), f"You are the {reviewer} reviewer. Review round {job['round']}."]
+        parts = [self._header(job, name, job["agents"]["reviewers"][reviewer]),
+                 f"You are the {reviewer} reviewer. Review round {job['round']}."]
         if self.cfg.reviewers[reviewer].get("port"):
             parts.append(f"Port: {self.port(job, 1 + index)}.")
         parts.append(f"Write: {out}.")

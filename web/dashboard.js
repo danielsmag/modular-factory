@@ -532,7 +532,10 @@ function openDrawer(job) {
   if (sameDrawer(job)) return;
   const files = sortedFiles(job.files || []);
   const path = files.length ? files[0].path : null;
-  state.drawer = { project: job.project || null, id: job.id, path, text: path ? "Loading..." : "No files yet.", focus: true };
+  state.drawer = {
+    project: job.project || null, id: job.id, path, text: path ? "Loading..." : "No files yet.", focus: true,
+    tab: "files", run: 0, runPicked: false, activity: null, activitySeq: 0,
+  };
   render();
   if (path) fetchDrawer(job, path);
 }
@@ -641,6 +644,123 @@ function fileList(job, files) {
   if (!files.length) box.append(el("p", { class: "kempty", text: "No files yet." }));
   return box;
 }
+function drawerTab(name, label) {
+  const on = state.drawer && state.drawer.tab === name;
+  return el("button", {
+    type: "button", role: "tab", text: label,
+    "aria-selected": String(on), "aria-pressed": on ? "true" : "false",
+    onclick: () => pickDrawerTab(name),
+  });
+}
+function pickDrawerTab(name) {
+  if (!state.drawer || state.drawer.tab === name) return;
+  state.drawer.tab = name;
+  render();
+  if (name === "activity") refreshActivity();
+}
+function activityUrl(job) {
+  if (state.fleet && job.project) {
+    return "/projects/" + encodeURIComponent(job.project) + "/jobs/" + encodeURIComponent(job.id) + "/activity";
+  }
+  return "jobs/" + encodeURIComponent(job.id) + "/activity";
+}
+function roundAttempt(run) {
+  const round = run.round == null ? "R-" : "R" + run.round;
+  const attempt = run.attempt == null ? "a-" : "a" + run.attempt;
+  return round + " · " + attempt;
+}
+function durationLabel(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds)));
+  const minutes = Math.floor(total / 60);
+  const remain = total % 60;
+  if (minutes >= 60) return Math.floor(minutes / 60) + "h " + (minutes % 60) + "m";
+  return minutes + "m " + String(remain).padStart(2, "0") + "s";
+}
+function runMeta(run) {
+  const bits = [roundAttempt(run)];
+  if (run.duration_s != null) bits.push(durationLabel(run.duration_s));
+  bits.push(run.status === "running" ? "running" : "done");
+  if (run.cost_usd != null && run.cost_usd !== undefined) bits.push(money(run.cost_usd));
+  else if (run.input_tokens || run.output_tokens) bits.push((run.input_tokens || 0) + " in / " + (run.output_tokens || 0) + " out");
+  return bits.join("  ");
+}
+function clock(at) {
+  const match = String(at || "").match(/T(\d{2}:\d{2}:\d{2})/);
+  return match ? match[1] : "";
+}
+function pickRun(index) {
+  if (!state.drawer) return;
+  state.drawer.run = index;
+  state.drawer.runPicked = true;
+  render();
+}
+function openJobFile(job, path) {
+  if (!state.drawer) return;
+  state.drawer.tab = "files";
+  pickFile(job, path);
+}
+function runList(job, runs, index) {
+  const box = el("div", { class: "d-runs" });
+  runs.forEach((run, at) => {
+    box.append(el("button", {
+      type: "button", class: "d-run" + (at === index ? " on" : ""),
+      "aria-pressed": String(at === index),
+      onclick: () => pickRun(at),
+    },
+      el("span", { class: "who", text: run.agent || "agent" }),
+      el("span", { class: "d-run-meta" },
+        run.status === "running" ? el("i", { class: "pulse", "aria-hidden": "true" }) : null,
+        el("span", { text: runMeta(run) }))));
+  });
+  return box;
+}
+function eventMain(job, event) {
+  const main = el("div", { class: "ev-main" });
+  if (event.kind === "text") {
+    main.append(el("p", { class: "ev-text", text: event.text || "" }));
+  } else if (event.job_file) {
+    main.append(el("button", {
+      type: "button", class: "ev-link",
+      onclick: () => openJobFile(job, event.job_file),
+    }, el("span", { text: (event.name || "Edit") + "  " + event.job_file })));
+  } else {
+    const summary = event.summary || event.path || "";
+    main.append(el("p", { class: "ev-tool", text: (event.name || "") + (summary ? "  " + summary : "") }));
+  }
+  if (event.output) main.append(el("pre", { class: "ev-out", text: event.output }));
+  return main;
+}
+function timeline(job, run, error) {
+  const box = el("div", { class: "d-doc d-timeline", tabindex: 0 });
+  if (error) box.append(el("p", { class: "error", text: error }));
+  (run.events || []).forEach((event) => {
+    box.append(el("div", { class: "ev" },
+      el("span", { class: "ev-time", text: clock(event.at) }),
+      eventMain(job, event)));
+  });
+  if (run.result) {
+    box.append(el("div", { class: "ev" },
+      el("span", { class: "ev-time", text: "result" }),
+      el("p", { class: "ev-text", text: run.result })));
+  }
+  if (!(run.events || []).length && !run.result) box.append(el("p", { class: "kempty", text: "No events yet." }));
+  return box;
+}
+function activityBody(job) {
+  const data = state.drawer.activity;
+  if (!data) return el("div", { class: "d-activity" }, el("p", { class: "kempty", text: "Loading..." }));
+  const runs = Array.isArray(data.runs) ? data.runs : [];
+  if (!runs.length) {
+    return el("div", { class: "d-activity" },
+      data.error ? el("p", { class: "error", text: data.error }) : null,
+      el("p", { class: "kempty", text: data.notice || "No agent runs yet." }));
+  }
+  let index = state.drawer.run || 0;
+  if (index >= runs.length) index = runs.length - 1;
+  if (index < 0) index = 0;
+  return el("div", { class: "d-body", style: splitStyle() },
+    runList(job, runs, index), grip(), timeline(job, runs[index], data.error || ""));
+}
 function drawer() {
   if (!state.drawer) return null;
   const job = jobs().find((item) => sameDrawer(item));
@@ -660,8 +780,12 @@ function drawer() {
         el("div", { class: "links" },
           link(job.issue_url, "issue #" + (job.issue == null ? "" : job.issue)),
           job.pr ? link(job.pr_url, "PR #" + job.pr) : null),
+        el("div", { class: "tabs d-tabs", role: "tablist", "aria-label": "Job view" },
+          drawerTab("files", "Files"), drawerTab("activity", "Agent activity")),
         close),
-      el("div", { class: "d-body", style: splitStyle() }, fileList(job, files), grip(), el("pre", { class: "file d-doc", tabindex: 0, text: state.drawer.text || "" }))));
+      state.drawer.tab === "activity"
+        ? activityBody(job)
+        : el("div", { class: "d-body", style: splitStyle() }, fileList(job, files), grip(), el("pre", { class: "file d-doc", tabindex: 0, text: state.drawer.text || "" }))));
 }
 function queueCard(row) {
   const who = state.fleet && state.selected === "all" && row.projectName ? row.projectName + " · " : "";
@@ -1262,7 +1386,7 @@ function render() {
   paintLive();
   const target = document.getElementById("view");
   const keep = document.activeElement && target.contains(document.activeElement) ? null : document.activeElement;
-  const scrollers = ".joblist, pre.file, .d-doc, .d-files, .filelist";
+  const scrollers = ".joblist, pre.file, .d-doc, .d-files, .d-runs, .d-timeline, .filelist";
   const scroll = [...target.querySelectorAll(scrollers)].map((n) => n.scrollTop);
   let content;
   const ready = state.fleet ? !state.error || state.projects.length : !!(state.index && state.graph);
@@ -1304,12 +1428,39 @@ async function load(path) {
   return data;
 }
 function openJob() {
-  if (!state.drawer || !state.drawer.path || route().view !== "board") return null;
+  if (!state.drawer || route().view !== "board") return null;
   return jobs().find((job) => sameDrawer(job)) || null;
 }
 function refetchDrawer() {
   const open = openJob();
-  if (open) fetchDrawer(open, state.drawer.path);
+  if (open && state.drawer.path) fetchDrawer(open, state.drawer.path);
+}
+function refreshActivity() {
+  if (!state.drawer || state.drawer.tab !== "activity" || route().view !== "board") return;
+  const open = openJob();
+  if (open) fetchActivity(open);
+}
+async function fetchActivity(job) {
+  const drawer = state.drawer;
+  if (!drawer) return;
+  const seq = (drawer.activitySeq = (drawer.activitySeq || 0) + 1);
+  let body;
+  try {
+    const res = await fetch(activityUrl(job), { cache: "no-store" });
+    body = res.ok ? await res.json() : { runs: [], error: "Could not load activity (" + res.status + ")." };
+  } catch (error) {
+    body = { runs: [], error: "Could not load activity." };
+  }
+  if (state.drawer !== drawer || drawer.activitySeq !== seq || drawer.tab !== "activity") return;
+  const runs = Array.isArray(body.runs) ? body.runs : [];
+  if (!drawer.runPicked) {
+    const running = runs.findIndex((run) => run.status === "running");
+    drawer.run = running >= 0 ? running : Math.max(0, runs.length - 1);
+  } else if (drawer.run >= runs.length) {
+    drawer.run = Math.max(0, runs.length - 1);
+  }
+  drawer.activity = body;
+  render();
 }
 let probed = false;
 let queueTimer = null;
@@ -1343,6 +1494,7 @@ async function refreshFleet() {
   } else {
     paintLive();
   }
+  refreshActivity();
 }
 async function refreshSingle() {
   const [index, graph] = await Promise.all([load("jobs/index.json"), load("jobs/graph.json")]);
@@ -1355,6 +1507,7 @@ async function refreshSingle() {
     render();
     refetchDrawer();
   } else paintLive();
+  refreshActivity();
 }
 async function tryProjects() {
   // false: this server has no fleet. null: try again next tick. object: the fleet.
