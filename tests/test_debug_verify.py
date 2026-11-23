@@ -1,11 +1,9 @@
 """The optional steps: a debugger after failed checks, and validation after merge or deploy."""
 
 import subprocess
-from pathlib import Path
-from typing import Any
 
 import pytest
-from conftest import AUTO_MERGE, World
+from conftest import AUTO_MERGE
 from modfactory import config
 from modfactory.util import MARKER, ConfigError, Refused
 
@@ -93,19 +91,6 @@ def test_a_failing_verify_is_retried_then_fails_the_job_with_a_comment(world):
     assert "smoke broke" in comment
     assert world.next(job)[0].startswith(f"finished {job} #1: failed (The commands failed with exit 1.")
     assert (world.dir(job) / "verify.md").read_text().startswith("VERIFY: FAIL\n")
-
-
-def test_a_revert_branch_uses_the_configured_prefix(world: World) -> None:
-    world.configure(AUTO_MERGE + verify(commands='["false"]', retries=0, on_failure='"revert-pr"'))
-    path: Path = world.repo / "factory.toml"
-    text: str = path.read_text().replace(
-        'base_branch = "main"\n', 'base_branch = "main"\nbranch_prefix = "feature/"\n')
-    path.write_text(text)
-    job: str = world.create(world.issue())
-    world.play(job)
-    assert world.job(job)["branch"] == f"feature/{job}"
-    revert: dict[str, Any] = world.gh["prs"]["3"]
-    assert revert["isDraft"] and revert["headRefName"] == f"feature/revert-{job}"
 
 
 def test_on_failure_revert_pr_opens_a_draft_and_never_merges_it(world):

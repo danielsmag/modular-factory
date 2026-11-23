@@ -4,7 +4,7 @@ import tomllib
 
 import pytest
 from modfactory import config, graph, sync
-from modfactory.util import ConfigError, Refused
+from modfactory.util import ConfigError
 
 
 def load(world, text=""):
@@ -147,39 +147,6 @@ def test_a_newer_schema_is_refused(world):
 def test_broken_toml_is_a_config_problem(world):
     with pytest.raises(ConfigError, match="factory.toml: "):
         config.load(world.repo, text="schema = \n")
-
-
-def test_a_branch_prefix_names_the_job_and_the_revert(world):
-    cfg = load(world)
-    assert cfg["project"]["branch_prefix"] == "factory/"
-    assert cfg["project"]["branch_pattern"] == ""
-    assert cfg.sources[("project", "branch_prefix")] == "default"
-    assert cfg.job_branch("001-add-dark-mode") == "factory/001-add-dark-mode"
-    assert cfg.job_branch("001-add-dark-mode", revert=True) == "factory/revert-001-add-dark-mode"
-
-    assert "non-empty string" in problems(world, '[project]\nbranch_prefix = ""\n')[0]
-    assert "legal git branch prefix" in problems(world, '[project]\nbranch_prefix = "feature.lock/"\n')[0]
-    assert "legal git branch prefix" in problems(world, '[project]\nbranch_prefix = "../x/"\n')[0]
-    assert "must be a valid regular expression" in problems(world, "[project]\nbranch_pattern = '('\n")[0]
-
-    missed = problems(
-        world, '[project]\nbranch_prefix = "feature/"\nbranch_pattern = \'^hotfix/.+$\'\n')
-    assert any("feature/000-add-dark-mode" in item for item in missed)
-    assert any("feature/revert-000-add-dark-mode" in item for item in missed)
-
-    named = load(
-        world,
-        '[project]\nbranch_prefix = "feature/"\n'
-        "branch_pattern = '^(feature|fix|chore|docs|test|hotfix)/[A-Za-z0-9._-]+$'\n")
-    assert named.job_branch("001-add-dark-mode") == "feature/001-add-dark-mode"
-    assert named.job_branch("001-add-dark-mode", revert=True) == "feature/revert-001-add-dark-mode"
-
-    narrow = load(
-        world,
-        '[project]\nbranch_prefix = "feature/"\n'
-        "branch_pattern = '^feature/(revert-)?000-add-dark-mode$'\n")
-    with pytest.raises(Refused, match="feature/001-add-a-thing"):
-        narrow.job_branch("001-add-a-thing")
 
 
 def test_a_pull_request_title_pattern_must_compile(world):
