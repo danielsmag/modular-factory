@@ -69,6 +69,57 @@ def test_init_again_keeps_factory_toml_and_changes_nothing_else(bare):
     assert (bare.repo / ".gitignore").read_text() == before
 
 
+def test_personal_install_leaves_the_factory_untracked(bare):
+    before = (bare.repo / ".gitignore").read_text()
+    res = bare.cli("install", "--tool", "claude", "--personal")
+    assert res.returncode == 0, res.stderr
+    assert (bare.repo / ".gitignore").read_text() == before
+    assert ".gitignore" not in res.stdout
+    assert "Leave factory.toml, .factory/ and the generated files untracked." in res.stdout
+    exclude = Path(git("rev-parse", "--git-path", "info/exclude", cwd=bare.repo))
+    if not exclude.is_absolute():
+        exclude = bare.repo / exclude
+    text = exclude.read_text()
+    block = "\n".join((
+        "# software factory, this checkout only",
+        "/factory.toml",
+        "/.factory/",
+        "/.worktrees/",
+        "/.claude/agents/mfactory-*",
+        "/.claude/agents/factory-*",
+        "/.claude/skills/mfactory/",
+        "/.cursor/agents/mfactory-*",
+        "/.cursor/agents/factory-*",
+        "/.agents/skills/mfactory/",
+        "/.codex/agents/mfactory-*",
+        "/.codex/agents/factory-*",
+        "",
+    ))
+    assert block in text
+    for path in ("factory.toml", ".factory/jobs/x", ".claude/agents/mfactory-build.md"):
+        ignored = subprocess.run(["git", "check-ignore", "-v", "--", path], cwd=bare.repo,
+                                 capture_output=True, text=True)
+        assert ignored.returncode == 0, path
+        assert ignored.stdout.split(":", 1)[0].endswith("info/exclude"), ignored.stdout
+    status = git("status", "--short", cwd=bare.repo)
+    assert "factory.toml" not in status
+    assert ".factory" not in status
+    assert "mfactory-build" not in status
+
+    again = bare.cli("install")
+    assert again.returncode == 0, again.stderr
+    assert (bare.repo / ".gitignore").read_text() == before
+    assert "ok    .git/info/exclude already ignores the factory (personal install)" in again.stdout
+
+    (bare.repo / "factory.toml").write_text(
+        'schema = 1\n[project]\nbase_branch = "main"\n[checks]\ncommands = ["true"]\n')
+    checked = doctor(bare, "--skip-checks")
+    assert "aren't on origin/main yet" not in checked.stdout
+    assert ("ok    factory.toml and .factory/ are ignored in this checkout (.git/info/exclude). "
+            "Worktrees built from origin/main do not contain them. "
+            "A check that needs those files must use the main checkout.") in checked.stdout
+
+
 def test_init_lists_the_skills_it_finds(bare):
     skill = bare.repo / ".claude/skills/testing/SKILL.md"
     skill.parent.mkdir(parents=True)

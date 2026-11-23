@@ -44,7 +44,7 @@ help: ## list checks and mfactory targets
 	@echo "mfactory  ($(MFACTORY))"
 	@echo "  make cli ARGS=\"--help\"     any CLI invocation"
 	@echo "  make version"
-	@echo "  make install               TOOL=claude  or  TOOLS=\"claude cursor\""
+	@echo "  make install               TOOL=claude  or  TOOLS=\"claude cursor\"  PERSONAL=1"
 	@echo "  make init                  same command as install"
 	@echo "  make upgrade               global CLI and every subscribed project"
 	@echo "                             SOURCE=.          install from this tree"
@@ -100,11 +100,11 @@ cli: ## raw CLI: make cli ARGS="queue"
 version: ## mfactory version
 	$(MFACTORY) version $(ARGS)
 
-install: ## mfactory install. TOOL=claude or TOOLS="claude cursor"
-	$(MFACTORY) install $(foreach t,$(if $(TOOLS),$(TOOLS),$(TOOL)),--tool $(t)) $(ARGS)
+install: ## mfactory install. TOOL=claude or TOOLS="claude cursor". PERSONAL=1
+	$(MFACTORY) install $(foreach t,$(if $(TOOLS),$(TOOLS),$(TOOL)),--tool $(t)) $(if $(PERSONAL),--personal) $(ARGS)
 
-init: ## mfactory init (same as install)
-	$(MFACTORY) init $(foreach t,$(if $(TOOLS),$(TOOLS),$(TOOL)),--tool $(t)) $(ARGS)
+init: ## mfactory init (same as install). PERSONAL=1
+	$(MFACTORY) init $(foreach t,$(if $(TOOLS),$(TOOLS),$(TOOL)),--tool $(t)) $(if $(PERSONAL),--personal) $(ARGS)
 
 upgrade: ## global CLI and every subscribed project. SELF=1 only the CLI. ALL=1 only projects. SOURCE=. uses this tree
 	$(MFACTORY) upgrade $(if $(SELF),--self) $(if $(ALL),--all) $(if $(REF),--version $(REF)) $(if $(SOURCE),--source $(SOURCE)) $(ARGS)
