@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.6.1
+
 - The GitHub Actions run that publishes a release is named with the version, such as `v0.6.1`.
 
 ## 0.6.0
