@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.4.0
+
 - Checks and verify commands receive `FACTORY_CHECKOUT`, the path of the main checkout. They still run in the worktree.
 
 ## 0.3.3
