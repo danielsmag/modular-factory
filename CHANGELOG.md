@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- `[project] branch_prefix` names job branches. The default `factory/` keeps today's names (`factory/<job-id>`, and `factory/revert-<job-id>` for a revert). `[project] branch_pattern`, when set, must match the branch name when the factory chooses it. A job already on disk keeps the branch stored in `job.json`. Schema stays 1.
+
 ## 0.7.0
 
 - The job drawer has an Agent activity tab. It shows what each Claude Code agent did, from its transcripts, with secrets redacted. The prompt names the agent, round, and attempt so a run can be matched to the step.

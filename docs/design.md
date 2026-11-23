@@ -91,7 +91,8 @@ round-1/review-code.md    one file per reviewer
 round-1/debug-1.md        the debugger's diagnosis
 ```
 
-and a git worktree at `.worktrees/<id>` on branch `factory/<id>`.
+and a git worktree at `.worktrees/<id>` on branch `{branch_prefix}<id>`
+(default `factory/<id>`). A revert branch is `{branch_prefix}revert-<id>`.
 
 ## Edges and limits
 

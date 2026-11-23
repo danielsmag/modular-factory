@@ -153,6 +153,10 @@ generated agent files.
      requires a pull request title format, such as Conventional Commits or a
      ticket key. Leave both empty to use the spec's title. With squash merge
      the title becomes the commit on the base branch.
+   - `[project] branch_prefix` and `[project] branch_pattern`, when CI requires
+     a branch name such as `feature/<name>`. The prefix is concatenated with
+     the job id, so include the slash. Leave the pattern empty to skip the
+     check. A revert branch is the prefix plus `revert-` and the job id.
    - `[checks] commands`: the commands from step 2, in the order CI runs them.
      Each must exit non-zero on failure and must not rewrite files.
    - `[skills]` and `skills = [...]` under a step or reviewer, when a project
@@ -219,7 +223,7 @@ feedback or asking for something new, ask.
 
 - Only issues with the factory's label run. Adding a label needs triage or
   write access to the repository, so the label is the trust boundary.
-- Agents push only their own `factory/<job>` branch. By default a maintainer
+- Agents push only the job's branch. By default a maintainer
   merges. The script merges only when the merge step is on. The factory never
   deploys.
 - One pull request per issue. How often a step may repeat is set by `max` on

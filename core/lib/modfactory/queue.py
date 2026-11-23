@@ -51,12 +51,13 @@ class Queue:
         if labels["queue"] not in {label["name"] for label in issue["labels"]}:
             raise Refused(f"issue #{number} isn't labeled `{labels['queue']}`. Only labeled issues run.")
         n, job_id = self.store.new_id(issue["title"])
+        branch: str = self.cfg.job_branch(job_id)
         job = {
             "id": job_id, "number": n, "issue": number, "title": issue["title"],
             "issue_url": issue["url"], "author": issue["author"]["login"],
             "step": None, "entered_at": None, "running_since": None, "running_order": None,
             "round": 0, "attempt": 0, "gate_failed": False, "taken": {}, "handoff": [],
-            "branch": f"factory/{job_id}",
+            "branch": branch,
             "worktree": str(self.cfg.repo / self.cfg["paths"]["worktrees"] / job_id),
             "pr": None, "pr_url": None, "merge_sha": None,
             "intake": None, "agents": None, "gate": None, "reviews": {},

@@ -121,6 +121,35 @@ def test_progress_notes_stay_out_of_a_spec_prompt(world):
     assert (world.dir(job) / "progress.md").is_file()
 
 
+def _set_branch_prefix(world: World, prefix: str, pattern: str = "") -> None:
+    """Set branch naming on the project's existing [project] table."""
+    path: Path = world.repo / "factory.toml"
+    lines: str = f'branch_prefix = "{prefix}"\n'
+    if pattern:
+        lines += f"branch_pattern = '{pattern}'\n"
+    text: str = path.read_text().replace('base_branch = "main"\n', 'base_branch = "main"\n' + lines)
+    path.write_text(text)
+
+
+def test_a_configured_prefix_names_the_job_branch(world: World) -> None:
+    _set_branch_prefix(world, "feature/")
+    job: str = world.start(until="spec")
+    assert world.job(job)["branch"] == f"feature/{job}"
+    shown: str = subprocess.run(
+        ["git", "branch", "--show-current"], cwd=world.repo / ".worktrees" / job,
+        capture_output=True, text=True, check=True).stdout.strip()
+    assert shown == f"feature/{job}"
+    prompt: str = world.next(job)[1]
+    assert f"Branch: feature/{job}." in prompt
+
+
+def test_create_refuses_a_branch_the_pattern_misses(world: World) -> None:
+    _set_branch_prefix(world, "feature/", r"^feature/(revert-)?000-add-dark-mode$")
+    with pytest.raises(Refused, match=r"branch 'feature/001-add-a-thing' does not match"):
+        world.create(world.issue())
+    assert not (world.repo / ".factory" / "jobs").exists()
+
+
 def _require_conventional_title(world: World) -> None:
     """Set the title pattern on the project's existing [project] table."""
     path: Path = world.repo / "factory.toml"
