@@ -7,6 +7,9 @@ changes when it does, and this file says what to change.
 ## Unreleased
 
 - `mfactory install --personal` keeps `factory.toml`, `.factory/` and the generated files untracked via `.git/info/exclude`, and leaves `.gitignore` alone. `doctor` accepts that layout. Worktrees built from the base branch do not contain those files.
+
+## 0.4.0
+
 - Checks and verify commands receive `FACTORY_CHECKOUT`, the path of the main checkout. They still run in the worktree.
 
 ## 0.3.3
