@@ -65,12 +65,18 @@ def verify(**settings):
 
 
 def test_verify_after_merge_runs_the_commands_on_the_merge_commit(world):
-    commands = '["test -f feature-1-1.txt", "test $FACTORY_MERGE_SHA = $(git rev-parse HEAD)"]'
+    checkout: str = str(world.repo)
+    commands: str = (
+        '["test -f feature-1-1.txt", "test $FACTORY_MERGE_SHA = $(git rev-parse HEAD)", '
+        f'"test \\"$FACTORY_CHECKOUT\\" = \\"{checkout}\\""]'
+    )
     job = world.start(config_text=AUTO_MERGE + verify(commands=commands))
     j = world.job(job)
+    log: str = (world.dir(job) / "verify-checks.log").read_text()
     assert j["step"] == "done" and j["history"][-1]["step"] == "verify"
     assert (world.dir(job) / "verify.md").read_text().startswith("VERIFY: PASS\n")
     assert f"COMMIT: {j['merge_sha']}" in (world.dir(job) / "verify-checks.md").read_text()
+    assert checkout in log and "(exit 0)" in log
     assert not (world.repo / ".worktrees" / f"{job}-verify").exists()
 
 

@@ -436,8 +436,8 @@ def doctor(repo, run_checks=True, say=print):
                 fail(f"could not check out origin/{base}: {added.stderr.strip()}")
             else:
                 try:
-                    code, log, seconds = checks.run_commands(commands, tree, {"FACTORY_JOB": "doctor"},
-                                                             cfg["checks"]["timeout_minutes"])
+                    code, log, seconds = checks.run_commands(
+                        commands, tree, checks.command_env(cfg, "doctor"), cfg["checks"]["timeout_minutes"])
                 finally:
                     run(["git", "worktree", "remove", "--force", str(tree)], cwd=repo, check=False)
                     run(["git", "worktree", "prune"], cwd=repo, check=False)

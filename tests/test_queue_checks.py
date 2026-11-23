@@ -130,6 +130,14 @@ def test_project_protected_paths_may_gain_files_but_not_lose_or_change_them(worl
     assert verdict == "FAIL" and "- M README.md" in report
 
 
+def test_checks_get_the_main_checkout_path(world):
+    job: str = world.start(until="build", config_text='[checks]\ncommands = ["printf %s \\"$FACTORY_CHECKOUT\\""]\n')
+    verdict, _report = gate(world, job, None)
+    log: str = (world.dir(job) / "round-1" / "checks.log").read_text()
+    assert verdict == "PASS"
+    assert str(world.repo) in log
+
+
 def test_the_checks_use_factory_toml_from_the_main_checkout(world):
     job = world.start(until="build")
     verdict, _ = gate(world, job, {"factory.toml": 'schema = 1\n[checks]\ncommands = ["true"]\n', "FAIL": "x\n"})

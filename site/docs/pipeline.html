@@ -154,7 +154,7 @@ commands = ["npm run test:smoke"]
 agent = true
 url = "https://staging.example.com"
 on_failure = "revert-pr"</code></pre>
-  <p><code>after = "merge"</code> validates the merge commit straight away. <code>after = "deploy"</code> runs <code>wait</code> until it exits 0, again every 15 seconds, until <code>timeout_minutes</code> (default 20). Commands run in a clean checkout of the merge commit. They receive <code>FACTORY_JOB</code>, <code>FACTORY_MERGE_SHA</code>, <code>FACTORY_PR</code>, and <code>FACTORY_DEPLOY_URL</code>.</p>
+  <p><code>after = "merge"</code> validates the merge commit straight away. <code>after = "deploy"</code> runs <code>wait</code> until it exits 0, again every 15 seconds, until <code>timeout_minutes</code> (default 20). Commands run in a clean checkout of the merge commit. They receive <code>FACTORY_CHECKOUT</code> (the main checkout), <code>FACTORY_JOB</code>, <code>FACTORY_MERGE_SHA</code>, <code>FACTORY_PR</code>, and <code>FACTORY_DEPLOY_URL</code>.</p>
   <p>When validation fails the job ends as <code>failed</code>. <code>on_failure</code> is <code>comment</code> (comment on the pull request), <code>issue</code> (also open a new <code>factory</code> issue), or <code>revert-pr</code> (also open a draft pull request that reverts the merge). The factory never merges that revert.</p>
 </article>
 <script src="docs.js"></script>

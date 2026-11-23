@@ -109,7 +109,11 @@ timeout_minutes = 30
 The commands run in order in the job's worktree with `bash -c`. The first one
 that exits non-zero stops the run and fails the step. They run at the `gate`
 step, and again in the `merge` step after the base branch is merged in, when
-that step is on.
+that step is on. The working directory stays that worktree. Each command gets
+`FACTORY_CHECKOUT`, the main checkout where the factory is installed, and
+`FACTORY_JOB`, the job id. `mfactory checks` runs in the current directory,
+which may be a subdirectory or a job worktree. `FACTORY_CHECKOUT` is still
+the main checkout. That command has no job, so `FACTORY_JOB` is unset.
 
 A command must not rewrite files: use `prettier --check`, not
 `prettier --write`.
@@ -405,8 +409,27 @@ on_failure = "revert-pr"
 | `retries` | `1` | How many times to run failing commands again before the step fails. |
 | `on_failure` | `"comment"` | What to do when validation fails, below. |
 
-The commands and `wait` get these environment variables: `FACTORY_JOB`,
-`FACTORY_MERGE_SHA`, `FACTORY_PR` and `FACTORY_DEPLOY_URL`.
+The commands and `wait` get `FACTORY_CHECKOUT`, `FACTORY_JOB`,
+`FACTORY_MERGE_SHA`, `FACTORY_PR` and `FACTORY_DEPLOY_URL`. The working
+directory is a clean checkout of the merge commit. `FACTORY_CHECKOUT` is the
+main checkout, so a command can read a job file that the worktree does not
+contain:
+
+```toml
+[checks]
+commands = [
+  "npm test",
+  "test -s \"$FACTORY_CHECKOUT/.factory/jobs/$FACTORY_JOB/spec.md\"",
+]
+```
+
+The same variable is set for `wait`. A token that is not on the merge commit
+stays in the main checkout:
+
+```bash
+test "$(curl -fsS -H "Authorization: Bearer $(cat "$FACTORY_CHECKOUT/.factory/smoke-token")" \
+  "$FACTORY_DEPLOY_URL/version")" = "$FACTORY_MERGE_SHA"
+```
 
 A minimal `wait` script:
 

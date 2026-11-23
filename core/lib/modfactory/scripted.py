@@ -89,8 +89,8 @@ class Scripted:
         self._remove_worktree(path)
         run(["git", "fetch", "origin", self.cfg.base], cwd=self.cfg.repo)
         run(["git", "worktree", "add", "--detach", path, sha], cwd=self.cfg.repo)
-        env = {"FACTORY_JOB": job["id"], "FACTORY_MERGE_SHA": sha, "FACTORY_PR": str(job["pr"] or ""),
-               "FACTORY_DEPLOY_URL": step["url"]}
+        env: dict[str, str] = checks.command_env(self.cfg, job["id"], {
+            "FACTORY_MERGE_SHA": sha, "FACTORY_PR": str(job["pr"] or ""), "FACTORY_DEPLOY_URL": step["url"]})
         code, log, problem = 0, "", None
         if step["after"] == "deploy":
             deadline = time.monotonic() + step["timeout_minutes"] * 60

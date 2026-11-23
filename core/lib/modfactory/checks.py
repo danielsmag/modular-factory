@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 
+from .config import Config
 from .util import Refused, run, tail
 
 TAIL = 80
@@ -37,6 +38,20 @@ def protected_changes(cfg, worktree):
     return hits
 
 
+def command_env(cfg: Config, job_id: str | None = None,
+                extra: dict[str, str] | None = None) -> dict[str, str]:
+    """Environment for a project command. The caller chooses the working directory.
+
+    `FACTORY_CHECKOUT` is the main checkout. `FACTORY_JOB` is set when this run belongs to a job.
+    `mfactory checks` has no job, so it leaves `FACTORY_JOB` unset.
+    """
+    env: dict[str, str] = {"FACTORY_CHECKOUT": str(cfg.repo)}
+    if job_id is not None:
+        env["FACTORY_JOB"] = job_id
+    env.update(extra or {})
+    return env
+
+
 def run_commands(commands, cwd, env=None, timeout_minutes=30):
     """Run each command in order; the first failure stops. Returns (exit code, log, seconds)."""
     start, log = time.monotonic(), []
@@ -63,7 +78,7 @@ def gate(cfg, job, round_dir, name="checks"):
     commit = run(["git", "rev-parse", "HEAD"], cwd=worktree).stdout.strip()
     protected = protected_changes(cfg, worktree)
     if commands:
-        code, log, seconds = run_commands(commands, worktree, {"FACTORY_JOB": job["id"]},
+        code, log, seconds = run_commands(commands, worktree, command_env(cfg, job["id"]),
                                           cfg["checks"]["timeout_minutes"])
     else:
         code, log, seconds = 1, "[checks].commands in factory.toml is empty, so nothing proves this works.\n", 0
@@ -103,7 +118,7 @@ def hook(cfg, store):
         return 0  # not a factory agent
     if not cfg["checks"]["commands"] or not Path(job["worktree"]).exists():
         return 0
-    code, log, _ = run_commands(cfg["checks"]["commands"], job["worktree"],
+    code, log, _ = run_commands(cfg["checks"]["commands"], job["worktree"], command_env(cfg, job["id"]),
                                 timeout_minutes=cfg["checks"]["timeout_minutes"])
     if code != 0:
         print(f"The project's checks fail in your worktree (exit {code}). The gate will reject this "
@@ -117,7 +132,7 @@ def run_here(cfg):
     """`factory checks`: run the project's checks in the current directory."""
     if not cfg["checks"]["commands"]:
         raise Refused("[checks].commands in factory.toml is empty")
-    code, log, seconds = run_commands(cfg["checks"]["commands"], os.getcwd(),
+    code, log, seconds = run_commands(cfg["checks"]["commands"], os.getcwd(), command_env(cfg),
                                       timeout_minutes=cfg["checks"]["timeout_minutes"])
     print(log, end="")
     print(f"checks: {'PASS' if code == 0 else 'FAIL'} in {seconds}s")
