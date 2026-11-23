@@ -304,12 +304,6 @@ def upgrade(repo, ref="latest", source=None, say=print):
     if res.returncode != 0:
         raise Refused(f"the new version could not sync. Fix {config.FILE} as it says, then run "
                       "`.factory/bin/mfactory sync`.")
-    if is_personal(repo):
-        say("Next: run `.factory/bin/mfactory doctor`. "
-            "Leave factory.toml, .factory/ and the generated files untracked.")
-    else:
-        say(f"Next: run `.factory/bin/mfactory doctor`, then commit .factory/ and the generated files to "
-            f"{base_branch(repo)}.")
 
 
 # ---- doctor ----------------------------------------------------------------

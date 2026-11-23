@@ -140,7 +140,8 @@ To install for the team afterwards, delete that block from `.git/info/exclude`, 
 `mfactory upgrade` in a personal checkout ends with:
 
 ```text
-Next: run `.factory/bin/mfactory doctor`. Leave factory.toml, .factory/ and the generated files untracked.
+1 upgraded, 0 current
+app  run `.factory/bin/mfactory doctor`. Leave factory.toml, .factory/ and the generated files untracked.
 ```
 
 ## 2. Set up
@@ -260,7 +261,7 @@ mfactory fleet dashboard
 mfactory fleet unsubscribe
 ```
 
-`subscribe` and `unsubscribe` take a path when you are not standing in the repository. `mfactory dashboard` outside a repository, or in a checkout with no `factory.toml`, uses this same list. `mfactory status` outside a repository does too. `mfactory upgrade` upgrades the global CLI and every subscribed project. A project that fails does not stop the others, and each repository still needs its own commit.
+`subscribe` and `unsubscribe` take a path when you are not standing in the repository. `mfactory dashboard` outside a repository, or in a checkout with no `factory.toml`, uses this same list. `mfactory status` outside a repository does too. `mfactory upgrade` upgrades the global CLI and every subscribed project, then prints the next step for each one. A project that fails does not stop the others, and each repository still needs its own commit.
 
 A `fleet.toml` in the current directory or a parent still wins, and so does `FACTORY_FLEET`. `mfactory fleet init` writes that local file. `fleet add` accepts a checkout only after the factory is installed there.
 
@@ -299,20 +300,28 @@ Codex, and Cursor may list the skill twice; the copies are identical.
 
 ```bash
 mfactory upgrade                              # global CLI and every subscribed project
+mfactory upgrade --dry-run                    # print the plan and change nothing
 mfactory upgrade --version v0.2.0
 mfactory upgrade --self                       # global CLI only
 mfactory upgrade --all                        # subscribed projects only
 ```
 
-`mfactory upgrade` updates the CLI from `install.sh --global` and every
-subscribed project. Standing in an installed checkout that is not subscribed
-updates that checkout too. It replaces `.factory/` (not `.factory/jobs/`),
-runs `sync`, and leaves `factory.toml` alone. It refuses a release whose
-`schema` number differs from your `factory.toml`; the
-[changelog](../CHANGELOG.md) says what to change when that number moves.
-One project failing does not stop the others. Commit the result in each
-repository. A personal install stays untracked: upgrade tells you to leave
-`factory.toml`, `.factory/` and the generated files untracked.
+`mfactory upgrade` downloads one release and updates the CLI from `install.sh --global`
+and every subscribed project. Standing in an installed checkout that is not subscribed
+updates that checkout too. It prints a plan first, then replaces `.factory/` (not
+`.factory/jobs/`), runs `sync`, and leaves `factory.toml` alone. A checkout already on
+that version is left as it is.
+
+A project whose `schema` differs from the release is skipped. The others still upgrade.
+The summary quotes that version's [changelog](../CHANGELOG.md) and tells you to set
+`schema`, then run `mfactory upgrade` again.
+
+One project failing does not stop the others. The summary ends with the next step:
+commit and push in a team checkout, or leave the files untracked in a personal checkout,
+then run doctor.
+
+`mfactory status --all` prints `run mfactory upgrade` when a subscribed project is behind
+the latest release.
 
 ## Remove
 
