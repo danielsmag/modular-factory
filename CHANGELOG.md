@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.9.0
+
 - `mfactory upgrade` prints a plan, downloads the release once, and ends with the next step for each project. A project already on that version is left as it is. A schema mismatch is skipped and the others still upgrade. `--dry-run` prints the plan and writes nothing. `mfactory status --all` says to run `mfactory upgrade` when a project is behind.
 
 ## 0.8.1
