@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "core" / "lib"))
 os.environ["FACTORY_VERIFY_POLL"] = "0.05"
 
-from modfactory import config  # noqa: E402
+from modfactory import config, sync  # noqa: E402
 from modfactory.engine import Factory  # noqa: E402
 
 CLI = ROOT / "core" / "bin" / "mfactory"
@@ -21,8 +21,12 @@ CLI = ROOT / "core" / "bin" / "mfactory"
 
 @pytest.fixture(autouse=True)
 def isolated_user_config(tmp_path, monkeypatch):
-    """Fleet commands must not read or write the developer's real fleet file."""
+    """Fleet commands and rule lookup must not read the developer's real home."""
     monkeypatch.setenv("FACTORY_HOME", str(tmp_path / "mfactory"))
+    home = tmp_path / "skill-home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(sync, "skill_home", lambda: home)
 
 
 BASE_CONFIG = """\
@@ -78,6 +82,7 @@ def repo_template(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]
     repo.mkdir()
     _git(["init", "-q", "-b", "main"], repo, env)
     (repo / "README.md").write_text("# app\n")
+    (repo / "AGENTS.md").write_text("# Agents\n")
     (repo / ".gitignore").write_text("/.factory/jobs/\n/.worktrees/\n")
     (repo / "factory.toml").write_text(BASE_CONFIG + BASE_CHECKS)
     _git(["add", "-A"], repo, env)

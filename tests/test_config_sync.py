@@ -1,5 +1,6 @@
 """factory.toml over the defaults, and the files `mfactory sync` generates from it."""
 
+import json
 import tomllib
 
 import pytest
@@ -287,7 +288,8 @@ def test_cursor_agents_put_effort_in_the_model_and_make_intake_read_only(world):
     assert frontmatter(files[".cursor/agents/mfactory-build.md"])["model"] == "gpt-5[effort=high]"
     assert frontmatter(files[".cursor/agents/mfactory-spec.md"])["model"] == "inherit"
     assert notes == ['[models.cursor].spec: Cursor sets effort only on a named model, so effort = "low" is ignored '
-                     'while model = "inherit"']
+                     'while model = "inherit"',
+                     'rule "user:CLAUDE.md" is not installed on this machine']
     intake = files[".cursor/agents/mfactory-intake.md"]
     assert frontmatter(intake)["readonly"] == "true"
     assert "reply with\nits full contents and nothing else" in intake
@@ -330,7 +332,8 @@ def test_one_copy_of_the_skill_per_folder_a_tool_reads(world):
     found, notes = skills('["claude", "cursor"]')
     assert found == [".claude/skills/mfactory/SKILL.md"]    # Cursor loads Claude Code's folder too
     assert notes == ["Cursor uses the factory skill in .claude/skills/mfactory, which it loads alongside its own "
-                     "folders."]
+                     "folders.",
+                     'rule "user:CLAUDE.md" is not installed on this machine']
     found, notes = skills('["claude", "cursor", "codex"]')
     assert found == [".agents/skills/mfactory/SKILL.md", ".claude/skills/mfactory/SKILL.md"]
     assert "so it may list it twice" in notes[0]
@@ -389,7 +392,7 @@ def test_sync_writes_reports_and_removes_what_is_stale(world):
     cfg = config.load(world.repo)
     actions, _ = sync.sync(cfg)
     assert ("create", ".claude/agents/mfactory-debug.md") in actions and len(actions) == 11
-    assert sync.sync(cfg) == ([], [])
+    assert sync.sync(cfg) == ([], ['rule "user:CLAUDE.md" is not installed on this machine'])
 
     (world.repo / ".claude/agents/mfactory-build.md").write_text("hand edit\n")
     (world.repo / ".claude/agents/mfactory-mine.md").write_text("not generated\n")
@@ -423,6 +426,27 @@ def add_skill(world, folder, name, description="Does things."):
     path = world.repo / folder / name / "SKILL.md"
     path.parent.mkdir(parents=True)
     path.write_text(f"---\nname: {name}\ndescription: {description}\n---\n# {name}\n")
+
+
+def use_home(monkeypatch, home):
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(sync, "skill_home", lambda: home)
+    return home
+
+
+def add_user_skill(home, folder, name, description="Does things."):
+    path = home / folder / name / "SKILL.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(f"---\nname: {name}\ndescription: {description}\n---\n# {name}\n")
+    return path
+
+
+def add_plugin_skill(home, tool, plugin, skill):
+    root = {"claude": ".claude/plugins", "cursor": ".cursor/plugins", "codex": ".codex/plugins"}[tool]
+    path = home / root / "cache" / "market" / plugin / "1.0.0" / "skills" / skill / "SKILL.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(f"---\nname: {skill}\ndescription: Plugin skill.\n---\n# {skill}\n")
+    return path
 
 
 SKILLS = """
@@ -479,14 +503,195 @@ def test_a_missing_skill_names_the_key_that_lists_it(world):
         ".codex/skills"]
 
 
-def test_factory_skills_lists_what_is_on_disk_and_who_reads_it(world):
+def test_factory_skills_lists_what_is_on_disk_and_who_reads_it(world, monkeypatch):
+    use_home(monkeypatch, world.tmp / "home")
     add_skill(world, ".agents/skills", "code-style", "House style for this repo.")
     add_skill(world, ".claude/skills", "testing")
     add_skill(world, ".claude/skills", "unused")
     add_skill(world, ".claude/skills", "factory")             # the factory's own skill is not a project skill
+    add_skill(world, ".claude/skills", "mfactory")
     cfg = load(world, "[skills]\nall = [\"code-style\"]\n[steps.build]\nskills = [\"testing\"]\n")
     text = sync.describe_skills(cfg)
-    assert "code-style  .agents/skills/code-style/SKILL.md\n    read by: every agent\n    House style" in text
-    assert "testing  .claude/skills/testing/SKILL.md\n    read by: build\n" in text
-    assert "unused  .claude/skills/unused/SKILL.md\n    read by: no agent\n" in text
+    assert ('code-style  .agents/skills/code-style/SKILL.md\n    skills = ["code-style"]\n'
+            "    read by: every agent\n    House style") in text
+    assert 'testing  .claude/skills/testing/SKILL.md\n    skills = ["testing"]\n    read by: build\n' in text
+    assert 'unused  .claude/skills/unused/SKILL.md\n    skills = ["unused"]\n    read by: no agent\n' in text
     assert "factory  " not in text
+    assert "mfactory  " not in text
+    assert "\nuser\n  (none)\n" in text
+    assert "\nplugin\n  (none)\n" in text
+
+
+def test_user_skill_uses_the_first_home_folder_in_every_tool(world, monkeypatch):
+    home = use_home(monkeypatch, world.tmp / "home")
+    add_user_skill(home, ".agents/skills", "python-best-practices", "House Python.")
+    add_user_skill(home, ".cursor/skills", "python-best-practices", "Other copy.")
+    files, notes = plan(world, ALL_TOOLS + '[steps.build]\nskills = ["user:python-best-practices"]\n')
+    line = "- `python-best-practices`: `~/.agents/skills/python-best-practices/SKILL.md`"
+    assert line in files[".claude/agents/mfactory-build.md"]
+    assert line in files[".cursor/agents/mfactory-build.md"]
+    codex = tomllib.loads(files[".codex/agents/mfactory-build.toml"])["developer_instructions"]
+    assert line in codex
+    assert "## User skills" in codex
+    assert not any(note.startswith("skill ") for note in notes)
+    assert "skills:" not in files[".claude/agents/mfactory-build.md"].split("---\n", 2)[1]
+
+
+def test_a_missing_user_or_plugin_skill_syncs_and_is_listed_as_missing(world, monkeypatch):
+    use_home(monkeypatch, world.tmp / "home")
+    text = ALL_TOOLS + """
+[steps.build]
+skills = ["user:missing", "superpowers:test-driven-development"]
+"""
+    files, notes = plan(world, text)
+    assert 'skill "user:missing" is not installed on this machine' in notes
+    for label in ("Claude Code", "Cursor", "Codex"):
+        assert f'skill "superpowers:test-driven-development" is not installed for {label}' in notes
+    claude = files[".claude/agents/mfactory-build.md"]
+    assert "## User skills" in claude and "- `missing`" in claude
+    assert "Invoke each of these with the Skill tool before you start" in claude
+    assert "- `superpowers:test-driven-development`" in claude
+    assert "Use each of these skills by name before you start" in files[".cursor/agents/mfactory-build.md"]
+    codex = tomllib.loads(files[".codex/agents/mfactory-build.toml"])["developer_instructions"]
+    assert "- `$superpowers:test-driven-development`" in codex
+    listed = sync.describe_skills(load(world, text))
+    assert 'user:missing  not installed\n    skills = ["user:missing"]\n    read by: build' in listed
+    assert "superpowers:test-driven-development" in listed
+    assert "Claude Code: not installed" in listed
+    assert "Cursor: not installed" in listed
+    assert "Codex: not installed" in listed
+
+
+def test_a_bad_user_or_plugin_name_names_its_key(world, monkeypatch):
+    use_home(monkeypatch, world.tmp / "home")
+    with pytest.raises(ConfigError) as error:
+        plan(world, '[skills]\nall = ["user:"]\n[steps.build]\nskills = ["user:a/b", ":skill", "plugin:"]\n')
+    assert error.value.problems == [
+        '[skills].all: skill "user:" needs a user skill name after "user:", such as user:python-best-practices',
+        '[steps.build].skills: skill "user:a/b" needs a user skill name after "user:", '
+        "such as user:python-best-practices",
+        '[steps.build].skills: skill ":skill" needs a plugin skill id, such as superpowers:test-driven-development',
+        '[steps.build].skills: skill "plugin:" needs a plugin skill id, such as superpowers:test-driven-development',
+    ]
+
+
+def test_all_takes_every_skill_the_tool_can_see(world, monkeypatch):
+    home = use_home(monkeypatch, world.tmp / "home")
+    add_skill(world, ".claude/skills", "testing")
+    add_skill(world, ".claude/skills", "mfactory")
+    add_user_skill(home, ".cursor/skills", "python-best-practices")
+    add_plugin_skill(home, "claude", "superpowers", "test-driven-development")
+    add_plugin_skill(home, "cursor", "databricks-skills", "databricks-core")
+    add_plugin_skill(home, "codex", "pdf", "pdf")
+    add_plugin_skill(home, "codex", "spreadsheets", "spreadsheets")
+    (home / ".codex" / "config.toml").parent.mkdir(parents=True, exist_ok=True)
+    (home / ".codex" / "config.toml").write_text(
+        '[plugins."pdf@openai-primary-runtime"]\nenabled = true\n\n'
+        '[plugins."spreadsheets@openai-primary-runtime"]\nenabled = false\n')
+    files, notes = plan(world, ALL_TOOLS + '[skills]\nall = ["all"]\n')
+    assert not any(note.startswith("skill ") for note in notes)
+    claude = files[".claude/agents/mfactory-build.md"]
+    assert "- `testing`: `.claude/skills/testing/SKILL.md`" in claude
+    assert "mfactory" not in claude.split("## Project skills", 1)[-1].split("##", 1)[0]
+    assert "- `python-best-practices`: `~/.cursor/skills/python-best-practices/SKILL.md`" in claude
+    assert ("- `superpowers:test-driven-development`: "
+            "`~/.claude/plugins/cache/market/superpowers/1.0.0/skills/test-driven-development/SKILL.md`") in claude
+    assert "databricks-core" not in claude
+    assert "pdf:pdf" not in claude
+    cursor = files[".cursor/agents/mfactory-build.md"]
+    assert "databricks-skills:databricks-core" in cursor
+    assert "superpowers:test-driven-development" not in cursor
+    codex = tomllib.loads(files[".codex/agents/mfactory-build.toml"])["developer_instructions"]
+    assert "- `$pdf:pdf`: `~/.codex/plugins/cache/market/pdf/1.0.0/skills/pdf/SKILL.md`" in codex
+    assert "spreadsheets" not in codex
+    intake = frontmatter(files[".claude/agents/mfactory-intake.md"])
+    assert intake["tools"] == "Read, Grep, Glob, Write, Skill"
+    head = claude.split("---\n", 2)[1]
+    assert "skills:\n  - testing\n" in head
+    assert "python-best-practices" not in head
+    listed = sync.describe_skills(load(world, ALL_TOOLS + '[skills]\nall = ["all"]\n'))
+    assert 'testing  .claude/skills/testing/SKILL.md\n    skills = ["testing"]\n    read by: every agent' in listed
+    assert ('user:python-best-practices  ~/.cursor/skills/python-best-practices/SKILL.md\n'
+            '    skills = ["user:python-best-practices"]\n    read by: every agent') in listed
+    assert "Claude Code: ~/.claude/plugins/cache/market/superpowers/" in listed
+    assert "spreadsheets" not in listed
+    assert "`all` in that list reads every project skill" in listed
+
+
+def test_claude_prefers_the_recorded_plugin_install(world, monkeypatch):
+    home = use_home(monkeypatch, world.tmp / "home")
+    add_plugin_skill(home, "claude", "superpowers", "test-driven-development")
+    recorded = home / ".claude/plugins/cache/official/superpowers/9.0.0/skills/test-driven-development/SKILL.md"
+    recorded.parent.mkdir(parents=True)
+    recorded.write_text("---\nname: test-driven-development\ndescription: Recorded.\n---\n")
+    record = {
+        "plugins": {
+            "superpowers@claude-plugins-official": [
+                {"scope": "user", "installPath": str(recorded.parents[2]), "version": "9.0.0"}],
+        },
+    }
+    (home / ".claude/plugins/installed_plugins.json").write_text(json.dumps(record))
+    files, _ = plan(world, '[steps.build]\nskills = ["superpowers:test-driven-development"]\n')
+    assert "`~/.claude/plugins/cache/official/superpowers/9.0.0/skills/test-driven-development/SKILL.md`" in files[
+        ".claude/agents/mfactory-build.md"]
+
+
+def test_clearing_rules_drops_the_instruction_section(world, monkeypatch):
+    use_home(monkeypatch, world.tmp / "home")
+    (world.repo / "AGENTS.md").write_text("# Agents\n")
+    files, _ = plan(world, '[rules]\nall = []\n[steps.build]\nrules = []\n')
+    assert "## Instruction files" not in files[".claude/agents/mfactory-build.md"]
+
+
+def test_all_rules_lists_docs_and_rule_files_and_skips_skills(world, monkeypatch):
+    home = use_home(monkeypatch, world.tmp / "home")
+    (world.repo / "AGENTS.md").write_text("# Agents\n")
+    (world.repo / "CLAUDE.md").write_text("# Claude\n")
+    add_skill(world, ".claude/skills", "testing")
+    rule = world.repo / ".claude/rules/testing.md"
+    rule.parent.mkdir(parents=True)
+    rule.write_text("# Test rule\n")
+    (world.repo / ".claude/rules/SKILL.md").write_text("# Not a rule\n")
+    cursor_rule = world.repo / ".cursor/rules/ui/style.mdc"
+    cursor_rule.parent.mkdir(parents=True)
+    cursor_rule.write_text("# Style\n")
+    (home / ".claude/CLAUDE.md").parent.mkdir(parents=True)
+    (home / ".claude/CLAUDE.md").write_text("# User\n")
+    files, notes = plan(world, '[skills]\nall = ["all"]\n[rules]\nall = ["all"]\n')
+    body = files[".claude/agents/mfactory-build.md"]
+    section = body.split("## Instruction files", 1)[1].split("## Project skills", 1)[0]
+    assert "- `AGENTS.md`" in section
+    assert "- `CLAUDE.md`" in section
+    assert "- `.claude/rules/testing.md`" in section
+    assert "- `.cursor/rules/ui/style.mdc`" in section
+    assert "- `~/.claude/CLAUDE.md`" in section
+    assert "SKILL.md" not in section
+    assert not any(note.startswith("rule ") for note in notes)
+    listed = sync.describe_skills(load(world, '[rules]\nall = ["all"]\n'))
+    assert 'AGENTS.md  AGENTS.md\n    rules = ["AGENTS.md"]\n    read by: every agent' in listed
+    assert 'user:CLAUDE.md  ~/.claude/CLAUDE.md\n    rules = ["user:CLAUDE.md"]\n    read by: every agent' in listed
+
+
+def test_a_missing_project_rule_fails_and_a_missing_user_rule_syncs(world, monkeypatch):
+    use_home(monkeypatch, world.tmp / "home")
+    (world.repo / "AGENTS.md").unlink()
+    with pytest.raises(ConfigError) as error:
+        plan(world, '[rules]\nall = []\n[steps.build]\nrules = ["AGENTS.md"]\n')
+    assert error.value.problems == ['[steps.build].rules: rule "AGENTS.md" not found in the repository']
+    files, notes = plan(world, '[steps.build]\nrules = ["user:CLAUDE.md"]\n')
+    assert 'rule "user:CLAUDE.md" is not installed on this machine' in notes
+    assert "- `user:CLAUDE.md`" in files[".claude/agents/mfactory-build.md"]
+    listed = sync.describe_skills(load(world, '[steps.build]\nrules = ["user:CLAUDE.md"]\n'))
+    assert 'user:CLAUDE.md  not installed\n    rules = ["user:CLAUDE.md"]\n    read by: build' in listed
+
+
+def test_a_rule_path_that_escapes_its_root_is_rejected(world, monkeypatch):
+    use_home(monkeypatch, world.tmp / "home")
+    with pytest.raises(ConfigError) as error:
+        plan(world, '[rules]\nall = ["user:../../.ssh/config", ".claude/rules/../../AGENTS.md"]\n')
+    assert error.value.problems == [
+        '[rules].all: rule "user:../../.ssh/config" must be user:CLAUDE.md, user:.codex/AGENTS.md, '
+        "user:.agents/AGENTS.md, or a file under user:.claude/rules or user:.cursor/rules",
+        '[rules].all: rule ".claude/rules/../../AGENTS.md" must be AGENTS.md, CLAUDE.md, CLAUDE.local.md, '
+        ".claude/CLAUDE.md, or a file under .claude/rules, .cursor/rules, or .agents/rules",
+    ]

@@ -127,13 +127,31 @@ commands = []
 # build = { model = "opus", effort = "high" }
 # reviewer-code = { model = "sonnet", effort = "medium", low = { model = "haiku", effort = "low" } }
 
-# ---- Project skills --------------------------------------------------------
+# ---- Skills ----------------------------------------------------------------
 #
-# Skills the factory finds under .claude/skills, .cursor/skills, .agents/skills and .codex/skills.
-# Nothing is read unless you list it. `all` is read by every agent. A step's `skills` is extra.
+# Nothing is read unless you list it. `[skills].all` is read by every agent. A step's `skills` is extra.
+# A bare name is a project skill under .claude/skills, .cursor/skills, .agents/skills or .codex/skills.
+# `user:name` is a skill in your home directory. `plugin:skill` is an installed plugin skill,
+# such as superpowers:test-driven-development. `all` takes every skill from those three places.
 # https://danielsmag.github.io/modular-factory/docs/configuration.html#project-skills
 
 # [skills]
 # all = ["code-style"]
 # [steps.build]
-# skills = ["testing"]
+# skills = ["testing", "user:python-best-practices", "superpowers:test-driven-development"]
+# [steps.spec]
+# skills = ["all"]
+
+# ---- Instruction files -----------------------------------------------------
+#
+# AGENTS.md, CLAUDE.md, and rule files. Nothing here is read from `skills`.
+# `all` takes every one found in the repo and in your home directory.
+# The builder also names AGENTS.md and ~/.claude/CLAUDE.md, so a missing
+# AGENTS.md fails sync and a missing user file is a doctor warning.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#instruction-files
+
+[rules]
+all = ["all"]
+
+[steps.build]
+rules = ["AGENTS.md", "user:CLAUDE.md"]

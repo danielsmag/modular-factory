@@ -49,7 +49,10 @@ base = 5100               # each job gets `step` ports for dev servers
 step = 10
 
 [skills]
-all = []                  # project skills every agent reads
+all = []                  # skills every agent reads; "all" means every skill on this machine
+
+[rules]
+all = ["all"]             # every AGENTS.md, CLAUDE.md, and rule file found in the repo and at home
 
 # ---- The pipeline ----------------------------------------------------------
 
@@ -80,6 +83,7 @@ on = { APPROVE = "build", CHANGES = { to = "spec", max = 3 }, REJECT = "rejected
 [steps.build]
 type = "agent"
 port = true
+rules = ["AGENTS.md", "user:CLAUDE.md"]
 on = { READY = "gate", BLOCKED = "escalated" }
 
 [steps.gate]

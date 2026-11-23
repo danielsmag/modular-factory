@@ -169,15 +169,26 @@ example reviews low-risk jobs with a cheaper model. Run
 
 ## Your project's skills
 
-Agents read the skills you already keep in `.claude/skills`, `.cursor/skills`,
-`.agents/skills` or `.codex/skills`. You say which:
+Agents read the skills you list. A bare name is a project skill in
+`.claude/skills`, `.cursor/skills`, `.agents/skills` or `.codex/skills`.
+`user:name` is a skill in your home directory. `plugin:skill` is an installed
+plugin skill. `all` takes every one of those.
 
 ```toml
 [skills]
 all = ["code-style"]          # every agent
 
 [steps.build]
-skills = ["testing"]          # only the builder
+skills = ["testing", "user:python-best-practices", "superpowers:test-driven-development"]
+
+[steps.spec]
+skills = ["all"]              # every project, user and plugin skill on this machine
+
+[rules]
+all = ["all"]                 # default: every AGENTS.md, CLAUDE.md, and rule file found
+
+[steps.build]
+rules = ["AGENTS.md", "user:CLAUDE.md"]
 ```
 
 ## Dashboard
