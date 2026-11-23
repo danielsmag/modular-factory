@@ -189,7 +189,7 @@ class Scripted:
         repo, base, sha = self.cfg.repo, self.cfg.base, job["merge_sha"]
         if not sha:
             raise Refused("the merge commit is unknown")
-        branch = f"factory/revert-{job['id']}"
+        branch: str = self.cfg.job_branch(job["id"], revert=True)
         path = Path(self._verify_path(job)).with_name(f"{job['id']}-revert")
         self._remove_worktree(path, branch)
         run(["git", "fetch", "origin", base], cwd=repo)

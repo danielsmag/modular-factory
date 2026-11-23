@@ -96,6 +96,21 @@ class Config:
     def base(self):
         return self.data["project"]["base_branch"]
 
+    def job_branch(self, job_id: str, *, revert: bool = False) -> str:
+        """The branch for a job, or for the draft pull request that reverts it.
+
+        The pattern is checked here, when the name is chosen, before any branch exists.
+        """
+        prefix: str = str(self.data["project"]["branch_prefix"])
+        suffix: str = f"revert-{job_id}" if revert else job_id
+        name: str = prefix + suffix
+        pattern: str = str(self.data["project"].get("branch_pattern", "")).strip()
+        if pattern and re.fullmatch(pattern, name) is None:
+            raise Refused(
+                f"branch {name!r} does not match [project].branch_pattern {pattern!r}. "
+                "Change [project].branch_prefix or [project].branch_pattern in factory.toml.")
+        return name
+
     def role(self, step):
         return graph.role(step, self.steps[step])
 
@@ -236,6 +251,72 @@ def a_regex(value: object) -> str | None:
     return None
 
 
+# A job id the prefix is checked against. Real ids are the same shape: NNN-slug.
+_JOB_SAMPLE = "000-add-dark-mode"
+_REVERT_SAMPLE = "revert-000-add-dark-mode"
+# git check-ref-format: controls, space, DEL, and the characters it forbids anywhere.
+_FORBIDDEN_IN_BRANCH = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
+
+
+def branch_ref_problem(name: str) -> str | None:
+    """Why `name` is not a legal git branch, or None when it is."""
+    if not name or name == "@":
+        return "it is empty or '@'"
+    if name.startswith("-"):
+        return "it starts with '-'"
+    if name.startswith("/") or name.endswith("/"):
+        return "it starts or ends with '/'"
+    if "//" in name:
+        return "it contains '//'"
+    if ".." in name:
+        return "it contains '..'"
+    if "@{" in name:
+        return "it contains '@{'"
+    if name.endswith("."):
+        return "it ends with '.'"
+    forbidden: re.Match[str] | None = _FORBIDDEN_IN_BRANCH.search(name)
+    if forbidden is not None:
+        return f"it contains {forbidden.group()!r}"
+    for component in name.split("/"):
+        if component.startswith("."):
+            return "a component starts with '.'"
+        if component.endswith(".lock"):
+            return "a component ends with '.lock'"
+    return None
+
+
+def a_branch_prefix(value: object) -> str | None:
+    """A prefix that, with a job id appended, is a legal git branch. A trailing slash is the separator."""
+    if not isinstance(value, str) or not value.strip():
+        return "must be a non-empty string"
+    problem: str | None = branch_ref_problem(value + _JOB_SAMPLE)
+    if problem:
+        return f"must be a legal git branch prefix ({problem})"
+    return None
+
+
+def _branch_pattern_gaps(project: object) -> list[str]:
+    """Samples a set pattern must accept: one job branch and one revert branch."""
+    if not isinstance(project, dict):
+        return []
+    prefix: object = project.get("branch_prefix")
+    pattern: object = project.get("branch_pattern")
+    if not isinstance(prefix, str) or not isinstance(pattern, str):
+        return []
+    if a_branch_prefix(prefix) or a_regex(pattern):
+        return []
+    source: str = pattern.strip()
+    if not source:
+        return []
+    gaps: list[str] = []
+    for sample in (prefix + _JOB_SAMPLE, prefix + _REVERT_SAMPLE):
+        if re.fullmatch(source, sample) is None:
+            gaps.append(
+                f"[project].branch_pattern does not match {sample!r}. "
+                "A job branch is the prefix plus the job id, and a revert branch inserts revert-.")
+    return gaps
+
+
 # GitHub login: 1–39 letters, digits, or hyphens, not starting or ending with a hyphen.
 LOGIN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
 WHO_WORDS = ("author", "maintainer", "operator")
@@ -253,7 +334,8 @@ def a_who(value: object) -> str | None:
 TABLES = {
     "project": {"description": a_string, "base_branch": a_filled_string,
                 "merge_method": one_of("merge", "squash", "rebase"),
-                "pr_title": a_string, "pr_title_pattern": a_regex},
+                "pr_title": a_string, "pr_title_pattern": a_regex,
+                "branch_prefix": a_branch_prefix, "branch_pattern": a_regex},
     "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string},
     "fleet": {"concurrency": an_int(1)},
     "checks": {"commands": a_string_list, "timeout_minutes": an_int(1)},
@@ -307,6 +389,7 @@ def check(cfg):
     if cfg.sources.get(("fleet", "concurrency")) == FILE:
         out.append("[fleet].concurrency is the cap across projects. Set it in fleet.toml, "
                    "or pass --concurrency to `mfactory fleet queue`.")
+    out.extend(_branch_pattern_gaps(d.get("project")))
 
     # tools
     tools = d.get("tools", {})

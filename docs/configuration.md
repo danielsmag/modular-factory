@@ -77,6 +77,8 @@ concurrency = 3
 | `[project] merge_method` | `"squash"` | `merge`, `squash` or `rebase`. With `squash`, the pull request title becomes the commit on the base branch. |
 | `[project] pr_title` | `""` | Example pull request title, such as `feat: add CSV export [ABC-123]`. The builder uses this shape instead of the spec title. Empty means the spec title. The script does not fill placeholders. |
 | `[project] pr_title_pattern` | `""` | Regular expression the whole title must match (`fullmatch`). Empty means no check. `done` refuses a `READY` build whose title does not match. |
+| `[project] branch_prefix` | `"factory/"` | Concatenated with the job id. Include the slash: `feature/` names the branch `feature/001-add-dark-mode`. A revert branch is the prefix plus `revert-` and the job id. |
+| `[project] branch_pattern` | `""` | Regular expression the whole branch name must match (`fullmatch`). Empty means no check. The factory checks the name when it chooses the branch, before creating it. A job already on disk keeps the branch stored in its `job.json`. |
 | `[tools] enabled` | `["claude"]` | The tools to write agent files for: `claude`, `cursor`, `codex`. |
 | `[tools.claude] stop_hook` | `false` | Run the checks when the build agent stops, and send it back to work if they fail. Claude Code only. |
 | `[tools.claude] cost` | `true` | Work out each job's cost from Claude Code's transcripts. Other tools record no cost. |
@@ -96,6 +98,18 @@ the issue lacks a value the title needs, such as a ticket key, intake returns
 [project]
 pr_title = "feat: add CSV export [ABC-123]"
 pr_title_pattern = '^(feat|fix|perf|refactor|chore|docs|test|ci|build|revert)(\(.+\))?!?: .+ \[[A-Z]+-\d+\]$'
+```
+
+`branch_prefix` is concatenated with the job id, so the slash belongs in the
+prefix. `branch_pattern` is checked when the factory chooses the name, before
+it creates the branch. A job already on disk keeps the branch stored in its
+`job.json`. A revert branch is the same prefix plus `revert-` and the job id,
+and the pattern has to match that name too.
+
+```toml
+[project]
+branch_prefix = "feature/"
+branch_pattern = '^(feature|fix|chore|docs|test|hotfix)/[A-Za-z0-9._-]+$'
 ```
 
 ## Checks

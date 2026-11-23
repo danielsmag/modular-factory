@@ -26,6 +26,13 @@ base_branch = "__BASE_BRANCH__"
 # Regular expression the whole title must match (fullmatch). Unset means no check.
 # `done` refuses a READY build whose title does not match.
 # pr_title_pattern = '^(feat|fix|perf|refactor|chore|docs|test|ci|build|revert)(\(.+\))?!?: .+ \[[A-Z]+-\d+\]$'
+# Prefix concatenated with the job id. Include the slash: feature/001-add-dark-mode.
+# A revert branch is this prefix plus revert- and the job id.
+# branch_prefix = "feature/"
+# Regular expression the whole branch name must match (fullmatch). Unset means no check.
+# The factory checks the name when it chooses the branch, before creating it.
+# The pattern has to match a revert branch too.
+# branch_pattern = '^(feature|fix|chore|docs|test|hotfix)/[A-Za-z0-9._-]+$'
 
 [tools]
 # Tools to write agent files for: claude, cursor, codex.

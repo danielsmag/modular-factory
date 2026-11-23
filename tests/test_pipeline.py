@@ -121,6 +121,21 @@ def test_progress_notes_stay_out_of_a_spec_prompt(world):
     assert (world.dir(job) / "progress.md").is_file()
 
 
+def test_a_configured_prefix_names_the_job_branch(world: World) -> None:
+    path: Path = world.repo / "factory.toml"
+    text: str = path.read_text().replace(
+        'base_branch = "main"\n', 'base_branch = "main"\nbranch_prefix = "feature/"\n')
+    path.write_text(text)
+    job: str = world.start(until="spec")
+    assert world.job(job)["branch"] == f"feature/{job}"
+    shown: str = subprocess.run(
+        ["git", "branch", "--show-current"], cwd=world.repo / ".worktrees" / job,
+        capture_output=True, text=True, check=True).stdout.strip()
+    assert shown == f"feature/{job}"
+    prompt: str = world.next(job)[1]
+    assert f"Branch: feature/{job}." in prompt
+
+
 def _require_conventional_title(world: World) -> None:
     """Set the title pattern on the project's existing [project] table."""
     path: Path = world.repo / "factory.toml"
