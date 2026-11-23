@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.8.1
+
 - Dashboard text is larger. Prose uses a proportional font and wraps near 75 characters. Secondary grey is lighter.
 
 ## 0.8.0
