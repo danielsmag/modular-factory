@@ -111,6 +111,29 @@ class ReleaseClassifier:
         )
 
 
+def publish_versions(
+    current: Version,
+    pending: list[tuple[str, str]],
+    missing: list[Version],
+) -> list[Version]:
+    """Tags this run publishes. Missing releases first, then one bump per conventional pull request."""
+    classifier: ReleaseClassifier = ReleaseClassifier()
+    versions: list[Version] = list(missing)
+    cursor: Version = current
+    for title, body in pending:
+        decision: ReleaseDecision | None = classifier.classify(title, body)
+        if decision is None:
+            continue
+        cursor = cursor.bumped(decision.bump)
+        versions.append(cursor)
+    return versions
+
+
+def release_run_name(versions: list[Version]) -> str:
+    """Actions run title, such as ``v0.4.1``."""
+    return " ".join(f"v{version}" for version in versions)
+
+
 def release_subject(version: Version) -> str:
     return f"Release v{version}."
 
