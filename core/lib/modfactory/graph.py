@@ -19,7 +19,7 @@ TYPE_OUTCOMES = {
     "checks": {"PASS", "FAIL"},
     "review": {"PASS", "CHANGES"},
     "merge": {"MERGED", "FAILED"},
-    "verify": {"PASS", "FAIL"},
+    "verify": {"PASS", "FAIL", "BLOCKED"},
 }
 
 

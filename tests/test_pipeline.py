@@ -43,7 +43,7 @@ def test_opt_in_auto_merge_merges_and_cleans_up(world):
     assert j["step"] == "done"
     assert [h["step"] + " " + h["outcome"] for h in j["history"]] == [
         "intake ACCEPT", "spec DONE", "build READY", "gate PASS", "review PASS", "approve APPROVE", "merge MERGED"]
-    assert f"{job} #{number}: merge MERGED -> done (skipped verify)" in lines
+    assert f"{job} #{number}: merge MERGED -> done (skipped ready-to-verify, verify)" in lines
     assert lines[-1] == f"finished {job} #{number}: done (PR #{j['pr']} merged)"
     pr = world.gh["prs"][str(j["pr"])]
     assert pr["state"] == "MERGED" and j["merge_sha"] == pr["mergeCommit"]["oid"]

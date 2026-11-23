@@ -3,8 +3,9 @@
 import os
 import time
 from pathlib import Path
+from typing import Any
 
-from . import checks
+from . import checks, graph
 from .util import Refused, first_line, run, section, tail
 
 POLL_SECONDS = float(os.environ.get("FACTORY_VERIFY_POLL", "15"))
@@ -127,17 +128,32 @@ class Scripted:
             raise Refused("verify.md wasn't written by the verifier agent during this step")
         line = first_line(self.dir(job) / "verify.md") or ""
         outcome = line.split()[-1] if line.split() else ""
-        if outcome not in ("PASS", "FAIL"):
-            raise Refused(f"verify.md starts with {line!r}. Its first line must be `VERIFY: PASS` or `VERIFY: FAIL`")
+        if outcome not in ("PASS", "FAIL", "BLOCKED"):
+            raise Refused(f"verify.md starts with {line!r}. Its first line must be `VERIFY: PASS`, `VERIFY: FAIL` "
+                          "or `VERIFY: BLOCKED`")
         job["last_file"] = "verify.md"
         if outcome == "PASS":
             return self._move(job, "PASS")
+        if outcome == "BLOCKED":
+            return self._verify_blocked(job, name, step)
         detail = section(self.dir(job) / "verify.md", "Failures") or "The verifier found a failure. See verify.md."
         if state["attempt"] <= step["retries"]:
             state["commands"] = None
             self.store.save(job)
             return f"{self.tag(job)}: {name} failed (attempt {state['attempt']}), trying again"
         return self._move(job, self._verify_failed(job, step, detail), detail)
+
+    def _verify_blocked(self, job: dict[str, Any], name: str, step: dict[str, Any]) -> str:
+        """Ask again when someone is waiting. Otherwise the environment miss is a failure."""
+        detail: str = (section(self.dir(job) / "verify.md", "Blocked")
+                       or "The verifier could not reach the environment. See verify.md.")
+        target: str
+        target, _skipped = graph.resolve(self.cfg.steps, step["on"]["BLOCKED"]["to"])
+        if target == name:
+            return self._move(job, self._verify_failed(job, step, detail), detail)
+        reason: str = ("The verifier could not reach the environment. "
+                       "The Blocked section of verify.md says why.")
+        return self._move(job, "BLOCKED", reason)
 
     def _verify_failed(self, job, step, detail):
         """Tell people, in the way `on_failure` asks for. The factory never merges a revert."""

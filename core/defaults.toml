@@ -110,7 +110,15 @@ on = { FEEDBACK = { to = "build", max = 3 }, REJECT = "rejected" }
 type = "merge"
 enabled = false          # a maintainer merges; turn this on only with approve's APPROVE edge
 skip = "MERGED"
-on = { MERGED = "verify", FAILED = "escalated" }
+on = { MERGED = "ready-to-verify", FAILED = "escalated" }
+
+[steps.ready-to-verify]
+type = "human"
+enabled = false          # turn on when a person must say the deploy is live before verify runs
+skip = "VERIFY"
+who = "maintainer"
+ask = "deployed: verify it"
+on = { VERIFY = "verify", REJECT = "rejected" }
 
 [steps.verify]
 type = "verify"
@@ -124,7 +132,7 @@ on_failure = "comment"    # "comment", "issue" or "revert-pr"
 wait = ""                 # for after = "deploy": exits 0 once FACTORY_MERGE_SHA is live
 timeout_minutes = 20
 url = ""
-on = { PASS = "done", FAIL = "failed" }
+on = { PASS = "done", FAIL = "failed", BLOCKED = { to = "ready-to-verify", max = 3 } }
 
 [steps.escalated]
 type = "human"

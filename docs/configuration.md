@@ -144,7 +144,7 @@ An edge is a step name, or `{ to = "<step>", max = <n> }`. The end states are
 | `review` | Every reviewer the job needs runs in parallel. | `PASS` if all pass, else `CHANGES` |
 | `human` | The script asks a person and parks the job. | Whatever you name in `on` |
 | `merge` | When the step is on, the script merges the base branch in, runs the checks, and merges the pull request. It ships off. | `MERGED`, `FAILED` |
-| `verify` | The script, and optionally an agent, check the merged change. | `PASS`, `FAIL` |
+| `verify` | The script, and optionally an agent, check the merged change. | `PASS`, `FAIL`, `BLOCKED` |
 
 The built-in agent steps:
 
@@ -254,8 +254,9 @@ script then syncs the base branch, runs the checks again, and merges.
 
 ## Optional steps
 
-`spec-approval`, `debug` and `verify` ship with `enabled = false`. The merge
-step does too; turning that one on is the block above, not a single key.
+`spec-approval`, `debug`, `ready-to-verify` and `verify` ship with
+`enabled = false`. The merge step does too; turning that one on is the block
+above, not a single key.
 
 ```toml
 [steps.spec-approval]     # a maintainer approves spec.md before anything is built
@@ -263,6 +264,10 @@ enabled = true
 
 [steps.debug]             # after failing checks, a debugger finds the cause before the builder retries
 enabled = true
+
+[steps.ready-to-verify]   # wait until a person says the deploy is live
+enabled = true
+who = "operator"
 
 [steps.verify]            # check the change after it is merged or deployed
 enabled = true
@@ -387,6 +392,28 @@ The word after `/mfactory` is the outcome's name in lower case, so a step with
 
 ## Validation after merge or deploy
 
+`ready-to-verify` sits between merge and verify. It ships off, so a merge still
+lands on verify. Turn it on when a person has to say the deploy is live and
+nothing the factory runs can tell. `who` and `replies` are the same keys as any
+human step. `/mfactory verify` then runs verify. `/mfactory reject` ends the job.
+
+```toml
+[steps.ready-to-verify]
+enabled = true
+who = "operator"
+
+[steps.verify]
+enabled = true
+after = "merge"
+agent = true
+url = "https://app.example.com"
+commands = [
+  "test \"$(curl -fsS \"$FACTORY_DEPLOY_URL/health\")\" = ok",
+]
+```
+
+A script that can see the deploy leaves `ready-to-verify` off and uses `wait`:
+
 ```toml
 [steps.verify]
 enabled = true
@@ -404,7 +431,7 @@ on_failure = "revert-pr"
 | `wait` | `""` | For `after = "deploy"`: a command that exits 0 once the merge commit is live. It is run again every 15 seconds until `timeout_minutes`. |
 | `timeout_minutes` | `20` | How long to wait for the deploy before the step fails. |
 | `commands` | `[]` | Commands run in a clean checkout of the merge commit. All must exit 0. `[checks] timeout_minutes` limits them. |
-| `agent` | `false` | After the commands pass, a verifier agent checks the spec's acceptance criteria against the running result and writes `verify.md`. |
+| `agent` | `false` | After the commands pass, a verifier agent checks the spec's acceptance criteria and its `## Verify after deploy` section against the running result and writes `verify.md`. |
 | `url` | `""` | Where the deployed result is, passed to the commands and the agent. |
 | `retries` | `1` | How many times to run failing commands again before the step fails. |
 | `on_failure` | `"comment"` | What to do when validation fails, below. |
@@ -438,6 +465,21 @@ A minimal `wait` script:
 # Exits 0 once the deployed version is the merge commit.
 test "$(curl -fsS "$FACTORY_DEPLOY_URL/version")" = "$FACTORY_MERGE_SHA"
 ```
+
+When verify is on, the spec must include `## Verify after deploy`: what to run
+or look at once the change is live. The verifier reads that section. The script
+does not turn those lines into commands.
+
+`VERIFY: PASS` ends the job at `done`. `VERIFY: FAIL` ends it as `failed` after
+`retries`. `VERIFY: BLOCKED` means the environment could not be reached. The
+job goes back to `ready-to-verify` and waits for `/mfactory verify` again. The
+fourth `BLOCKED` in a row goes to `escalated`. `BLOCKED` does not comment as a
+failure, open an issue, or open a revert pull request. If `ready-to-verify` is
+off, there is nobody to ask, so `BLOCKED` fails the job through `on_failure`
+instead of running verify again.
+
+A project that replaces `[steps.verify].on` must keep an edge for `BLOCKED`.
+The default is `{ to = "ready-to-verify", max = 3 }`.
 
 When validation fails the job ends as `failed`, and:
 

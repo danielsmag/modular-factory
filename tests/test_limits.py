@@ -119,7 +119,7 @@ def problems(world, text):
 def test_the_graph_refuses_a_step_that_cannot_run(world):
     assert problems(world, '[steps.build]\non = { READY = "gaet" }\n') == [
         '[steps.build].on.READY points at unknown step "gaet". Steps: intake, ask-author, spec, spec-approval, '
-        "build, gate, debug, review, approve, ready-to-merge, merge, verify, escalated; "
+        "build, gate, debug, review, approve, ready-to-merge, merge, ready-to-verify, verify, escalated; "
         "end states: done, failed, rejected"]
     found = problems(world, '[steps.gate]\non = { MAYBE = "build" }\n')
     assert "[steps.gate].on.MAYBE is not an outcome of a checks step. Outcomes: FAIL, PASS" in found

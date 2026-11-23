@@ -74,6 +74,8 @@ def test_verify_after_merge_runs_the_commands_on_the_merge_commit(world):
     j = world.job(job)
     log: str = (world.dir(job) / "verify-checks.log").read_text()
     assert j["step"] == "done" and j["history"][-1]["step"] == "verify"
+    merged = [h for h in j["history"] if h["step"] == "merge"][-1]
+    assert merged["to"] == "verify" and merged["skipped"] == ["ready-to-verify"]
     assert (world.dir(job) / "verify.md").read_text().startswith("VERIFY: PASS\n")
     assert f"COMMIT: {j['merge_sha']}" in (world.dir(job) / "verify-checks.md").read_text()
     assert checkout in log and "(exit 0)" in log
@@ -150,6 +152,98 @@ def test_the_default_path_waits_then_a_hand_merge_is_verified(world):
     assert finished["history"][-2]["outcome"] == "MERGED-BY-HAND"
     assert finished["history"][-2]["to"] == "verify"
     assert finished["history"][-1]["step"] == "verify"
+
+
+READY = '[steps.ready-to-verify]\nenabled = true\nwho = "operator"\n'
+
+
+def test_ready_to_verify_parks_until_an_allowed_reply(world):
+    job = world.start(until="ready-to-verify", config_text=AUTO_MERGE + READY + verify(
+        commands='["true"]', agent="true"))
+    assert world.job(job)["running_since"] is None
+    assert job not in [row["id"] for row in world.factory().store.running()]
+    assert not (world.dir(job) / "verify-checks.md").exists()
+    assert world.queue() == [("wait", 1, job, "ready-to-verify", "waiting for the operator (@operator)")]
+    assert world.next(job)[0].startswith(f"wait {job} #1: ready-to-verify is waiting for the operator")
+
+    world.comment(1, "/mfactory verify", "maintainer")
+    assert world.next(job)[0].startswith("wait ")
+
+    lines = world.answer(job, "verify")
+    assert lines == [f"{job} #1: ready-to-verify VERIFY -> verify"]
+    lines = world.next(job)
+    assert lines[0] == "start-agent mfactory-verify"
+    assert "Read ## Verify after deploy in spec.md" in lines[1]
+    assert (world.dir(job) / "verify-checks.md").exists()
+    world.verifier(job, "BLOCKED")
+    assert "BLOCKED -> ready-to-verify" in world.done(job)[0]
+    assert world.job(job)["step"] == "ready-to-verify"
+    pr = str(world.job(job)["pr"])
+    assert all("verification failed" not in comment["body"] for comment in world.gh["prs"][pr]["comments"])
+    assert not any("revert" in " ".join(call) for call in world.calls("pr create"))
+
+    world.answer(job, "verify")
+    world.next(job)
+    world.verifier(job, "PASS")
+    assert world.done(job) == [f"{job} #1: verify PASS -> done"]
+
+
+def test_a_verify_comment_from_the_operator_starts_the_check(world):
+    job = world.start(until="ready-to-verify", config_text=AUTO_MERGE + READY + verify(commands='["true"]'))
+    world.comment(1, "/mfactory verify", "operator")
+    lines = world.next(job)
+    assert lines[0] == f"{job} #1: ready-to-verify VERIFY -> verify"
+    assert lines[1] == f"{job} #1: verify PASS -> done"
+
+
+def test_blocked_four_times_escalates(world):
+    job = world.start(until="ready-to-verify", config_text=AUTO_MERGE + READY + verify(
+        commands='["true"]', agent="true"))
+    for _ in range(3):
+        world.answer(job, "verify")
+        world.next(job)
+        world.verifier(job, "BLOCKED")
+        assert "BLOCKED -> ready-to-verify" in world.done(job)[0]
+    world.answer(job, "verify")
+    world.next(job)
+    world.verifier(job, "BLOCKED")
+    assert "max = 3 reached" in world.done(job)[0]
+    assert world.job(job)["step"] == "escalated"
+
+
+def test_blocked_fails_the_job_when_nobody_is_waiting(world):
+    job = world.start(until="verify", config_text=AUTO_MERGE + verify(commands='["true"]', agent="true"))
+    world.next(job)
+    world.verifier(job, "BLOCKED")
+    assert "verify FAIL -> failed" in world.done(job)[0]
+    assert world.job(job)["step"] == "failed"
+    pr = str(world.job(job)["pr"])
+    assert "verification failed" in world.gh["prs"][pr]["comments"][-1]["body"]
+    assert world.next(job)[0].startswith(f"finished {job} #1: failed")
+
+
+def test_the_verifier_fail_outcome_still_fails_the_job(world):
+    job = world.start(until="verify", config_text=AUTO_MERGE + verify(
+        commands='["true"]', agent="true", retries=0))
+    world.next(job)
+    world.verifier(job, "FAIL")
+    assert "verify FAIL -> failed" in world.done(job)[0]
+
+
+def test_spec_must_say_what_to_check_after_deploy_when_verify_is_on(world):
+    job = world.start(until="spec", config_text=verify(commands='["true"]'))
+    prompt = world.next(job)[1]
+    assert "## Verify after deploy" in prompt and "verify runs after merge" in prompt
+    world.write(job, "spec.md", "STATUS: DONE\n\n# A thing\n\n## Acceptance criteria\n1. It exists.\n")
+    with pytest.raises(Refused, match="Verify after deploy"):
+        world.done(job)
+
+
+def test_spec_can_omit_the_deploy_section_when_verify_is_off(world):
+    job = world.start(until="spec")
+    assert "Verify after deploy" not in world.next(job)[1]
+    world.write(job, "spec.md", "STATUS: DONE\n\n# A thing\n\n## Acceptance criteria\n1. It exists.\n")
+    assert world.done(job)[0].endswith("spec DONE -> build (skipped spec-approval)")
 
 
 def test_verify_needs_something_to_check_and_a_wait_for_deploys(world):

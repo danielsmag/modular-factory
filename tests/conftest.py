@@ -190,7 +190,8 @@ class World:
                                      "## Summary\n- decided\n\n## Scope\nBuild it.\n\n## Questions\n1. Which?\n")
 
     def spec(self, job):
-        self.write(job, "spec.md", "STATUS: DONE\n\n# A thing\n\n## Acceptance criteria\n1. It exists.\n")
+        self.write(job, "spec.md", "STATUS: DONE\n\n# A thing\n\n## Acceptance criteria\n1. It exists.\n\n"
+                                     "## Verify after deploy\n1. The feature file is on the base branch.\n")
 
     def build(self, job, files=None, status="READY", push=True, commit=True):
         j = self.job(job)

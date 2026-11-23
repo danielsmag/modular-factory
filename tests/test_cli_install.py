@@ -211,9 +211,10 @@ def test_models_and_graph_describe_the_setup(world):
     assert models[0].split() == ["agent", "claude", "codex"]
     assert "mfactory-debug              opus / high      inherit / high" in models
     graph = world.cli("graph").stdout
-    assert "gate            checks  PASS -> review | FAIL -> debug (max 2)" in graph
-    assert "spec-approval   human   off, continues as APPROVE -> build" in graph
-    assert "merge           merge   off, continues as MERGED -> verify" in graph
+    assert "gate             checks  PASS -> review | FAIL -> debug (max 2)" in graph
+    assert "spec-approval    human   off, continues as APPROVE -> build" in graph
+    assert "merge            merge   off, continues as MERGED -> ready-to-verify" in graph
+    assert "ready-to-verify  human   off, continues as VERIFY -> verify" in graph
 
 
 # ---- doctor ----------------------------------------------------------------
@@ -239,7 +240,7 @@ def test_doctor_passes_on_a_ready_project(world):
     res = doctor(world)
     assert res.returncode == 0, res.stdout
     for line in ("ok    gh is signed in",
-                 "ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, merge, verify",
+                 "ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, merge, ready-to-verify, verify",
                  "ok    generated agent and skill files match factory.toml", "ok    origin/main can be fetched",
                  "ok    .factory/jobs/ is ignored by git", "ok    GitHub labels exist",
                  "Everything a run needs is in place."):

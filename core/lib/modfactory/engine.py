@@ -17,7 +17,7 @@ from .queue import Queue
 from .scripted import Scripted
 from .service import GitHub, Humans
 from .store import Store
-from .util import MARKER, Refused, body, first_line, header, now, quote, run
+from .util import MARKER, Refused, body, first_line, header, now, quote, run, section
 
 CLI = ".factory/bin/mfactory"
 # Files the built-in agent roles write, relative to the job folder.
@@ -239,6 +239,17 @@ class Factory(Humans, Scripted, Queue):
                 f"Main checkout: {self.cfg.repo}. Worktree: {worktree}. Branch: {job['branch']}. "
                 f"Base: origin/{self.cfg.base}. Issue: #{job['issue']}.")
 
+    def _verify_enabled(self) -> bool:
+        """True when the built-in verify step will run."""
+        step: dict[str, Any] | None = self.cfg.steps.get("verify")
+        return bool(step) and step.get("type") == "verify" and graph.enabled(step)
+
+    def _require_deploy_section(self, path: Path) -> None:
+        """Refuse a finished spec that never says how to check the live change."""
+        if section(path, "Verify after deploy") is None:
+            raise Refused("spec.md is missing ## Verify after deploy. Verify is on, so say what to check "
+                          "once the change is live.")
+
     def _prompt(self, job, name, step):
         role = self.cfg.role(name) if step["type"] == "agent" else "verify"
         out = self.dir(job) / self.output_file(job, name, step)
@@ -249,11 +260,16 @@ class Factory(Humans, Scripted, Queue):
             parts.append(f"Round {job['round']}, attempt {job['attempt']}.")
         elif role == "approve":
             parts.append(f"PR: #{job['pr']}. Final round: {job['round']}.")
+        elif role == "spec" and self._verify_enabled():
+            after: str = str(self.cfg.steps["verify"].get("after") or "merge")
+            parts.append("Verify is on. spec.md must include a ## Verify after deploy section: "
+                         f"what to run or look at once the change is live (verify runs after {after}).")
         elif role == "verify":
             parts.append(f"PR: #{job['pr']}. Merge commit: {job['merge_sha']}. "
                          f"Checkout of that commit: {self._verify_path(job)}.")
             if step.get("url"):
                 parts.append(f"Deployed at: {step['url']}.")
+            parts.append("Read ## Verify after deploy in spec.md and check each item there.")
         elif role == "custom":
             parts.append(f"Outcomes: {' | '.join(step['on'])}.")
         if step.get("port"):
@@ -451,6 +467,8 @@ class Factory(Humans, Scripted, Queue):
                               f"{job.get('head_at_entry', '')[:7]} to {head[:7]}); it must only write {rel}")
             if role == "custom" and job["pr"]:
                 self._require_pushed(job)
+        if role == "spec" and outcome == "DONE" and self._verify_enabled():
+            self._require_deploy_section(path)
         if role == "approve" and outcome == "ESCALATE":
             reason = "The approver escalated this job. See decision.md."
         if role != "debug":
