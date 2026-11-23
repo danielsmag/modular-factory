@@ -66,6 +66,7 @@ core/lib/modfactory/      the factory's code
 core/roles/*.md           one prompt per agent step and reviewer
 core/skill/SKILL.md       the orchestrator
 core/defaults.toml        the default pipeline and settings
+core/templates/factory.toml  the factory.toml written on first install
 web/dashboard.html        the dashboard shell: one project, or every subscribed project with a filter
 web/dashboard.css         styles, inlined into the page when it is served
 web/dashboard.js          the page's script, inlined the same way

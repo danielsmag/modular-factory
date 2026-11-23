@@ -1,0 +1,132 @@
+# The software factory's configuration. This is the only file you edit.
+#
+# It holds what this project changes. Everything else comes from
+# .factory/defaults.toml and each tool's adapter in .factory/adapters/.
+#
+# Reference: https://danielsmag.github.io/modular-factory/docs/configuration.html
+#
+#   .factory/bin/mfactory config show   every setting and where its value comes from
+#   .factory/bin/mfactory graph         the pipeline in effect
+#   .factory/bin/mfactory models        the model and effort of each agent
+# After a change, run `.factory/bin/mfactory sync` and commit the result.
+
+# Version of this file's format. `mfactory upgrade` refuses a release that needs another.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#project-tools-and-run
+schema = 1
+
+[project]
+# What the project is for, and what does not belong. Intake judges issues against this.
+description = ""
+# Jobs branch from origin/<base_branch> and merge into it.
+base_branch = "__BASE_BRANCH__"
+# Example pull request title. The builder uses this shape instead of the spec title.
+# Leave it unset to use the spec title. The script does not fill placeholders.
+# With squash merge, the title is the commit on the base branch.
+# pr_title = "feat: add CSV export [ABC-123]"
+# Regular expression the whole title must match (fullmatch). Unset means no check.
+# `done` refuses a READY build whose title does not match.
+# pr_title_pattern = '^(feat|fix|perf|refactor|chore|docs|test|ci|build|revert)(\(.+\))?!?: .+ \[[A-Z]+-\d+\]$'
+
+[tools]
+# Tools to write agent files for: claude, cursor, codex.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#project-tools-and-run
+enabled = [__TOOLS__]
+
+[run]
+# Jobs this project works on at once. A job waiting for a person, or being
+# validated after merge, does not count.
+concurrency = 3
+
+[checks]
+# Commands run in order in the job's worktree with `bash -c`. The first non-zero exit fails the step.
+# They run at the gate step, and again in merge after the base branch is merged in, when merge is on.
+# A command must not rewrite files. Example: ["npm ci", "npm run lint", "npm test"]
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#checks
+commands = []
+
+# ---- Merging ----------------------------------------------------------------
+#
+# By default a maintainer merges the pull request. The factory does not.
+# Remove the leading "# " on all three tables to let the factory merge.
+# Do that only when a merge to the base branch does not publish a release.
+# The script then syncs the base branch, runs the checks again, and merges.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#who-merges
+
+# Send an approval straight to the merge step.
+# [steps.approve]
+# on = { APPROVE = "merge" }
+
+# Switch off the human "ready to merge" wait. `skip` is the outcome a switched-off step counts as.
+# [steps.ready-to-merge]
+# enabled = false
+# skip = "REJECT"
+
+# Turn the factory's merge step on.
+# [steps.merge]
+# enabled = true
+
+# ---- Optional steps: remove the leading "# " to switch one on --------------
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#optional-steps
+
+# A maintainer approves spec.md before anything is built.
+# [steps.spec-approval]
+# enabled = true
+
+# After failing checks, a debugger finds the cause before the builder retries.
+# The debugger changes no code. Off, failing checks go straight back to the builder.
+# [steps.debug]
+# enabled = true
+
+# Wait until a person says the deploy is live, then verify. Off, merge goes straight to verify.
+# `who` is who must answer: maintainer, operator, author, or a list of logins.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#human-steps
+# [steps.ready-to-verify]
+# enabled = true
+# who = "operator"
+
+# Check the change again after it is merged or deployed.
+# `after = "merge"` validates the merge commit immediately.
+# `after = "deploy"` first runs `wait`, a command that exits 0 once the commit is live.
+# `commands` run in a clean checkout of the merge commit. All must exit 0.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#validation
+# [steps.verify]
+# enabled = true
+# after = "merge"
+# commands = []
+
+# ---- Loop limits: how often a step may send a job back ---------------------
+#
+# A `max` on an edge is how many times in a row a step may send a job that way.
+# When the limit is used up, the job goes to escalated and a maintainer is asked.
+# Writing only these keys keeps the default target and changes the count.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#loop-limits
+
+# Failed checks: retries before a maintainer is asked.
+# [steps.gate]
+# on = { FAIL = { max = 2 } }
+
+# Review rounds that may ask for changes.
+# [steps.review]
+# on = { CHANGES = { max = 2 } }
+
+# ---- Models: per tool, per step --------------------------------------------
+#
+# Set the model and effort for one agent. Other agents stay on the adapter default.
+# `low` is a cheaper model used when intake marks the job low-risk.
+# Claude efforts: low, medium, high, xhigh, max. Cursor and Codex also take none and minimal.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#models-and-effort
+
+# [models.claude]
+# build = { model = "opus", effort = "high" }
+# reviewer-code = { model = "sonnet", effort = "medium", low = { model = "haiku", effort = "low" } }
+
+# ---- Project skills --------------------------------------------------------
+#
+# Skills the factory finds under .claude/skills, .cursor/skills, .agents/skills and .codex/skills.
+# Nothing is read unless you list it. `all` is read by every agent. A step's `skills` is extra.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#project-skills
+
+# [skills]
+# all = ["code-style"]
+# [steps.build]
+# skills = ["testing"]

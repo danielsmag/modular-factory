@@ -38,7 +38,8 @@ def test_init_installs_everything_a_project_needs(bare):
     assert res.returncode == 0, res.stderr
     repo = bare.repo
     for item in ("bin/mfactory", "bin/factory", "lib/modfactory/cli/__init__.py", "roles/build.md", "skill/SKILL.md",
-                 "defaults.toml", "adapters/claude.toml", "web/dashboard.html", "web/dashboard.css",
+                 "defaults.toml", "templates/factory.toml", "adapters/claude.toml",
+                 "web/dashboard.html", "web/dashboard.css",
                  "web/dashboard.js", "VERSION", "LICENSE",
                  "NOTICE"):
         assert (repo / ".factory" / item).exists(), item

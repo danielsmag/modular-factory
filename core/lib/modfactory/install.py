@@ -15,92 +15,24 @@ from . import checks, config, graph
 from . import sync as syncer
 from .util import CORE, SOURCE_REPO, ConfigError, FactoryError, Refused, run, tail, version
 
-ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "VERSION"]
+ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "templates", "VERSION"]
 LABELS = {
     "queue": ("ff4a26", "The software factory builds this issue"),
     "needs_info": ("d4a72c", "The factory is waiting for the issue's author"),
     "needs_human": ("b60205", "The factory is waiting for a maintainer"),
 }
+TEMPLATE: Path = CORE / "templates" / "factory.toml"
+_BASE_TOKEN: str = "__BASE_BRANCH__"
+_TOOLS_TOKEN: str = "__TOOLS__"
 
-STARTER = """\
-# The software factory's configuration. This is the only file you edit.
-#
-# It holds what this project changes; everything else is a default.
-#   .factory/bin/mfactory config show   every setting and where its value comes from
-#   .factory/bin/mfactory graph         the pipeline in effect
-#   .factory/bin/mfactory models        the model and effort of each agent
-# After a change, run `.factory/bin/mfactory sync` and commit the result.
 
-schema = 1
-
-[project]
-description = ""            # what the project is for; intake uses it to decide what belongs
-base_branch = "{base}"
-# pr_title = "feat: add CSV export [ABC-123]"
-# pr_title_pattern = '^(feat|fix|perf|refactor|chore|docs|test|ci|build|revert)(\\(.+\\))?!?: .+ \\[[A-Z]+-\\d+\\]$'
-# Leave both unset to use the spec's title. With squash merge the title is the commit on the base branch.
-
-[tools]
-enabled = [{tools}]         # claude, cursor, codex
-
-[run]
-concurrency = 3             # jobs worked on at once
-
-[checks]
-commands = []               # for example ["npm ci", "npm run lint", "npm test"]
-
-# ---- Merging ----------------------------------------------------------------
-#
-# By default a maintainer merges the pull request. The factory does not.
-# Remove the leading "# " on all three tables to let the factory merge. Do that
-# only when a merge to the base branch does not publish a release.
-
-# [steps.approve]
-# on = {{ APPROVE = "merge" }}
-
-# [steps.ready-to-merge]
-# enabled = false
-# skip = "REJECT"
-
-# [steps.merge]
-# enabled = true
-
-# ---- Optional steps: remove the leading "# " to switch one on --------------
-
-# A maintainer approves the spec before anything is built.
-# [steps.spec-approval]
-# enabled = true
-
-# A debugger diagnoses failing checks before the builder tries again.
-# [steps.debug]
-# enabled = true
-
-# Check the change again after it is merged or deployed.
-# [steps.verify]
-# enabled = true
-# after = "merge"           # or "deploy", with `wait` set to a command that exits 0 once it is live
-# commands = []             # for example ["npm run test:smoke"]
-
-# ---- Loop limits: how often a step may send a job back ---------------------
-
-# [steps.gate]
-# on = {{ FAIL = {{ max = 2 }} }}       # failed checks: retries before a maintainer is asked
-# [steps.review]
-# on = {{ CHANGES = {{ max = 2 }} }}    # review rounds that may ask for changes
-
-# ---- Models: per tool, per step --------------------------------------------
-
-# [models.claude]
-# build = {{ model = "opus", effort = "high" }}
-# reviewer-code = {{ model = "sonnet", effort = "medium", low = {{ model = "haiku", effort = "low" }} }}
-
-# ---- Project skills --------------------------------------------------------
-
-# [skills]
-# all = ["code-style"]      # every agent reads these
-# [steps.build]
-# skills = ["testing"]
-"""
+def render_starter(base: str, tools: list[str]) -> str:
+    """Fill `core/templates/factory.toml` for a new project's `factory.toml`."""
+    if not TEMPLATE.is_file():
+        raise Refused(f"{TEMPLATE} is missing")
+    text: str = TEMPLATE.read_text()
+    chosen: str = ", ".join(json.dumps(tool) for tool in tools)
+    return text.replace(_BASE_TOKEN, base).replace(_TOOLS_TOKEN, chosen)
 
 
 def layout(root):
@@ -274,8 +206,7 @@ def init(repo: Path, tools: list[str] | None = None, say: Callable[[str], None] 
         if tools:
             say(f"      To change the tools, set [tools].enabled in {config.FILE}.")
     else:
-        chosen = ", ".join(json.dumps(t) for t in (tools or ["claude"]))
-        path.write_text(STARTER.format(base=base_branch(repo), tools=chosen))
+        path.write_text(render_starter(base_branch(repo), tools or ["claude"]))
         say(f"ok    {config.FILE} written")
 
     cfg = config.load(repo)
