@@ -6,6 +6,7 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- Dashboard text is larger. Prose uses a proportional font and wraps near 75 characters. Secondary grey is lighter.
 - `[project] branch_prefix` names job branches. The default `factory/` keeps today's names (`factory/<job-id>`, and `factory/revert-<job-id>` for a revert). `[project] branch_pattern`, when set, must match the branch name when the factory chooses it. A job already on disk keeps the branch stored in `job.json`. Schema stays 1.
 
 ## 0.7.0
