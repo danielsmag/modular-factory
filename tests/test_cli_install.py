@@ -203,7 +203,9 @@ def test_queue_says_when_the_generated_files_are_out_of_date(world):
     world.configure("[steps.debug]\nenabled = true\n")
     assert world.cli("queue").stdout.startswith("note: 1 generated file(s) are out of date with factory.toml.")
     assert world.cli("sync", "--check").returncode == 1
-    assert world.cli("sync").stdout == "create  .claude/agents/mfactory-debug.md\n"
+    assert world.cli("sync").stdout == (
+        "create  .claude/agents/mfactory-debug.md\n"
+        'note: rule "user:CLAUDE.md" is not installed on this machine\n')
     assert world.cli("sync", "--check").returncode == 0
 
 
@@ -295,6 +297,32 @@ def test_doctor_warns_when_an_edge_skips_a_disabled_merge(bare):
     res = doctor(bare, "--skip-checks")
     assert "warn  [steps.merge] is off, but approve.APPROVE still points at it." in res.stdout
     assert "FAIL  [steps.merge]" not in res.stdout
+
+
+def test_doctor_warns_when_a_listed_skill_is_not_installed(world, monkeypatch):
+    ready(world)
+    monkeypatch.setenv("HOME", str(world.tmp / "empty-home"))
+    (world.tmp / "empty-home").mkdir()
+    world.configure('[skills]\nall = ["user:missing", "superpowers:test-driven-development"]\n')
+    synced = world.cli("sync")
+    assert synced.returncode == 0, synced.stderr
+    assert 'note: skill "user:missing" is not installed on this machine' in synced.stdout
+    assert 'note: skill "superpowers:test-driven-development" is not installed for Claude Code' in synced.stdout
+    res = doctor(world, "--skip-checks")
+    assert 'warn  skill "user:missing" is not installed on this machine' in res.stdout
+    assert 'warn  skill "superpowers:test-driven-development" is not installed for Claude Code' in res.stdout
+
+
+def test_doctor_warns_when_a_listed_rule_is_not_installed(world, monkeypatch):
+    ready(world)
+    monkeypatch.setenv("HOME", str(world.tmp / "empty-home"))
+    (world.tmp / "empty-home").mkdir()
+    world.configure('[rules]\nall = ["user:CLAUDE.md"]\n')
+    synced = world.cli("sync")
+    assert synced.returncode == 0, synced.stderr
+    assert 'note: rule "user:CLAUDE.md" is not installed on this machine' in synced.stdout
+    res = doctor(world, "--skip-checks")
+    assert 'warn  rule "user:CLAUDE.md" is not installed on this machine' in res.stdout
 
 
 def test_doctor_warns_when_the_factory_is_not_on_the_base_branch(bare):

@@ -232,6 +232,9 @@ def init(repo: Path, tools: list[str] | None = None, say: Callable[[str], None] 
         for name, where, description in skills:
             say(f"  {name}  ({where})" + (f"  {description[:70]}" if description else ""))
     say("")
+    say("Skills you can list. `all` takes every one of these:")
+    say(syncer.describe_skills(cfg).rstrip())
+    say("")
     say("Next:")
     say(f"  1. In your tool, run `/mfactory setup` to fill in {config.FILE} (or edit it yourself).")
     say("  2. Run `.factory/bin/mfactory doctor`.")
@@ -372,8 +375,10 @@ def doctor(repo, run_checks=True, say=print):
             ok(f"{adapter['label']}: {found}")
 
     # skills and generated files
+    gaps: list[str] = []
     try:
         actions, notes = syncer.sync(cfg, check=True)
+        gaps = syncer.skill_gap_notes(cfg)
     except ConfigError as e:
         for problem in e.problems:
             fail(problem)
@@ -386,8 +391,12 @@ def doctor(repo, run_checks=True, say=print):
         say("      Run `.factory/bin/mfactory sync`. It overwrites hand edits: put changes in factory.toml.")
     elif actions is not None:
         ok("generated agent and skill files match factory.toml")
+    gap_set: set[str] = set(gaps)
     for note in notes:
-        say(f"note  {note}")
+        if note in gap_set:
+            warn(note)
+        else:
+            say(f"note  {note}")
 
     # the installed core
     installed = repo / ".factory"

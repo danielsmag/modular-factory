@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- `rules` names instruction files for an agent: `AGENTS.md`, `CLAUDE.md`, a rule file, `user:CLAUDE.md`, or `all` for every one found in the repo and on this machine. The default is `[rules] all = ["all"]`, and the builder also reads `AGENTS.md` and `user:CLAUDE.md`. Empty `rules` still reads `AGENTS.md`, or `CLAUDE.md` when `AGENTS.md` is missing. A missing project file fails sync. A missing user file does not; `doctor` warns. Schema stays 1.
+- `skills` accepts a project skill, a user skill (`user:name`), a plugin skill (`plugin:skill`, such as `superpowers:test-driven-development`), or `all` for every skill found in the repo and on this machine. A missing user or plugin skill does not fail sync; `doctor` warns. Schema stays 1.
 - `mfactory upgrade` prints a plan, downloads the release once, and ends with the next step for each project. A project already on that version is left as it is. A schema mismatch is skipped and the others still upgrade. `--dry-run` prints the plan and writes nothing. `mfactory status --all` says to run `mfactory upgrade` when a project is behind.
 
 ## 0.8.1

@@ -25,7 +25,7 @@ To see what is in effect:
 .factory/bin/mfactory config show   # every setting and which file set it
 .factory/bin/mfactory graph         # the pipeline
 .factory/bin/mfactory models        # the model and effort of every agent, per tool
-.factory/bin/mfactory skills        # the project's skills and who reads them
+.factory/bin/mfactory skills        # project, user and plugin skills, and who reads them
 ```
 
 A mistake is reported with the key to fix, and nothing runs until it is fixed:
@@ -325,7 +325,8 @@ Keys of an `agent` step:
 | `instructions` | What the agent must do. Required for a step you add. |
 | `writes` | The file it writes in the job folder. Default: `<step>.md`. |
 | `context` | Project facts added to the agent's prompt, such as where things live. Works on built-in steps too. |
-| `skills` | Project skills this agent reads. |
+| `skills` | Skills this agent reads: a project skill, `user:name`, `plugin:skill`, or `all`. |
+| `rules` | Instruction files this agent reads: `AGENTS.md`, `CLAUDE.md`, a rule path, `user:CLAUDE.md`, or `all`. |
 | `port` | `true` gives the agent a port number for a dev server. |
 | `role` | Use a built-in step's prompt under another name: `intake`, `spec`, `build`, `debug` or `approve`. |
 
@@ -542,7 +543,8 @@ reviewers = ["ux", "ui", "a11y"]
 | --- | --- |
 | `[reviewers.<name>] focus` | What this reviewer looks for. Required for a reviewer you add. |
 | `[reviewers.<name>] context` | Project facts added to its prompt. |
-| `[reviewers.<name>] skills` | Project skills it reads. |
+| `[reviewers.<name>] skills` | Skills it reads: a project skill, `user:name`, `plugin:skill`, or `all`. |
+| `[reviewers.<name>] rules` | Instruction files it reads: `AGENTS.md`, `CLAUDE.md`, a rule path, `user:CLAUDE.md`, or `all`. |
 | `[reviewers.<name>] port` | `true` gives it a port for a dev server, for reviewers that look at the running app. |
 | `[surfaces.<name>] when` | One line telling intake when a change touches this surface. |
 | `[surfaces.<name>] reviewers` | The reviewers that run on jobs with this surface. |
@@ -605,27 +607,83 @@ agent starts.
 
 ## Project skills
 
-The factory finds skills in `.claude/skills`, `.cursor/skills`,
-`.agents/skills` and `.codex/skills`. `.factory/bin/mfactory skills` lists them.
-Nothing is read unless you list it:
+`.factory/bin/mfactory skills` lists every skill the factory can attach, in
+three groups, and the exact string to put in `skills`. Nothing is read unless
+you list it. The same list works on `[skills].all` (every agent), a step, and
+a reviewer.
 
 ```toml
 [skills]
 all = ["code-style"]                 # every agent
 
 [steps.build]
-skills = ["testing", "migrations"]   # the builder as well reads these
+skills = ["testing", "user:python-best-practices", "superpowers:test-driven-development"]
 
 [reviewers.security]
 skills = ["auth-rules"]
+
+[steps.spec]
+skills = ["all"]                     # every project, user and plugin skill on this machine
 ```
 
-Each agent's prompt then names the `SKILL.md` files to read before it starts.
-This works the same in every tool, whether or not the tool would load the
-skill by itself. In Claude Code, a skill that lives in `.claude/skills` is also
-loaded into the agent up front.
+| Entry | Where it comes from | What the agent does |
+| --- | --- | --- |
+| `testing` | `.agents/skills`, `.claude/skills`, `.cursor/skills`, `.codex/skills` in the repo, first folder wins | Reads that `SKILL.md` in the main checkout. Claude Code also preloads a skill that lives in `.claude/skills`. |
+| `user:python-best-practices` | `~/.agents/skills`, `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, first folder wins | Reads the `~/.../SKILL.md` path written at sync time. |
+| `superpowers:test-driven-development` | An installed plugin. The text before the first colon is the plugin. | Claude Code invokes it with the Skill tool. Cursor uses it by name. Codex follows `$superpowers:test-driven-development`. When that tool has the plugin's files, the prompt also gives their `~/` path. |
+| `all` | Every project skill, user skill, and plugin skill the enabled tools can see right now | Same as listing each of them. A plugin skill is written into a tool's agent only when that tool has it. |
 
-`mfactory sync` refuses a name that matches no skill and says where it looked.
+A project skill that matches no file fails `mfactory sync`, and the error names
+the key. A user skill or plugin skill is per machine: sync still writes the
+agent files and prints a note, and `mfactory doctor` warns, naming the tool
+that cannot see a plugin skill. Run sync again on a machine that has the skill
+and the prompt gains its path.
+
+Codex counts a plugin when `~/.codex/config.toml` enables `plugins."<plugin>@..."`.
+Claude prefers the install recorded in `~/.claude/plugins/installed_plugins.json`
+when that file names the plugin. Cursor uses its plugin cache.
+
+## Instruction files
+
+`skills = ["all"]` does not attach rules, `AGENTS.md`, or `CLAUDE.md`. Those
+go in `rules`. `[rules].all` is read by every agent. A step's or reviewer's
+`rules` is extra. `.factory/bin/mfactory skills` lists them under
+`instructions`.
+
+This is the default. Every agent reads every instruction file found. The builder
+also names `AGENTS.md` and `~/.claude/CLAUDE.md`, so a missing `AGENTS.md` fails
+sync and a missing user file is a doctor warning.
+
+```toml
+[rules]
+all = ["all"]
+
+[steps.build]
+rules = ["AGENTS.md", "user:CLAUDE.md"]
+```
+
+| Entry | Where it comes from |
+| --- | --- |
+| `all` | Every file below that exists now. |
+| `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md` | That file at the repository root. |
+| `.claude/CLAUDE.md` | That file. |
+| `.claude/rules/...md`, `.cursor/rules/...md` or `.mdc`, `.agents/rules/...md` | That rule file. |
+| `user:CLAUDE.md` | `~/.claude/CLAUDE.md`. |
+| `user:.codex/AGENTS.md`, `user:.agents/AGENTS.md` | That home file. |
+| `user:.claude/rules/...`, `user:.cursor/rules/...` | That home rule file. |
+
+`all` looks in the repository first: `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`,
+`.claude/CLAUDE.md`, then `.claude/rules`, `.cursor/rules`, and `.agents/rules`.
+Then the home directory: `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
+`~/.agents/AGENTS.md`, `~/.claude/rules`, and `~/.cursor/rules`.
+
+The agent's prompt lists each path. When that section is present, it is the
+set to follow, so a repository with both `AGENTS.md` and `CLAUDE.md` follows
+both. When `rules` is empty, the agent still reads `AGENTS.md`, or `CLAUDE.md`
+when `AGENTS.md` is missing.
+
+A missing project file fails `mfactory sync`. A missing user file syncs, and
+`mfactory doctor` warns. `SKILL.md` files and plugin caches are not rule files.
 
 ## Labels, paths and ports
 

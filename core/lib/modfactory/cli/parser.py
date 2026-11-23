@@ -66,7 +66,7 @@ def parser() -> argparse.ArgumentParser:
     graph: argparse.ArgumentParser = sub.add_parser("graph", help="show the pipeline in effect")
     graph.add_argument("--json", action="store_true")
     sub.add_parser("models", help="show the model and effort of each agent, per tool")
-    sub.add_parser("skills", help="list the project's skills and which agents read them")
+    sub.add_parser("skills", help="list skills and instruction files, and which agents read them")
 
     sub.add_parser("queue", help="what to run now")
     create: argparse.ArgumentParser = sub.add_parser("create", help="start a job for a labeled issue")

@@ -343,12 +343,14 @@ TABLES = {
     "paths": {"worktrees": a_filled_string, "protected": a_string_list},
     "ports": {"base": an_int(1024), "step": an_int(3)},
     "skills": {"all": a_string_list},
+    "rules": {"all": a_string_list},
 }
 TOOL_KEYS = {"claude": {"stop_hook": a_bool, "cost": a_bool}, "codex": {"intake_shell": a_bool}}
 STEP_COMMON = {"type": one_of(*graph.TYPES), "enabled": a_bool, "skip": a_filled_string}
 STEP_KEYS = {
     "agent": {"role": one_of(*graph.ROLE_OUTCOMES, "custom"), "instructions": a_filled_string,
-              "writes": a_filled_string, "skills": a_string_list, "context": a_string, "port": a_bool},
+              "writes": a_filled_string, "skills": a_string_list, "rules": a_string_list,
+              "context": a_string, "port": a_bool},
     "checks": {},
     "review": {},
     "human": {"who": a_who, "shows": a_string, "ask": a_string, "pr_ready": a_bool,
@@ -357,9 +359,10 @@ STEP_KEYS = {
     "verify": {"after": one_of("merge", "deploy"), "commands": a_string_list, "agent": a_bool,
                "retries": an_int(0), "on_failure": one_of("comment", "issue", "revert-pr"),
                "wait": a_string, "timeout_minutes": an_int(1), "url": a_string,
-               "skills": a_string_list, "context": a_string, "port": a_bool},
+               "skills": a_string_list, "rules": a_string_list, "context": a_string, "port": a_bool},
 }
-REVIEWER_KEYS = {"focus": a_filled_string, "context": a_string, "skills": a_string_list, "port": a_bool}
+REVIEWER_KEYS = {"focus": a_filled_string, "context": a_string, "skills": a_string_list,
+                 "rules": a_string_list, "port": a_bool}
 BUILTIN_REVIEWERS = ("code", "security", "ux", "ui")
 TOP = set(TABLES) | {"schema", "tools", "steps", "reviewers", "surfaces", "models"}
 

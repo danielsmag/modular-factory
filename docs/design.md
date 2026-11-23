@@ -158,6 +158,9 @@ def follow(job, step, outcome):
 | Effort per step | `effort:` | `model: name[effort=x]`, only with a named model | `model_reasoning_effort =` |
 | Intake's guard | No shell tool; writes its file | `readonly: true`; hands in its file as its reply | `shell_tool = false`; hands in its file as its reply |
 | Project skills | Named in the prompt, and preloaded when in `.claude/skills` | Named in the prompt | Named in the prompt |
+| User skills | Named in the prompt with a `~/` path | Named in the prompt with a `~/` path | Named in the prompt with a `~/` path |
+| Plugin skills | Invoked with the Skill tool; `Skill` is added to an agent that needs it | Invoked by name, with a `~/` path when the plugin is installed | Mentioned as `$plugin:skill`, with a `~/` path when the plugin is enabled |
+| Instruction files | Named in the prompt when `rules` lists them. Empty `rules` still reads `AGENTS.md`, or `CLAUDE.md` when that is missing | Named in the prompt when `rules` lists them | Named in the prompt when `rules` lists them |
 | Cost per job | From transcripts | Not recorded | Not recorded |
 | Builder stop hook | Optional | No | No |
 
@@ -291,7 +294,8 @@ project's `factory/bin/job`, `factory/bin/gate`, `factory/bin/route` and
   replaces the routing table, which set models only for reviewers.
 - **Reviewers and surfaces are data.** A new reviewer or surface needs a few
   lines of configuration and no prompt file.
-- **Project skills** are passed to agents explicitly, per step.
+- **Skills** are passed to agents explicitly, per step: a project skill, a user skill, a plugin skill, or `all`.
+- **Instruction files** (`AGENTS.md`, `CLAUDE.md`, and rule files) are passed the same way through `rules`. Empty `rules` still reads `AGENTS.md`, or `CLAUDE.md` when `AGENTS.md` is missing.
 - **Checks are a list of commands**, not a shell script, and stop at the first
   failure.
 - **Every round starts a fresh builder** that reads `build.md`, `progress.md`
