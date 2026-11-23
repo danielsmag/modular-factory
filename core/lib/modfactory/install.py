@@ -8,6 +8,7 @@ import tarfile
 import tempfile
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 from . import checks, config, graph
@@ -163,10 +164,74 @@ def ignore_entries(repo, worktrees):
     path = Path(repo) / ".gitignore"
     have = {line.strip() for line in path.read_text().splitlines()} if path.exists() else set()
     wanted = ["/.factory/jobs/", f"/{worktrees.strip('/')}/"]
-    missing = [w for w in wanted if w not in have and w.lstrip("/") not in have and w.strip("/") not in have]
+    missing = [w for w in wanted if not _pattern_present(have, w)]
     if missing:
         text = path.read_text() if path.exists() else ""
         text += ("" if text.endswith("\n") or not text else "\n") + "\n# software factory runtime state\n"
+        path.write_text(text + "\n".join(missing) + "\n")
+    return missing
+
+
+_TOOL_ORDER: tuple[str, ...] = ("claude", "cursor", "codex")
+_EXCLUDE_NOTE: str = "# software factory, this checkout only"
+
+
+def _pattern_present(have: set[str], pattern: str) -> bool:
+    """True when `pattern` or the same path without slashes is already listed."""
+    return pattern in have or pattern.lstrip("/") in have or pattern.strip("/") in have
+
+
+def personal_patterns(cfg: config.Config) -> list[str]:
+    """Ignore lines for a personal install: the factory, its runtime dirs, and generated files."""
+    worktrees: str = str(cfg["paths"]["worktrees"]).strip("/")
+    patterns: list[str] = [f"/{config.FILE}", "/.factory/", f"/{worktrees}/"]
+    seen: set[str] = set(patterns)
+    names: list[str] = [name for name in _TOOL_ORDER if name in cfg.adapters]
+    names.extend(sorted(name for name in cfg.adapters if name not in _TOOL_ORDER))
+    for name in names:
+        paths: dict[str, object] = cfg.adapters[name]["paths"]
+        agents: str = str(paths["agents"]).strip("/")
+        skill: str = str(paths["skill"]).strip("/")
+        for pattern in (f"/{agents}/mfactory-*", f"/{agents}/factory-*", f"/{skill}/"):
+            if pattern not in seen:
+                seen.add(pattern)
+                patterns.append(pattern)
+    return patterns
+
+
+def git_path(repo: Path, name: str) -> Path:
+    """A path inside this checkout's git dir, absolute."""
+    res = run(["git", "rev-parse", "--git-path", name], cwd=repo)
+    raw: str = res.stdout.strip()
+    path: Path = Path(raw)
+    if not path.is_absolute():
+        path = (Path(repo) / path).resolve()
+    return path
+
+
+def excluded_by_info(repo: Path, path: str) -> bool:
+    """True when `.git/info/exclude` is the rule that ignores `path`."""
+    res = run(["git", "check-ignore", "-v", "--", path], cwd=repo, check=False)
+    if res.returncode != 0 or not res.stdout.strip():
+        return False
+    source: str = res.stdout.split(":", 1)[0]
+    return source.endswith("info/exclude")
+
+
+def is_personal(repo: Path) -> bool:
+    """True when this checkout already hides factory.toml in `.git/info/exclude`."""
+    return excluded_by_info(Path(repo), config.FILE)
+
+
+def exclude_entries(repo: Path, patterns: list[str]) -> list[str]:
+    """Append factory patterns to `.git/info/exclude`. Returns the lines added."""
+    path: Path = git_path(repo, "info/exclude")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text: str = path.read_text() if path.exists() else ""
+    have: set[str] = {line.strip() for line in text.splitlines()}
+    missing: list[str] = [pattern for pattern in patterns if not _pattern_present(have, pattern)]
+    if missing:
+        text += ("" if text.endswith("\n") or not text else "\n") + f"\n{_EXCLUDE_NOTE}\n"
         path.write_text(text + "\n".join(missing) + "\n")
     return missing
 
@@ -188,8 +253,13 @@ def create_labels(cfg, say):
     say("ok    GitHub labels: " + ", ".join(cfg["labels"][k] for k in LABELS))
 
 
-def init(repo, tools=None, say=print):
-    """Install the factory into `repo`, or repair an install. Never overwrites factory.toml."""
+def init(repo: Path, tools: list[str] | None = None, say: Callable[[str], None] = print,
+         *, personal: bool = False) -> None:
+    """Install the factory into `repo`, or repair an install. Never overwrites factory.toml.
+
+    `personal` writes ignore lines to `.git/info/exclude` and leaves `.gitignore` alone.
+    A later install stays personal when that exclude file already hides factory.toml.
+    """
     repo = Path(repo)
     copied = copy_core(CORE.parent if (CORE.parent / "core").is_dir() else CORE, repo)
     say(f"ok    .factory/ {'installed' if copied else 'already in place'} (version {version()})")
@@ -209,8 +279,14 @@ def init(repo, tools=None, say=print):
         say(f"ok    {config.FILE} written")
 
     cfg = config.load(repo)
-    added = ignore_entries(repo, cfg["paths"]["worktrees"])
-    say("ok    .gitignore " + (f"gained {', '.join(added)}" if added else "already ignores the runtime folders"))
+    personal = personal or is_personal(repo)
+    if personal:
+        added = exclude_entries(repo, personal_patterns(cfg))
+        say("ok    .git/info/exclude " + (
+            f"gained {', '.join(added)}" if added else "already ignores the factory (personal install)"))
+    else:
+        added = ignore_entries(repo, cfg["paths"]["worktrees"])
+        say("ok    .gitignore " + (f"gained {', '.join(added)}" if added else "already ignores the runtime folders"))
     actions, notes = syncer.sync(cfg)
     say(f"ok    generated files for {', '.join(cfg.tools)}: "
         + (f"{len(actions)} written" if actions else "up to date"))
@@ -228,7 +304,10 @@ def init(repo, tools=None, say=print):
     say("Next:")
     say(f"  1. In your tool, run `/mfactory setup` to fill in {config.FILE} (or edit it yourself).")
     say("  2. Run `.factory/bin/mfactory doctor`.")
-    say(f"  3. Commit {config.FILE}, .factory/ and the generated files to {cfg.base}, and push.")
+    if personal:
+        say(f"  3. Leave {config.FILE}, .factory/ and the generated files untracked. This checkout ignores them.")
+    else:
+        say(f"  3. Commit {config.FILE}, .factory/ and the generated files to {cfg.base}, and push.")
     say(f"  4. Label an issue `{cfg['labels']['queue']}` and run `/mfactory run`.")
 
 
@@ -294,8 +373,12 @@ def upgrade(repo, ref="latest", source=None, say=print):
     if res.returncode != 0:
         raise Refused(f"the new version could not sync. Fix {config.FILE} as it says, then run "
                       "`.factory/bin/mfactory sync`.")
-    say(f"Next: run `.factory/bin/mfactory doctor`, then commit .factory/ and the generated files to "
-        f"{base_branch(repo)}.")
+    if is_personal(repo):
+        say("Next: run `.factory/bin/mfactory doctor`. "
+            "Leave factory.toml, .factory/ and the generated files untracked.")
+    else:
+        say(f"Next: run `.factory/bin/mfactory doctor`, then commit .factory/ and the generated files to "
+            f"{base_branch(repo)}.")
 
 
 # ---- doctor ----------------------------------------------------------------
@@ -402,11 +485,16 @@ def doctor(repo, run_checks=True, say=print):
         tracked = set(run(["git", "ls-tree", "-r", "--name-only", f"origin/{base}", "--", config.FILE,
                            ".factory/bin/mfactory", ".factory/bin/factory"], cwd=repo, check=False).stdout.split())
         if config.FILE not in tracked or not tracked & {".factory/bin/mfactory", ".factory/bin/factory"}:
-            warn(f"{config.FILE} and .factory/ aren't on origin/{base} yet. Commit and push them: "
-                 "jobs build from that branch.")
+            if excluded_by_info(repo, config.FILE) and excluded_by_info(repo, ".factory"):
+                ok(f"{config.FILE} and .factory/ are ignored in this checkout (.git/info/exclude). "
+                   f"Worktrees built from origin/{base} do not contain them. "
+                   "A check that needs those files must use the main checkout.")
+            else:
+                warn(f"{config.FILE} and .factory/ aren't on origin/{base} yet. Commit and push them: "
+                     "jobs build from that branch.")
     ignored = run(["git", "check-ignore", "-q", ".factory/jobs/x"], cwd=repo, check=False).returncode == 0
     (ok if ignored else fail)(".factory/jobs/ is ignored by git" if ignored
-                              else ".factory/jobs/ isn't in .gitignore: run `mfactory install`")
+                              else ".factory/jobs/ isn't ignored by git: run `mfactory install`")
 
     # labels
     if _version("gh") is not None:

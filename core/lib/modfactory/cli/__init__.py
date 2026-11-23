@@ -100,7 +100,7 @@ def run(args: argparse.Namespace) -> int:
 
     repo = find_repo()
     if command in ("init", "install"):
-        install.init(repo, args.tool)
+        install.init(repo, args.tool, personal=args.personal)
         return 0
     if command == "uninstall":
         uninstall(repo, remove_config=args.config, labels=args.labels)

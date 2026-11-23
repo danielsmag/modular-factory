@@ -34,6 +34,8 @@ def parser() -> argparse.ArgumentParser:
         installed: argparse.ArgumentParser = sub.add_parser(name, help=help_text)
         installed.add_argument("--tool", action="append", choices=sorted(config.load_adapters()), metavar="TOOL",
                                help="claude, cursor or codex; repeat for several (default: claude)")
+        installed.add_argument("--personal", action="store_true",
+                               help="keep factory.toml, .factory/ and the generated files untracked in this checkout")
         return installed
 
     install_parser("install", "install the factory into this repository")

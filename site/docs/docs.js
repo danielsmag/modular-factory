@@ -10,7 +10,7 @@ const PAGES = [
     heads: [["Install", "install"], ["Why a factory", "why-a-factory"], ["One job, two commands", "one-job-two-commands"], ["The default pipeline", "the-default-pipeline"], ["Read next", "read-next"]] },
   { id: "install", group: "Get started", file: "install.html", title: "Install",
     blurb: "Install the command, put the factory in a repository, set it up, and check it.",
-    heads: [["What you need", "what-you-need"], ["Install the command", "install-the-command"], ["Install into a repository", "install-into-a-repository"], ["Set up", "set-up"], ["Check", "check"], ["Commit", "commit"], ["More than one tool", "more-than-one-tool"], ["Upgrade", "upgrade"], ["Remove", "remove"]] },
+    heads: [["What you need", "what-you-need"], ["Install the command", "install-the-command"], ["Install into a repository", "install-into-a-repository"], ["Personal install", "personal-install"], ["Set up", "set-up"], ["Check", "check"], ["Commit", "commit"], ["More than one tool", "more-than-one-tool"], ["Upgrade", "upgrade"], ["Remove", "remove"]] },
   { id: "first-job", group: "Get started", file: "first-job.html", title: "First job",
     blurb: "Label an issue, run the factory, and answer when a job waits.",
     heads: [["Label an issue", "label-an-issue"], ["Run", "run"], ["What the orchestrator does", "what-the-orchestrator-does"], ["Answer a person", "answer-a-person"], ["Watch", "watch"], ["Permissions", "permissions"]] },

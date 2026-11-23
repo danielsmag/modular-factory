@@ -40,6 +40,7 @@ curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/i
 | Option | Meaning |
 | --- | --- |
 | `--tool claude\|cursor\|codex` | The tool to generate agents for. Repeat it or separate names with commas for several. Default: `claude`. |
+| `--personal` | Keep `factory.toml`, `.factory/` and the generated files untracked in this checkout. Writes `.git/info/exclude` and does not touch `.gitignore`. |
 | `--version v0.1.0` | Install that release. Default: the latest release, or the `master` branch before the first release. |
 | `--source DIR` | Install from a local copy of this repository instead of downloading. |
 
@@ -71,6 +72,76 @@ ok    GitHub labels: factory, factory:needs-info, factory:needs-human
 | `.claude/skills/mfactory/` or `.agents/skills/mfactory/` | The `/mfactory` skill. | Yes |
 
 Running the installer again is safe: it never overwrites `factory.toml`.
+
+### Personal install
+
+Use this when the factory is for you, not for everyone who clones the repository:
+
+```bash
+mfactory install --tool claude --personal
+```
+
+The same flag works from the installer script and from the Makefile:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --tool claude --personal
+make install PERSONAL=1 TOOL=claude
+```
+
+`.gitignore` stays as it was. The installer appends this block to `.git/info/exclude` (patterns for every tool, so turning one on later does not show new files in `git status`):
+
+```gitignore
+# software factory, this checkout only
+/factory.toml
+/.factory/
+/.worktrees/
+/.claude/agents/mfactory-*
+/.claude/agents/factory-*
+/.claude/skills/mfactory/
+/.cursor/agents/mfactory-*
+/.cursor/agents/factory-*
+/.agents/skills/mfactory/
+/.codex/agents/mfactory-*
+/.codex/agents/factory-*
+```
+
+```text
+ok    .factory/ installed (version 0.3.1)
+ok    factory.toml written
+ok    .git/info/exclude gained /factory.toml, /.factory/, /.worktrees/, /.claude/agents/mfactory-*, /.claude/agents/factory-*, /.claude/skills/mfactory/, /.cursor/agents/mfactory-*, /.cursor/agents/factory-*, /.agents/skills/mfactory/, /.codex/agents/mfactory-*, /.codex/agents/factory-*
+ok    generated files for claude: 10 written
+ok    GitHub labels: factory, factory:needs-info, factory:needs-human
+
+Next:
+  1. In your tool, run `/mfactory setup` to fill in factory.toml (or edit it yourself).
+  2. Run `.factory/bin/mfactory doctor`.
+  3. Leave factory.toml, .factory/ and the generated files untracked. This checkout ignores them.
+  4. Label an issue `factory` and run `/mfactory run`.
+```
+
+`git status` does not list `factory.toml`, `.factory/` or `.claude/agents/mfactory-build.md`. `git check-ignore -v factory.toml` names `.git/info/exclude`.
+
+Running `mfactory install` again in that checkout, without `--personal`, does not touch `.gitignore`:
+
+```text
+ok    .git/info/exclude already ignores the factory (personal install)
+```
+
+`doctor` then reports:
+
+```text
+ok    factory.toml and .factory/ are ignored in this checkout (.git/info/exclude). Worktrees built from origin/main do not contain them. A check that needs those files must use the main checkout.
+```
+
+Jobs build a worktree from `origin/<base>`. That worktree does not contain `factory.toml` or `.factory/`. A check command that needs those files has to reach the main checkout itself. Skip the commit step below.
+
+To install for the team afterwards, delete that block from `.git/info/exclude`, then run `mfactory install`. That run appends `/.factory/jobs/` and `/.worktrees/` to `.gitignore` and tells you to commit.
+
+`mfactory upgrade` in a personal checkout ends with:
+
+```text
+Next: run `.factory/bin/mfactory doctor`. Leave factory.toml, .factory/ and the generated files untracked.
+```
 
 ## 2. Set up
 
@@ -141,7 +212,8 @@ as your CI. Pass `--skip-checks` to leave that out.
 | A problem in `factory.toml`, naming the key | Fix that key. `mfactory graph` shows the pipeline in effect. |
 | `[checks].commands is empty` | Run `/mfactory setup`, or list the commands yourself. |
 | Generated files differ from `factory.toml` | Run `.factory/bin/mfactory sync`. Edit `factory.toml`, never the generated files. |
-| `factory.toml and .factory/ aren't on origin/<base> yet` | Commit and push them. Jobs build from that branch. |
+| `factory.toml and .factory/ aren't on origin/<base> yet` | Commit and push them. Jobs build from that branch. A personal install does not report this: those files are listed in `.git/info/exclude`. |
+| `factory.toml and .factory/ are ignored in this checkout` | Expected after `mfactory install --personal`. Worktrees from `origin/<base>` do not contain the factory. |
 | The checks fail on the base branch | Fix the base branch first. Otherwise every job fails for a reason it did not cause. |
 | A label is missing | `mfactory init` creates them; it needs write access to the repository. |
 | `<tool> isn't on PATH` | A warning only. It is fine if you run the tool as an app. |
@@ -239,7 +311,8 @@ runs `sync`, and leaves `factory.toml` alone. It refuses a release whose
 `schema` number differs from your `factory.toml`; the
 [changelog](../CHANGELOG.md) says what to change when that number moves.
 One project failing does not stop the others. Commit the result in each
-repository.
+repository. A personal install stays untracked: upgrade tells you to leave
+`factory.toml`, `.factory/` and the generated files untracked.
 
 ## Remove
 

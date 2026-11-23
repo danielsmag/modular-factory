@@ -13,14 +13,17 @@ VERSION="latest"
 SOURCE=""
 TOOLS=()
 GLOBAL=0
+PERSONAL=0
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [--global] [--tool claude|cursor|codex]... [--version vX.Y.Z] [--source DIR]
+Usage: install.sh [--global] [--tool claude|cursor|codex]... [--personal] [--version vX.Y.Z] [--source DIR]
 
   --global    install the mfactory command for your user
   --tool      the coding tool to generate agents for; repeat it, or separate
               names with commas, for several (default: claude). Not with --global.
+  --personal  keep the factory untracked in this checkout (.git/info/exclude).
+              Not with --global.
   --version   a release tag to install (default: the latest release)
   --source    install from a local copy of the factory instead of downloading
 EOF
@@ -38,6 +41,7 @@ need_value() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --global) GLOBAL=1; shift ;;
+    --personal) PERSONAL=1; shift ;;
     --tool) need_value "$@"; IFS=',' read -r -a more <<<"$2"; TOOLS+=("${more[@]}"); shift 2 ;;
     --tool=*) IFS=',' read -r -a more <<<"${1#*=}"; TOOLS+=("${more[@]}"); shift ;;
     --version) need_value "$@"; VERSION="$2"; shift 2 ;;
@@ -51,6 +55,9 @@ done
 
 if [ "$GLOBAL" = 1 ] && [ ${#TOOLS[@]} -gt 0 ]; then
   fail "--global installs the CLI for your user; run mfactory install --tool inside a repository"
+fi
+if [ "$GLOBAL" = 1 ] && [ "$PERSONAL" = 1 ]; then
+  fail "--personal installs into a repository; run \`mfactory install --personal\` there"
 fi
 if [ "$GLOBAL" != 1 ]; then
   git rev-parse --show-toplevel >/dev/null 2>&1 || fail "run this inside the git repository you want the factory in"
@@ -116,4 +123,7 @@ args=()
 for tool in ${TOOLS[@]+"${TOOLS[@]}"}; do
   args+=(--tool "$tool")
 done
+if [ "$PERSONAL" = 1 ]; then
+  args+=(--personal)
+fi
 "$PYTHON" "$SOURCE/core/bin/mfactory" init ${args[@]+"${args[@]}"}
