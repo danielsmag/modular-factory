@@ -30,7 +30,7 @@ escalate_to = "escalated" # the human step a job goes to when an edge's max is r
 concurrency = 3           # new and resume rows across every project; fleet.toml or --concurrency overrides
 
 [checks]
-commands = []             # run in order in the job's worktree; the first failure stops
+commands = []             # worktree cwd; FACTORY_CHECKOUT is the main checkout; first failure stops
 timeout_minutes = 30
 
 [labels]

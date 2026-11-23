@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- Checks and verify commands receive `FACTORY_CHECKOUT`, the path of the main checkout. They still run in the worktree.
+
 ## 0.3.3
 
 - `mfactory upgrade` upgrades the global CLI, every subscribed project, and the checkout you are in when that checkout is not subscribed. `--self` updates only the global CLI. `--all` upgrades only subscribed projects. One failure does not stop the others.
