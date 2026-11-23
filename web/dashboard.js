@@ -882,7 +882,7 @@ function areaChart(all) {
   let sum = 0;
   const values = daily.map((v) => (sum += v));
   const total = sum;
-  const W = 640, H = 230, L = 34, R = 8, T = 10, B = 26;
+  const W = 640, H = 230, L = 44, R = 8, T = 14, B = 32;
   const ticks = total <= 4 ? Math.max(2, total) : 4, top = Math.max(2, Math.ceil(total / ticks) * ticks);
   const x = (i) => L + (axis.length === 1 ? 0 : (i * (W - L - R)) / (axis.length - 1));
   const y = (v) => T + (1 - v / top) * (H - T - B);
@@ -1038,7 +1038,7 @@ function lanes(groups) {
   return taken.length;
 }
 function pipelineGraph(graph, count) {
-  const NW = 172, LABEL = 106, LANE = 12, PORT = 16, GAP = 14, PAD = 12, R = 5;
+  const NW = 200, LABEL = 152, LANE = 12, PORT = 16, GAP = 14, PAD = 12, R = 5;
   const names = order(graph), index = new Map(names.map((n, i) => [n, i]));
   const nodes = new Map();
   let y = PAD;
@@ -1085,7 +1085,7 @@ function pipelineGraph(graph, count) {
     wires.append(svg("path", { class: "edge" + kind, d, "marker-end": `url(#arrow${run.off ? "-off" : right ? "" : "-back"})`, "data-from": run.from, "data-to": run.to }));
     const text = run.edge.outcome + (run.edge.max !== null && run.edge.max !== undefined ? ` · max ${run.edge.max}` : "");
     labels.append(svg("circle", { class: "port" + kind, cx: x0, cy: run.y1, r: 2.5, "data-from": run.from, "data-to": run.to }),
-      svg("text", { class: "elabel" + kind, x: x0 + dir * 8, y: run.y1 - 4, "text-anchor": right ? "start" : "end", text, "data-from": run.from, "data-to": run.to }));
+      svg("text", { class: "elabel" + kind, x: x0 + dir * 8, y: run.y1 - 6, "text-anchor": right ? "start" : "end", text, "data-from": run.from, "data-to": run.to }));
   }
   root.append(wires);
   for (const node of nodes.values()) {
@@ -1096,7 +1096,7 @@ function pipelineGraph(graph, count) {
     group.append(svg("rect", { x: xl, y: node.y, width: NW, height: h, rx: 3 }),
       svg("text", { class: "name", x: xl + 11, y: node.y + 18, text: name.length > 20 ? name.slice(0, 19) + "…" : name }),
       svg("text", { class: "kind", x: xl + 11, y: node.y + 32, text: kind }));
-    if (n) group.append(svg("g", { class: "count" }, svg("rect", { x: xr - 34, y: node.y + 9, width: 24, height: 18, rx: 9 }), svg("text", { x: xr - 22, y: node.y + 22, "text-anchor": "middle", text: n })));
+    if (n) group.append(svg("g", { class: "count" }, svg("rect", { x: xr - 40, y: node.y + 8, width: 28, height: 20, rx: 10 }), svg("text", { x: xr - 26, y: node.y + 22, "text-anchor": "middle", text: n })));
     group.append(svg("title", { text: `${name}: ${n} job${n === 1 ? "" : "s"}` }));
     const focus = (on) => {
       root.classList.toggle("focus", on);
@@ -1120,7 +1120,7 @@ function pipelineDiagram(graph, jobList) {
     const stepRows = graph.steps.map((step) => el("tr", {},
       el("td", { class: "mono", text: step.name }),
       el("td", {}, el("span", { class: "chip" + (off(step) ? " off" : ""), text: step.type + (off(step) ? " · off" : "") }),
-        step.who ? el("div", { class: "dim", style: "font-size:11px;margin-top:4px", text: step.who }) : null),
+        step.who ? el("div", { class: "dim step-who", text: step.who }) : null),
       el("td", { class: "mono wrap" }, (step.edges || []).map((e) => el("div", { class: off(step) && e.outcome !== step.skip ? "dim" : "" },
         e.outcome, el("span", { class: "dim", text: " → " }), e.to, e.max !== null && e.max !== undefined ? el("span", { class: "dim", text: `  max ${e.max}` }) : null))),
       el("td", { class: "mono dim", text: count(step.name) || "-" })));
@@ -1187,7 +1187,7 @@ function jobDetail(job) {
   const step = stepOf(job.step, job);
   const parts = [];
   parts.push(el("div", { class: "panel" },
-    el("div", { class: "head" }, el("div", { style: "min-width:0" }, el("h2", { style: "font-size:17px;overflow-wrap:anywhere", text: job.title }), el("div", { class: "mono dim", style: "margin-top:3px", text: (state.fleet && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id })), chip(job)),
+    el("div", { class: "head" }, el("div", { style: "min-width:0" }, el("h2", { class: "job-title", text: job.title }), el("div", { class: "mono dim", style: "margin-top:3px", text: (state.fleet && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id })), chip(job)),
     el("div", { class: "facts" },
       el("span", {}, "Issue ", link(job.issue_url, "#" + job.issue)),
       job.pr ? el("span", {}, "PR ", link(job.pr_url, "#" + job.pr)) : null,
@@ -1219,7 +1219,7 @@ function jobDetail(job) {
     return el("li", { class: bad ? "ko" : "ok" }, el("span", { class: "mark" }), el("span", { class: "mono", text: h.step }),
       el("span", { class: "what" }, el("span", { class: "mono", text: h.outcome + " → " + h.to }),
         h.skipped && h.skipped.length ? el("span", { class: "dim", text: "  skipped " + h.skipped.join(", ") }) : null,
-        h.reason ? el("div", { class: "dim", style: "font-size:12px", text: h.reason.split("\n")[0].slice(0, 200) }) : null),
+        h.reason ? el("div", { class: "dim history-reason", text: h.reason.split("\n")[0].slice(0, 200) }) : null),
       el("span", { class: "when", text: span((time(h.at) - time(h.entered_at)) / 1000) + " · " + ago(h.at) }));
   });
   if (!isEnd(job.step, job)) {
