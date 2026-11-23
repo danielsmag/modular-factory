@@ -32,3 +32,33 @@ jobs:
           python-version: "3.13"
       - run: python -m pip install pytest pytest-xdist
       - run: make test
+
+  # The release workflow's run title is fixed when it starts, so pass the version in.
+  dispatch:
+    needs: [lint, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Plan release
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: python scripts/cut_release.py --plan
+      - name: Start release
+        if: steps.plan.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          SHA: ${{ github.sha }}
+        run: gh workflow run release.yml --ref master -f version="$VERSION" -f sha="$SHA"

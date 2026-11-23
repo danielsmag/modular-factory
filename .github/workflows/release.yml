@@ -1,11 +1,19 @@
 name: release
+run-name: ${{ inputs.version }}
 
 on:
-  workflow_run:
-    workflows: [ci]
-    types: [completed]
   workflow_dispatch:
+    inputs:
+      version:
+        description: Tag this run publishes
+        required: true
+        type: string
+      sha:
+        description: Master commit CI verified
+        required: true
+        type: string
 
+# CI on master dispatches this with the version, so the run is named vX.Y.Z.
 # Master requires a pull request, so the job squash-merges release-vX.Y.Z
 # instead of pushing the version commit to master itself.
 permissions:
@@ -18,14 +26,7 @@ concurrency:
 
 jobs:
   release:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_branch == 'master'
-      )
+    name: ${{ inputs.version }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,5 +40,5 @@ jobs:
       - name: Cut release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          RELEASE_SHA: ${{ inputs.sha }}
         run: python scripts/cut_release.py
