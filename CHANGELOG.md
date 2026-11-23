@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- `ready-to-verify` waits until a person says the deploy is live, then runs verify. It ships off, so a merge still goes straight to verify. `VERIFY: BLOCKED` returns to that step instead of failing the job. The fourth `BLOCKED` in a row goes to `escalated`. When verify is on, `spec.md` needs a `## Verify after deploy` section. Schema stays 1. A project that replaces `[steps.verify].on` must include a `BLOCKED` edge.
+
 ## 0.5.0
 
 - `mfactory install --personal` keeps `factory.toml`, `.factory/` and the generated files untracked via `.git/info/exclude`, and leaves `.gitignore` alone. `doctor` accepts that layout. Worktrees built from the base branch do not contain those files.

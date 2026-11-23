@@ -190,7 +190,7 @@ ok    factory 0.1.0, Python 3.12.3
 ok    git: git version 2.43.0
 ok    gh: gh version 2.60.0
 ok    gh is signed in
-ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, merge, verify
+ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, merge, ready-to-verify, verify
 ok    Claude Code: claude 2.1.0
 ok    generated agent and skill files match factory.toml
 ok    origin/main can be fetched

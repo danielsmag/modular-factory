@@ -51,7 +51,8 @@ class Humans:
     def _commands(self, job, step, slash=True):
         rows = []
         for outcome in step["on"]:
-            text = {"REJECT": " <why>", "ANSWER": " <your answer>", "APPROVE": ""}.get(outcome, " <what to change>")
+            text = {"REJECT": " <why>", "ANSWER": " <your answer>", "APPROVE": "", "VERIFY": ""}.get(
+                outcome, " <what to change>")
             rows.append(f"/mfactory {outcome.lower()} {job['issue']}{text}" if slash
                         else f"`/mfactory {outcome.lower()}{text}`")
         return rows

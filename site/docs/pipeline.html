@@ -13,19 +13,20 @@
   <p>Every key is in the <a href="configuration.html">factory.toml reference</a>. This page is how the graph behaves.</p>
 
   <h2 id="the-default-graph">The default graph</h2>
-  <pre data-lang="text"><code>intake          agent   ACCEPT -&gt; spec | NEEDS-INFO -&gt; ask-author (max 2) | REJECT -&gt; rejected
-ask-author      human   ANSWER -&gt; intake | REJECT -&gt; rejected
-spec            agent   DONE -&gt; spec-approval
-spec-approval   human   off, continues as APPROVE -&gt; build
-build           agent   READY -&gt; gate | BLOCKED -&gt; escalated
-gate            checks  PASS -&gt; review | FAIL -&gt; debug (max 2)
-debug           agent   off, continues as FOUND -&gt; build
-review          review  PASS -&gt; approve | CHANGES -&gt; build (max 2)
-approve         agent   APPROVE -&gt; ready-to-merge | ESCALATE -&gt; escalated
-ready-to-merge  human   FEEDBACK -&gt; build (max 3) | REJECT -&gt; rejected
-merge           merge   off, continues as MERGED -&gt; verify
-verify          verify  off, continues as PASS -&gt; done
-escalated       human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pre>
+  <pre data-lang="text"><code>intake           agent   ACCEPT -&gt; spec | NEEDS-INFO -&gt; ask-author (max 2) | REJECT -&gt; rejected
+ask-author       human   ANSWER -&gt; intake | REJECT -&gt; rejected
+spec             agent   DONE -&gt; spec-approval
+spec-approval    human   off, continues as APPROVE -&gt; build
+build            agent   READY -&gt; gate | BLOCKED -&gt; escalated
+gate             checks  PASS -&gt; review | FAIL -&gt; debug (max 2)
+debug            agent   off, continues as FOUND -&gt; build
+review           review  PASS -&gt; approve | CHANGES -&gt; build (max 2)
+approve          agent   APPROVE -&gt; ready-to-merge | ESCALATE -&gt; escalated
+ready-to-merge   human   FEEDBACK -&gt; build (max 3) | REJECT -&gt; rejected
+merge            merge   off, continues as MERGED -&gt; ready-to-verify
+ready-to-verify  human   off, continues as VERIFY -&gt; verify
+verify           verify  off, continues as PASS -&gt; done
+escalated        human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pre>
   <p>End states are <code>done</code>, <code>rejected</code>, and <code>failed</code>. A switched-off step is passed through as if it had returned its <code>skip</code> outcome. Several in a row are passed through at once.</p>
 
   <h2 id="steps-and-edges">Steps and edges</h2>
@@ -55,7 +56,7 @@ on = { PASS = "review", FAIL = { to = "debug", max = 2 } }</code></pre>
   </div>
   <div class="def">
     <div class="def-h"><code>verify</code><span class="chip">type</span></div>
-    <p>The script, and optionally an agent, check the merged change. Outcomes: <code>PASS</code>, <code>FAIL</code>.</p>
+    <p>The script, and optionally an agent, check the merged change. Outcomes: <code>PASS</code>, <code>FAIL</code>, <code>BLOCKED</code>. <code>BLOCKED</code> means the environment could not be reached.</p>
   </div>
   <p>The built-in agent steps:</p>
   <div class="scroll">
@@ -104,12 +105,16 @@ enabled = true</code></pre>
   <p>Do that only when a merge to the base branch does not publish a release. The script then syncs the base branch, runs the checks again, and merges. <code>[project] merge_method</code> is <code>squash</code>, <code>merge</code>, or <code>rebase</code>.</p>
 
   <h2 id="optional-steps">Optional steps</h2>
-  <p><code>spec-approval</code>, <code>debug</code>, and <code>verify</code> ship with <code>enabled = false</code>. The merge step does too. Turning that one on is the block above, not a single key.</p>
+  <p><code>spec-approval</code>, <code>debug</code>, <code>ready-to-verify</code>, and <code>verify</code> ship with <code>enabled = false</code>. The merge step does too. Turning that one on is the block above, not a single key.</p>
   <pre data-lang="toml"><code>[steps.spec-approval]   # a maintainer approves spec.md before anything is built
 enabled = true
 
 [steps.debug]           # after failing checks, a debugger finds the cause
 enabled = true
+
+[steps.ready-to-verify] # wait until a person says the deploy is live
+enabled = true
+who = "operator"
 
 [steps.verify]          # check the change after it is merged or deployed
 enabled = true
@@ -145,7 +150,7 @@ on = { READY = "docs" }</code></pre>
   <p>Comments from anyone else are ignored. With <code>replies = "tool"</code>, every comment is ignored. On a step with an <code>ANSWER</code> outcome, such as <code>ask-author</code>, any comment from the author counts as the answer. Words given with a reply are saved as <code>feedback-&lt;k&gt;.md</code>. <code>REJECT</code> ends the job as <code>rejected</code> and needs a reason. <code>mfactory answer</code> is the person running the factory. <code>who</code> does not filter it.</p>
 
   <h2 id="validation-after-merge">Validation after merge</h2>
-  <p>Turn <code>verify</code> on to check the change again after it is merged, or after a deploy your own script waits for. The factory never deploys. A job being validated holds no slot.</p>
+  <p>Turn <code>verify</code> on to check the change again after it is merged, or after a deploy your own script waits for. Turn <code>ready-to-verify</code> on when a person has to say the deploy is live first: <code>/mfactory verify</code> runs the check, and <code>VERIFY: BLOCKED</code> waits there again. The factory never deploys. A job being validated holds no slot.</p>
   <pre data-lang="toml"><code>[steps.verify]
 enabled = true
 after = "deploy"

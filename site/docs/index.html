@@ -46,19 +46,20 @@ $ .factory/bin/mfactory done 004-dark-mode
 
   <h2 id="the-default-pipeline">The default pipeline</h2>
   <p>Each step names its type and where each outcome leads. This is what <code>.factory/bin/mfactory graph</code> prints. Steps marked off are passed through.</p>
-  <pre data-lang="text"><code>intake          agent   ACCEPT -&gt; spec | NEEDS-INFO -&gt; ask-author (max 2) | REJECT -&gt; rejected
-ask-author      human   ANSWER -&gt; intake | REJECT -&gt; rejected
-spec            agent   DONE -&gt; spec-approval
-spec-approval   human   off, continues as APPROVE -&gt; build
-build           agent   READY -&gt; gate | BLOCKED -&gt; escalated
-gate            checks  PASS -&gt; review | FAIL -&gt; debug (max 2)
-debug           agent   off, continues as FOUND -&gt; build
-review          review  PASS -&gt; approve | CHANGES -&gt; build (max 2)
-approve         agent   APPROVE -&gt; ready-to-merge | ESCALATE -&gt; escalated
-ready-to-merge  human   FEEDBACK -&gt; build (max 3) | REJECT -&gt; rejected
-merge           merge   off, continues as MERGED -&gt; verify
-verify          verify  off, continues as PASS -&gt; done
-escalated       human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pre>
+  <pre data-lang="text"><code>intake           agent   ACCEPT -&gt; spec | NEEDS-INFO -&gt; ask-author (max 2) | REJECT -&gt; rejected
+ask-author       human   ANSWER -&gt; intake | REJECT -&gt; rejected
+spec             agent   DONE -&gt; spec-approval
+spec-approval    human   off, continues as APPROVE -&gt; build
+build            agent   READY -&gt; gate | BLOCKED -&gt; escalated
+gate             checks  PASS -&gt; review | FAIL -&gt; debug (max 2)
+debug            agent   off, continues as FOUND -&gt; build
+review           review  PASS -&gt; approve | CHANGES -&gt; build (max 2)
+approve          agent   APPROVE -&gt; ready-to-merge | ESCALATE -&gt; escalated
+ready-to-merge   human   FEEDBACK -&gt; build (max 3) | REJECT -&gt; rejected
+merge            merge   off, continues as MERGED -&gt; ready-to-verify
+ready-to-verify  human   off, continues as VERIFY -&gt; verify
+verify           verify  off, continues as PASS -&gt; done
+escalated        human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pre>
   <p>The factory does not merge unless the project turns that step on. <a href="pipeline.html#who-merges">Who merges</a> has the three keys that change it. A <code>max</code> on an edge is how many times in a row a step may send a job that way. When the limit is used up, the job goes to a maintainer.</p>
 
   <h2 id="read-next">Read next</h2>

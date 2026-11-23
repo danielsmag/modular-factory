@@ -76,19 +76,20 @@ Each step names its type and where each outcome leads. This is the default
 pipeline, printed by `.factory/bin/mfactory graph`:
 
 ```text
-intake          agent   ACCEPT -> spec | NEEDS-INFO -> ask-author (max 2) | REJECT -> rejected
-ask-author      human   ANSWER -> intake | REJECT -> rejected
-spec            agent   DONE -> spec-approval
-spec-approval   human   off, continues as APPROVE -> build
-build           agent   READY -> gate | BLOCKED -> escalated
-gate            checks  PASS -> review | FAIL -> debug (max 2)
-debug           agent   off, continues as FOUND -> build
-review          review  PASS -> approve | CHANGES -> build (max 2)
-approve         agent   APPROVE -> ready-to-merge | ESCALATE -> escalated
-ready-to-merge  human   FEEDBACK -> build (max 3) | REJECT -> rejected
-merge           merge   off, continues as MERGED -> verify
-verify          verify  off, continues as PASS -> done
-escalated       human   FEEDBACK -> build | REJECT -> rejected
+intake           agent   ACCEPT -> spec | NEEDS-INFO -> ask-author (max 2) | REJECT -> rejected
+ask-author       human   ANSWER -> intake | REJECT -> rejected
+spec             agent   DONE -> spec-approval
+spec-approval    human   off, continues as APPROVE -> build
+build            agent   READY -> gate | BLOCKED -> escalated
+gate             checks  PASS -> review | FAIL -> debug (max 2)
+debug            agent   off, continues as FOUND -> build
+review           review  PASS -> approve | CHANGES -> build (max 2)
+approve          agent   APPROVE -> ready-to-merge | ESCALATE -> escalated
+ready-to-merge   human   FEEDBACK -> build (max 3) | REJECT -> rejected
+merge            merge   off, continues as MERGED -> ready-to-verify
+ready-to-verify  human   off, continues as VERIFY -> verify
+verify           verify  off, continues as PASS -> done
+escalated        human   FEEDBACK -> build | REJECT -> rejected
 ```
 
 The factory does not merge unless the project turns that step on. All three
@@ -112,7 +113,7 @@ With the default, approving marks the pull request ready and waits. Merging
 it by hand continues from the merge step's `MERGED` edge. That path does not
 sync the base branch or run the checks again.
 
-Three other steps ship switched off. Turning one on is two lines in `factory.toml`:
+Four other steps ship switched off. Turning one on is two lines in `factory.toml`:
 
 ```toml
 [steps.spec-approval]     # a maintainer approves the spec before anything is built
@@ -120,6 +121,10 @@ enabled = true
 
 [steps.debug]             # a debugger diagnoses failing checks before the builder retries
 enabled = true
+
+[steps.ready-to-verify]   # wait until a person says the deploy is live
+enabled = true
+who = "operator"
 
 [steps.verify]            # check the change again after it is merged or deployed
 enabled = true

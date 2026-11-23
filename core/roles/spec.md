@@ -49,6 +49,11 @@ everything intake left out.
 ## Assumptions
 Decisions you made where the request was ambiguous, each with a one-line reason.
 The approver sends the job to a person when one of these is a product decision.
+
+## Verify after deploy
+Include this section only when your prompt says verify is on. Numbered list of
+what to run or look at once the change is live: a command, a URL and what it
+should show, or a page to open. The verifier checks this list after the merge.
 ```
 
 ## Rules

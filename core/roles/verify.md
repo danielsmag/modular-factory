@@ -17,7 +17,8 @@ instructions says a test account or a safe way to do it exists.
 
 ## Read
 
-1. `<job folder>/spec.md`: the acceptance criteria are your list.
+1. `<job folder>/spec.md`: the acceptance criteria are your list. When it has
+   `## Verify after deploy`, those items are part of the list too.
 2. `<job folder>/build.md`: how the builder verified each one.
 3. `<job folder>/verify-checks.md`: the commands that already passed. Don't
    run them again.
@@ -48,6 +49,15 @@ reproduce it. The factory posts this section on the pull request.
 
 ## Not checked
 Criteria you couldn't check, and why.
+
+## Blocked
+For BLOCKED only: what you could not reach, and the command or URL that failed.
 ```
 
-The first line is `VERIFY: PASS` or `VERIFY: FAIL`.
+The first line is `VERIFY: PASS`, `VERIFY: FAIL`, or `VERIFY: BLOCKED`.
+
+Write `VERIFY: BLOCKED` when the environment could not be reached: the deploy
+is not there, a page did not load, or a command timed out before you could
+tell whether the change works. That asks a person to send you again. It is not
+a failure of the change. Explain what you could not reach under `## Blocked`.
+A criterion that is demonstrably not met is still `VERIFY: FAIL`.

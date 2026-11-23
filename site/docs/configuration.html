@@ -110,10 +110,14 @@ enabled = true
 [steps.debug]
 enabled = true
 
+[steps.ready-to-verify]
+enabled = true
+who = "operator"
+
 [steps.verify]
 enabled = true
 commands = ["npm run test:smoke"]</code></pre>
-  <p><code>spec-approval</code>, <code>debug</code>, and <code>verify</code> ship off. The debugger writes a diagnosis and changes no code. With it off, failing checks go straight back to the builder.</p>
+  <p><code>spec-approval</code>, <code>debug</code>, <code>ready-to-verify</code>, and <code>verify</code> ship off. The debugger writes a diagnosis and changes no code. With it off, failing checks go straight back to the builder. <code>ready-to-verify</code> waits until a person says the deploy is live.</p>
 
   <h2 id="adding-a-step">Adding a step</h2>
   <pre data-lang="toml"><code>[steps.docs]
@@ -159,7 +163,18 @@ on = { APPROVE = "merge", CHANGES = { to = "build", max = 2 }, REJECT = "rejecte
   <p>The reply is <code>/mfactory</code> plus the outcome in lower case. See <a href="first-job.html#answer-a-person">answering</a>.</p>
 
   <h2 id="validation">Validation</h2>
-  <p>Keys of the <code>verify</code> step. The factory never deploys. A job being validated holds no slot.</p>
+  <p><code>ready-to-verify</code> sits between merge and verify. It ships off, so a merge still lands on verify. Turn it on when a person has to say the deploy is live. <code>/mfactory verify</code> then runs verify. <code>/mfactory reject</code> ends the job. <code>who</code> is the same key as any human step.</p>
+  <pre data-lang="toml"><code>[steps.ready-to-verify]
+enabled = true
+who = "operator"
+
+[steps.verify]
+enabled = true
+after = "merge"
+agent = true
+url = "https://app.example.com"
+commands = ["test \"$(curl -fsS \"$FACTORY_DEPLOY_URL/health\")\" = ok"]</code></pre>
+  <p>A script that can see the deploy leaves <code>ready-to-verify</code> off and uses <code>wait</code>. Keys of the <code>verify</code> step. The factory never deploys. A job being validated holds no slot.</p>
   <div class="scroll">
     <table>
       <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
@@ -168,7 +183,7 @@ on = { APPROVE = "merge", CHANGES = { to = "build", max = 2 }, REJECT = "rejecte
         <tr><td class="mono">wait</td><td><code>""</code></td><td>For <code>deploy</code>: a command that exits 0 once the merge commit is live. Run again every 15 seconds until <code>timeout_minutes</code>.</td></tr>
         <tr><td class="mono">timeout_minutes</td><td><code>20</code></td><td>How long to wait for the deploy.</td></tr>
         <tr><td class="mono">commands</td><td><code>[]</code></td><td>Commands in a clean checkout of the merge commit. All must exit 0. <code>[checks] timeout_minutes</code> limits them.</td></tr>
-        <tr><td class="mono">agent</td><td><code>false</code></td><td>After the commands pass, a verifier checks the spec against the running result and writes <code>verify.md</code>.</td></tr>
+        <tr><td class="mono">agent</td><td><code>false</code></td><td>After the commands pass, a verifier checks the spec, including <code>## Verify after deploy</code>, and writes <code>verify.md</code>.</td></tr>
         <tr><td class="mono">url</td><td><code>""</code></td><td>Where the deployed result is. Passed to the commands and the agent.</td></tr>
         <tr><td class="mono">retries</td><td><code>1</code></td><td>How many times to run failing commands again.</td></tr>
         <tr><td class="mono">on_failure</td><td><code>comment</code></td><td><code>comment</code>, <code>issue</code>, or <code>revert-pr</code>. The factory never merges a revert.</td></tr>
@@ -176,6 +191,7 @@ on = { APPROVE = "merge", CHANGES = { to = "build", max = 2 }, REJECT = "rejecte
     </table>
   </div>
   <p>Commands and <code>wait</code> get <code>FACTORY_CHECKOUT</code> (the main checkout), <code>FACTORY_JOB</code>, <code>FACTORY_MERGE_SHA</code>, <code>FACTORY_PR</code>, and <code>FACTORY_DEPLOY_URL</code>. The working directory is a clean checkout of the merge commit. A job file that the worktree does not contain is <code>test -s "$FACTORY_CHECKOUT/.factory/jobs/$FACTORY_JOB/spec.md"</code>.</p>
+  <p>When verify is on, <code>spec.md</code> must include <code>## Verify after deploy</code>. <code>VERIFY: PASS</code> ends at <code>done</code>. <code>VERIFY: FAIL</code> ends as <code>failed</code> after <code>retries</code>. <code>VERIFY: BLOCKED</code> means the environment could not be reached: the job returns to <code>ready-to-verify</code>. The fourth <code>BLOCKED</code> in a row goes to <code>escalated</code>. It does not comment as a failure, open an issue, or open a revert pull request. If <code>ready-to-verify</code> is off, <code>BLOCKED</code> fails the job through <code>on_failure</code>. A project that replaces <code>[steps.verify].on</code> must keep a <code>BLOCKED</code> edge. The default is <code>{ to = "ready-to-verify", max = 3 }</code>.</p>
 
   <h2 id="reviewers-and-surfaces">Reviewers and surfaces</h2>
   <p>The <code>review</code> step runs every reviewer the job needs, in parallel. <code>code</code> runs on every job. <code>security</code> runs on the <code>security</code> surface. <code>ux</code> and <code>ui</code> run on the <code>ui</code> surface. A new reviewer is a table with a <code>focus</code>. No prompt file is needed.</p>
