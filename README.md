@@ -201,9 +201,10 @@ mfactory stop
 The page comes with the global install (`install.sh --global`), not with each
 project. `.factory/bin/mfactory dashboard` hands off to the global `mfactory`.
 It serves a read-only page on your machine: jobs by step, with a Now panel of
-the agents still on the current step, the pipeline, what each job wrote, an
-overview with the job table, and the merged configuration with the source of
-each value. It changes nothing;
+the agents still on the current step, queued issues that are not jobs yet, the
+pipeline, what each job wrote, an overview with the job table, and the merged
+configuration with the source of each value. A queued issue opens its body and
+comments. It changes nothing;
 approvals and feedback go through `/mfactory` or an issue comment.
 
 ![The dashboard's pipeline view, showing made-up sample jobs](docs/dashboard-pipeline.png?v=2)

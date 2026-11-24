@@ -256,13 +256,131 @@ def test_the_workspace_dashboard_serves_the_queue_and_caches_it(tmp_path):
     finally:
         server.shutdown()
         server.server_close()
-    expected: dict[str, str] = {
+    expected: dict[str, object] = {
         "project": "alpha", "action": "new", "issue": "12", "job": "-", "step": "-", "note": "Add a widget",
+        "title": None, "issue_url": None, "created_at": None, "updated_at": None, "author": None, "labels": [],
     }
     assert first["rows"] == [expected]
     assert second["rows"] == [expected]
     assert any("beta" in item and "queue broke" in item for item in first["errors"])
     assert counts.read_text().count("x") == 1
+
+
+QUEUE_KEYS: set[str] = {
+    "project", "action", "issue", "job", "step", "note",
+    "title", "issue_url", "created_at", "updated_at", "author", "labels",
+}
+
+
+def serve_file(file: Path) -> tuple[DashboardServer, str]:
+    server: DashboardServer = DashboardServer(("127.0.0.1", 0), handler(file))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_address[1]}"
+
+
+def test_queue_json_reaches_the_page_and_an_older_core_still_reads(tmp_path, monkeypatch, capsys):
+    rows: list[dict[str, object]] = [
+        {"action": "new", "issue": 5, "job": "-", "step": "-", "note": "Leak ghp_abcdefgh12345678",
+         "title": "Leak ghp_abcdefgh12345678", "issue_url": "https://github.test/acme/app/issues/5",
+         "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z",
+         "author": "alice", "labels": ["factory", "ui"]},
+        {"action": "hold", "issue": 6, "job": "-", "step": "-", "note": "concurrency 3 reached",
+         "title": "Plain", "issue_url": "http://github.test/acme/app/issues/6",
+         "created_at": None, "updated_at": None, "author": None, "labels": []},
+        {"action": "new", "issue": 7, "job": "-", "step": "-", "note": "Bad link",
+         "title": "Bad link", "issue_url": "javascript:alert(1)",
+         "created_at": None, "updated_at": None, "author": "bob", "labels": []},
+    ]
+    alpha: Path = checkout(tmp_path, "alpha", "#!/bin/sh\ncat <<'EOF'\n" + json.dumps(rows) + "\nEOF\n")
+    old_script: str = (
+        "#!/bin/sh\n"
+        "if [ \"$2\" = \"--json\" ]; then\n"
+        "  echo 'usage: mfactory [-h]' >&2\n"
+        "  echo 'mfactory: error: unrecognized arguments: --json' >&2\n"
+        "  exit 2\n"
+        "fi\n"
+        "printf '%s\\n' 'new  8  -  -  Old core row'\n"
+    )
+    old: Path = checkout(tmp_path, "old", old_script)
+    broken: Path = checkout(tmp_path, "broken", "#!/bin/sh\necho '[not json'\n")
+    file: Path = tmp_path / "workspace.toml"
+    Workspace(file, [Project(alpha), Project(old), Project(broken)], concurrency=9).save()
+    server, base = serve_file(file)
+    try:
+        body: dict = json.loads(fetch(base + "/queue.json")[0])
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert all(set(row) == QUEUE_KEYS for row in body["rows"])
+    by_issue: dict[str, dict] = {row["issue"]: row for row in body["rows"]}
+    assert set(by_issue) == {"5", "6", "7", "8"}
+    assert by_issue["5"]["title"] == "Leak [redacted]"
+    assert by_issue["5"]["issue_url"] == "https://github.test/acme/app/issues/5"
+    assert by_issue["5"]["labels"] == ["factory", "ui"]
+    assert by_issue["5"]["author"] == "alice"
+    assert by_issue["5"]["created_at"] == "2026-01-01T00:00:00Z"
+    assert by_issue["6"]["issue_url"] is None
+    assert by_issue["7"]["issue_url"] is None
+    assert by_issue["8"] == {
+        "project": "old", "action": "new", "issue": "8", "job": "-", "step": "-", "note": "Old core row",
+        "title": None, "issue_url": None, "created_at": None, "updated_at": None, "author": None, "labels": [],
+    }
+    assert any(error.startswith("broken: ") and "malformed JSON" in error for error in body["errors"])
+
+    monkeypatch.setenv("FACTORY_WORKSPACE", str(file))
+    assert main(["workspace", "queue"]) == 1
+    printed: str = capsys.readouterr().out
+    assert "alpha  new  5  -  -  Leak ghp_abcdefgh12345678\n" in printed
+    assert "alpha  hold  6  -  -  concurrency 3 reached\n" in printed
+    assert "old  new  8  -  -  Old core row\n" in printed
+
+
+def test_the_issue_endpoint_reads_one_issue_and_the_queue_never_does(world, tmp_path):
+    real_factory(world.repo)
+    number: int = world.issue(title="Leak ghp_abcdefgh12345678", body="line one\ntoken ghp_abcdefgh12345678")
+    world.comment(number, "first sk-abcdefgh12345678", "bob")
+    world.comment(number, "second", "carol")
+    file: Path = tmp_path / "workspace.toml"
+    Workspace(file, [Project(world.repo)]).save()
+    server, base = serve_file(file)
+    try:
+        queue: dict = json.loads(fetch(base + "/queue.json")[0])
+        assert queue["rows"][0]["title"] == "Leak [redacted]"
+        assert world.calls("issue list") and not world.calls("issue view")
+
+        issue: dict = json.loads(fetch(base + f"/projects/repo/issues/{number}")[0])
+        assert set(issue) == {
+            "number", "title", "url", "state", "author", "labels", "created_at", "updated_at",
+            "body", "comment_count", "comments",
+        }
+        assert issue["number"] == number and issue["comment_count"] == 2
+        assert issue["title"] == "Leak [redacted]"
+        assert issue["body"] == "line one\ntoken [redacted]"
+        assert issue["url"] == f"https://github.test/acme/app/issues/{number}"
+        assert issue["labels"] == ["factory"] and issue["author"] == "alice" and issue["state"] == "OPEN"
+        assert issue["comments"][0] == {"author": "bob", "created_at": "2026-01-01T00:00:00Z",
+                                        "body": "first [redacted]"}
+        assert len(world.calls("issue view")) == 1
+
+        for path in ("/projects/repo/issues/abc", "/projects/repo/issues/0", "/projects/repo/issues/12;rm",
+                     "/projects/repo/issues/12/x", "/projects/repo/issues/-1", f"/projects/nope/issues/{number}"):
+            with pytest.raises(urllib.error.HTTPError) as error:
+                fetch(base + path)
+            assert error.value.code == 404, path
+        assert len(world.calls("issue view")) == 1
+
+        with pytest.raises(urllib.error.HTTPError) as error:
+            fetch(base + "/projects/repo/issues/999")
+        assert error.value.code == 502
+        message: str = json.loads(error.value.read())["error"]
+        assert message.startswith("Could not load issue #999") and "gh issue view" not in message
+
+        with pytest.raises(urllib.error.HTTPError) as error:
+            fetch(base + f"/projects/repo/issues/{number}", host="evil.example")
+        assert error.value.code == 403
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_a_bad_schema_is_refused(tmp_path):
@@ -436,6 +554,40 @@ if (JSON.stringify(cards) !== JSON.stringify(["9", "10"])) throw new Error(JSON.
     (tmp_path / "queue.js").write_text(script)
     result: subprocess.CompletedProcess[str] = subprocess.run(
         ["node", str(tmp_path / "queue.js")], capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="needs node to run the page's script")
+def test_queue_cards_carry_issue_metadata_and_an_issue_drawer_is_not_a_job_drawer(tmp_path: Path) -> None:
+    page: str = dashboard_page().decode()
+    script: str = page.split("<script>", 1)[1].rsplit("</script>", 1)[0].split("/* boot */", 1)[0]
+    script += """
+globalThis.location = { hash: "#/board", search: "" };
+const row = {
+  project: "alpha", action: "new", issue: "9", job: "-", step: "-", note: "Widget", title: "Widget",
+  issue_url: "https://github.test/acme/app/issues/9", created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-02T00:00:00Z", author: "carol", labels: ["needs-design", "factory"],
+};
+const passed = queueCards([row], []);
+if (JSON.stringify(passed) !== JSON.stringify([row])) throw new Error("metadata changed: " + JSON.stringify(passed));
+state.query = "carol";
+if (!queueMatches(row)) throw new Error("author did not match");
+state.query = "needs-design";
+if (!queueMatches(row)) throw new Error("label did not match");
+state.query = "nobody";
+if (queueMatches(row)) throw new Error("matched nothing");
+state.query = "";
+state.workspace = true;
+state.projects = [{ id: "alpha", name: "alpha", jobs: [{ id: "001-a", issue: 1 }] }];
+state.drawer = issueDrawerState(row);
+if (sameDrawer({ id: "001-a", project: "alpha" })) throw new Error("issue drawer matched a job");
+if (openJob() !== null) throw new Error("openJob found a job for an issue drawer");
+if (!sameIssue(row)) throw new Error("issue drawer lost its row");
+"""
+    (tmp_path / "issue.js").write_text(script)
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        ["node", str(tmp_path / "issue.js")], capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
 

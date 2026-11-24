@@ -21,6 +21,22 @@ def test_queue_lists_new_issues_in_order_up_to_the_free_slots(world):
         ("new", 1, "-", "-", "One"), ("new", 2, "-", "-", "Two"), ("hold", 3, "-", "-", "concurrency 2 reached")]
 
 
+def test_queue_json_adds_what_gh_issue_list_says_about_each_issue(world):
+    number: int = world.issue(title="Add a widget")
+    res = world.cli("queue", "--json")
+    assert res.returncode == 0, res.stderr
+    assert json.loads(res.stdout) == [{
+        "action": "new", "issue": number, "job": "-", "step": "-", "note": "Add a widget",
+        "title": "Add a widget", "issue_url": f"https://github.test/acme/app/issues/{number}",
+        "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z",
+        "author": "alice", "labels": ["factory"],
+    }]
+    assert "note:" in res.stderr                            # the stale-files note stays out of the JSON
+    assert len(world.calls("issue list")) == 1
+    plain = world.cli("queue")
+    assert plain.stdout.splitlines()[-1] == f"new  {number}  -  -  Add a widget"
+
+
 def test_create_refuses_when_every_slot_is_taken(world):
     world.configure(ONE)
     first = world.create(world.issue(title="One"))

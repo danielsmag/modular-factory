@@ -1,6 +1,7 @@
 """Everything the factory asks of GitHub, through the `gh` CLI."""
 
 import json
+from subprocess import CompletedProcess
 
 from ..util import MARKER, Refused, run
 
@@ -44,9 +45,19 @@ class GitHub:
         return self.json("issue", "view", number, "--json",
                          "number,title,body,author,labels,state,url,comments")
 
+    def issue_details(self, number: int) -> object:
+        """The issue for the dashboard's drawer. A failure names only gh's last line, not the command."""
+        res: CompletedProcess[str] = self.call(
+            "issue", "view", number, "--json",
+            "number,title,body,author,labels,state,url,createdAt,updatedAt,comments", check=False)
+        if res.returncode != 0:
+            lines: list[str] = (res.stderr or res.stdout).strip().splitlines()
+            raise Refused(lines[-1] if lines else f"gh exited with code {res.returncode}")
+        return json.loads(res.stdout)
+
     def queue(self, label):
         return self.json("issue", "list", "--label", label, "--state", "open", "--limit", "200",
-                         "--json", "number,title")
+                         "--json", "number,title,url,createdAt,updatedAt,author,labels")
 
     def create_issue(self, title, body, label):
         return self.call("issue", "create", "--title", title, "--label", label, "--body-file", "-",

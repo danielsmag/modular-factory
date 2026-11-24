@@ -242,6 +242,11 @@ button.act:hover .act-label { color: var(--text); }
 .step-who { margin-top: 4px; font-size: var(--fs-meta); line-height: var(--lh-prose); }
 .history-reason { font-size: var(--fs-meta); line-height: var(--lh-prose); }
 .drawer pre.file { max-height: none; border: 0; background: transparent; padding: 22px 28px 48px; }
+.d-issue { overflow: auto; padding: 22px 28px 48px; }
+.d-issue pre.file { padding: 0; min-height: 0; overflow: visible; overflow-wrap: anywhere; }
+.d-comment { margin-top: 14px; }
+.d-comment pre.file { margin-top: 4px; }
+.kcard .meta .chip, .facts .chip { white-space: normal; overflow-wrap: anywhere; }
 .grip { position: relative; cursor: col-resize; touch-action: none; }
 .grip::before { content: ""; position: absolute; top: 0; bottom: 0; left: 5px; width: 1px; background: var(--line-2); }
 .grip:hover::before, .grip.on::before, .grip:focus-visible::before { background: var(--accent); width: 2px; }

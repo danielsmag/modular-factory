@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -25,24 +26,93 @@ from urllib.parse import quote, unquote, urlsplit
 from .. import activity
 from ..config import Config
 from ..config import load as load_config
+from ..service import GitHub
 from ..util import FactoryError, Refused, dashboard_page, user_dir
 from .paths import FILE, SERVED
 from .project import Project
+from .queue import QueueMeta
 from .registry import Workspace
 
 QUEUE_TTL_SECONDS: float = 15.0
 STATE_NAME: str = "dashboard.json"
+ISSUE_NUMBER: re.Pattern[str] = re.compile(r"[1-9][0-9]{0,9}")
+
+
+def _web_url(value: object) -> str | None:
+    return value if isinstance(value, str) and value.startswith("https://") else None
+
+
+def _text(value: object) -> str | None:
+    """A string from GitHub, redacted like agent activity. None for anything else."""
+    return activity.redact(value) if isinstance(value, str) else None
+
+
+def _login(value: object) -> str | None:
+    return _text(value.get("login")) if isinstance(value, dict) else None
 
 
 def queue_payload(
-    rows: list[tuple[str, str, str, str, str, str]], errors: list[str],
+    rows: list[tuple[str, str, str, str, str, str]], metas: list[QueueMeta], errors: list[str],
 ) -> dict[str, object]:
-    items: list[dict[str, str]] = []
-    for project, action, issue, job, step, note in rows:
+    """`/queue.json`. Only the list fields of each issue go out, redacted."""
+    items: list[dict[str, object]] = []
+    for (project, action, issue, job, step, note), meta in zip(rows, metas, strict=True):
         items.append({
-            "project": project, "action": action, "issue": issue, "job": job, "step": step, "note": note,
+            "project": project, "action": action, "issue": issue, "job": job, "step": step,
+            "note": activity.redact(note),
+            "title": _text(meta.title),
+            "issue_url": _web_url(meta.issue_url),
+            "created_at": _text(meta.created_at), "updated_at": _text(meta.updated_at),
+            "author": _text(meta.author), "labels": [activity.redact(name) for name in meta.labels],
         })
     return {"rows": items, "errors": errors}
+
+
+def issue_payload(raw: object) -> dict[str, object]:
+    """The issue drawer's whitelisted fields, every string redacted."""
+    issue: dict[str, object] = raw if isinstance(raw, dict) else {}
+    raw_labels: object = issue.get("labels")
+    labels: list[str] = []
+    for label in raw_labels if isinstance(raw_labels, list) else []:
+        name: str | None = _text(label.get("name")) if isinstance(label, dict) else None
+        if name is not None:
+            labels.append(name)
+    raw_comments: object = issue.get("comments")
+    comments: list[dict[str, object]] = []
+    for item in raw_comments if isinstance(raw_comments, list) else []:
+        comment: dict[str, object] = item if isinstance(item, dict) else {}
+        comments.append({
+            "author": _login(comment.get("author")),
+            "created_at": _text(comment.get("createdAt")),
+            "body": _text(comment.get("body")) or "",
+        })
+    number: object = issue.get("number")
+    return {
+        "number": number if isinstance(number, int) and not isinstance(number, bool) else None,
+        "title": _text(issue.get("title")),
+        "url": _web_url(issue.get("url")),
+        "state": _text(issue.get("state")),
+        "author": _login(issue.get("author")),
+        "labels": labels,
+        "created_at": _text(issue.get("createdAt")),
+        "updated_at": _text(issue.get("updatedAt")),
+        "body": _text(issue.get("body")) or "",
+        "comment_count": len(comments),
+        "comments": comments,
+    }
+
+
+def issue_response(project: Project, number: int) -> tuple[HTTPStatus, dict[str, object]]:
+    """One issue of a project, read from GitHub on every call."""
+    try:
+        raw: object = GitHub(project.path).issue_details(number)
+    except FactoryError as error:
+        lines: list[str] = str(error).strip().splitlines()
+        reason: str = lines[-1] if lines else "gh failed"
+        return HTTPStatus.BAD_GATEWAY, {"error": f"Could not load issue #{number} from GitHub: {reason}"}
+    except json.JSONDecodeError:
+        return HTTPStatus.BAD_GATEWAY, {"error": f"Could not load issue #{number} from GitHub: gh printed no JSON"}
+    return HTTPStatus.OK, issue_payload(raw)
 
 
 class QueueCache:
@@ -61,8 +131,8 @@ class QueueCache:
             if self._at is not None and now - self._at < self._ttl:
                 return self._body
             workspace: Workspace = self._load()
-            rows, errors = workspace.queue()
-            self._body = queue_payload(rows, errors)
+            rows, metas, errors = workspace.queue()
+            self._body = queue_payload(rows, metas, errors)
             self._at = time.monotonic()
             return self._body
 
@@ -115,6 +185,17 @@ def _handler(load: Callable[[], Workspace]) -> type[BaseHTTPRequestHandler]:
                     return
                 if path.startswith("/projects/"):
                     rest: str = path.removeprefix("/projects/")
+                    issue_ident, issue_separator, issue_ref = rest.partition("/issues/")
+                    if issue_separator and "/" not in issue_ident:
+                        issue_project: Project | None = workspace.project(issue_ident)
+                        if issue_project is None or not ISSUE_NUMBER.fullmatch(issue_ref):
+                            self.send("not found", "text/plain", HTTPStatus.NOT_FOUND)
+                            return
+                        status: HTTPStatus
+                        issue_body: dict[str, object]
+                        status, issue_body = issue_response(issue_project, int(issue_ref))
+                        self.send(json.dumps(issue_body), "application/json", status)
+                        return
                     ident, separator, job_path = rest.partition("/jobs/")
                     project: Project | None = workspace.project(ident) if separator else None
                     if project is not None and job_path.endswith("/activity"):

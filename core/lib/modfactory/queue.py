@@ -25,6 +25,8 @@ class _QueueHost(Protocol):
 
     def _find_reply(self, job: dict[str, Any], step: dict[str, Any]) -> tuple[str, str, str, Any] | None: ...
 
+    def queue_and_issues(self) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]: ...
+
 
 class Queue:
     """Job queue. `Factory` owns `cfg`, `gh`, and `store` and mixes this in."""
@@ -79,6 +81,10 @@ class Queue:
         `new` and `resume` rows fit in the concurrency slots. `hold` rows wait
         for a slot, `wait` rows for a person, and `skip` rows need nothing.
         """
+        return self.queue_and_issues()[0]
+
+    def queue_and_issues(self: _QueueHost) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]:
+        """The rows of `queue`, and the labeled open issues the one `gh issue list` call returned."""
         labels, limit = self.cfg["labels"], self.cfg["run"]["concurrency"]
         for stale in self.store.all():
             if stale["pr"] and not stale["merge_sha"] and stale["step"] not in graph.END_STATES:
@@ -125,4 +131,21 @@ class Queue:
                 free -= 1
             else:
                 rows.append(("hold",) + row[1:4] + (f"concurrency {limit} reached",))
-        return rows + waiting + other
+        return rows + waiting + other, issues
+
+
+def queue_json(rows: list[tuple[Any, ...]], issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """`mfactory queue --json`: each row, plus what `gh issue list` said about its issue."""
+    by_number: dict[int, dict[str, Any]] = {issue["number"]: issue for issue in issues}
+    out: list[dict[str, Any]] = []
+    for action, number, job, step, note in rows:
+        issue: dict[str, Any] = by_number.get(number, {})
+        author: object = issue.get("author")
+        out.append({
+            "action": action, "issue": number, "job": job, "step": step, "note": note,
+            "title": issue.get("title"), "issue_url": issue.get("url"),
+            "created_at": issue.get("createdAt"), "updated_at": issue.get("updatedAt"),
+            "author": author.get("login") if isinstance(author, dict) else None,
+            "labels": [label["name"] for label in issue.get("labels") or []],
+        })
+    return out

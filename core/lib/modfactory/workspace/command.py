@@ -46,7 +46,7 @@ def workspace_command(args: argparse.Namespace) -> int:
             return 0
         rows: list[tuple[str, str, str, str, str, str]]
         errors: list[str]
-        rows, errors = group.queue(args.concurrency)
+        rows, _metas, errors = group.queue(args.concurrency)
         for row in rows:
             print("  ".join(row))
         if not rows and not errors:

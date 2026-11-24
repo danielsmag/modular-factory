@@ -68,7 +68,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_parser("models", help="show the model and effort of each agent, per tool")
     sub.add_parser("skills", help="list skills and instruction files, and which agents read them")
 
-    sub.add_parser("queue", help="what to run now")
+    queue_run: argparse.ArgumentParser = sub.add_parser("queue", help="what to run now")
+    queue_run.add_argument("--json", action="store_true",
+                           help="one JSON array, with each issue's title, URL, dates, author and labels")
     create: argparse.ArgumentParser = sub.add_parser("create", help="start a job for a labeled issue")
     create.add_argument("issue")
     nxt: argparse.ArgumentParser = sub.add_parser("next", help="say what the orchestrator must do for a job")

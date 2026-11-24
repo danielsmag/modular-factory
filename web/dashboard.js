@@ -172,7 +172,8 @@ function jobs() {
 function queueMatches(row) {
   const q = state.query.trim().toLowerCase();
   if (!q) return true;
-  return [row.project, row.projectName, row.note, "#" + row.issue, row.action, row.job, row.step].some((value) => String(value || "").toLowerCase().includes(q));
+  const labels = Array.isArray(row.labels) ? row.labels : [];
+  return [row.project, row.projectName, row.title, row.note, "#" + row.issue, row.action, row.job, row.step, row.author, ...labels].some((value) => String(value || "").toLowerCase().includes(q));
 }
 function queueCards(rows, jobList) {
   const ids = new Set(jobList.map((job) => job.id));
@@ -451,7 +452,7 @@ function cardHint(job) {
   return lines.length ? lines[0] : "";
 }
 function sameDrawer(job) {
-  if (!state.drawer || state.drawer.id !== job.id) return false;
+  if (!state.drawer || state.drawer.kind === "issue" || state.drawer.id !== job.id) return false;
   if (!state.workspace) return true;
   return state.drawer.project === (job.project || null);
 }
@@ -1007,6 +1008,7 @@ function activityBody(job) {
 }
 function drawer() {
   if (!state.drawer) return null;
+  if (state.drawer.kind === "issue") return issueDrawer();
   const job = jobs().find((item) => sameDrawer(item));
   const close = el("button", { type: "button", class: "close", "data-close": "true", "data-focus": "drawer-close", text: "close", onclick: closeDrawer });
   if (!job) {
@@ -1031,13 +1033,116 @@ function drawer() {
         ? activityBody(job)
         : el("div", { class: "d-body", style: splitStyle() }, fileList(job, files), grip(), el("pre", { class: "file d-doc", tabindex: 0, "data-focus": "drawer-doc", text: state.drawer.text || "" }))));
 }
+function day(stamp) {
+  const found = /^\d{4}-\d{2}-\d{2}/.exec(String(stamp || ""));
+  return found ? found[0] : "";
+}
+function labelChips(labels) {
+  return (Array.isArray(labels) ? labels : []).map((name) => el("span", { class: "chip", text: name }));
+}
+function issueDrawerState(row) {
+  return { kind: "issue", project: row.project, issue: String(row.issue), row, data: null, error: null, focus: true };
+}
+function sameIssue(row) {
+  return !!(state.drawer && state.drawer.kind === "issue" && state.drawer.project === row.project && state.drawer.issue === String(row.issue));
+}
+function issueUrl(drawer) {
+  return "/projects/" + encodeURIComponent(drawer.project) + "/issues/" + encodeURIComponent(drawer.issue);
+}
+function openIssue(row) {
+  if (sameIssue(row)) return;
+  state.drawer = issueDrawerState(row);
+  render();
+  fetchIssue(state.drawer);
+}
+async function fetchIssue(drawer) {
+  const fallback = "Could not load issue #" + drawer.issue + ".";
+  let data = null;
+  let error = null;
+  try {
+    const res = await fetch(issueUrl(drawer), { cache: "no-store" });
+    const body = await res.json().catch(() => null);
+    if (res.ok && body) data = body;
+    else error = (body && body.error) || fallback;
+  } catch (failure) {
+    error = fallback;
+  }
+  if (state.drawer !== drawer) return;
+  drawer.data = data;
+  drawer.error = error;
+  render();
+}
 function queueCard(row) {
   const who = state.workspace && state.selected === "all" && row.projectName ? row.projectName + " · " : "";
-  return el("article", { class: "kcard" },
+  const label = (row.title || row.note || "issue #" + (row.issue || "")) + (state.workspace && state.selected === "all" && row.projectName ? ", " + row.projectName : "");
+  const opened = day(row.created_at);
+  return el("article", {
+    class: "kcard" + (sameIssue(row) ? " on" : ""), tabindex: 0, role: "button", "aria-label": label,
+    "data-focus": "queue:" + (row.project || "") + ":" + row.issue,
+    onclick: (event) => { if (event.target.closest("a")) return; openIssue(row); },
+    onkeydown: (event) => {
+      if (event.target.closest("a")) return;
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openIssue(row); }
+    },
+  },
     el("div", { class: "card-top" },
       el("span", { class: "num", text: who + (row.action || "new") }),
       el("span", { class: "flag", text: "#" + (row.issue || "") })),
-    el("p", { class: "feature", text: row.note || ("issue #" + (row.issue || "")) }));
+    el("p", { class: "feature", text: row.title || row.note || ("issue #" + (row.issue || "")) }),
+    el("div", { class: "links" }, link(row.issue_url, "issue #" + (row.issue || ""))),
+    opened || row.author || (row.labels || []).length ? el("div", { class: "meta" },
+      opened ? el("span", { text: opened }) : null,
+      opened ? ageNode(row.created_at, "ago") : null,
+      row.author ? el("span", { text: "@" + row.author }) : null,
+      labelChips(row.labels)) : null,
+    row.action === "hold" && row.title && row.note ? el("p", { class: "hint", text: row.note }) : null);
+}
+function plural(count, word) {
+  return count + " " + word + (count === 1 ? "" : "s");
+}
+function issueBody(drawer) {
+  const box = (...kids) => el("div", { class: "d-doc d-issue", tabindex: 0, "data-focus": "drawer-issue" }, kids);
+  if (drawer.error) return box(el("p", { class: "error", text: drawer.error }));
+  const data = drawer.data;
+  if (!data) return box(el("p", { class: "kempty", text: "Loading..." }));
+  const comments = Array.isArray(data.comments) ? data.comments : [];
+  return box(
+    data.body ? el("pre", { class: "file", text: data.body }) : el("p", { class: "kempty", text: "No description." }),
+    el("h4", { class: "block-title", text: "Comments" }),
+    comments.length
+      ? comments.map((comment) => el("section", { class: "d-comment" },
+        el("div", { class: "step-meta", text: [comment.author ? "@" + comment.author : "", day(comment.created_at)].filter(Boolean).join(" · ") }),
+        el("pre", { class: "file", text: comment.body || "" })))
+      : el("p", { class: "kempty", text: "No comments." }));
+}
+function issueDrawer() {
+  const drawer = state.drawer;
+  const row = state.queueRows.find((item) => item.project === drawer.project && String(item.issue) === drawer.issue) || drawer.row;
+  const data = drawer.data || {};
+  const project = state.projects.find((item) => item.id === drawer.project);
+  const close = el("button", { type: "button", class: "close", "data-close": "true", "data-focus": "drawer-close", text: "close", onclick: closeDrawer });
+  const issueLink = link(data.url || row.issue_url, "issue #" + drawer.issue);
+  issueLink.setAttribute("data-focus", "drawer-issue-link");
+  const author = data.author || row.author;
+  const labels = drawer.data ? data.labels : row.labels;
+  const created = data.created_at || row.created_at;
+  const updated = data.updated_at || row.updated_at;
+  const dated = (word, stamp) => (day(stamp) ? el("span", {}, word + " " + day(stamp) + " · ", ageNode(stamp, "ago")) : null);
+  return el("div", { class: "overlay" },
+    el("div", { class: "scrim", onclick: closeDrawer }),
+    el("aside", { class: "drawer", role: "dialog", "aria-modal": "true", "aria-labelledby": "d-title" },
+      el("div", { class: "d-head" },
+        el("div", { class: "num", text: (project ? projectLabel(project) : drawer.project) + " · issue #" + drawer.issue + (row.action ? " · " + row.action : "") }),
+        el("h3", { id: "d-title", text: data.title || row.title || row.note || "issue #" + drawer.issue }),
+        el("div", { class: "links" }, issueLink),
+        el("div", { class: "facts" },
+          author ? el("span", { text: "@" + author }) : null,
+          labelChips(labels),
+          dated("opened", created),
+          dated("updated", updated),
+          drawer.data ? el("span", { text: plural(Number(data.comment_count) || 0, "comment") }) : null),
+        close),
+      issueBody(drawer)));
 }
 function column(col, shown) {
   const queued = col.queue ? col.queue.filter(queueMatches) : null;
