@@ -351,6 +351,34 @@ function elapsed(job) {
   if (!start) return "-";
   return span(((time(job.finished_at) || Date.now()) - start) / 1000);
 }
+function ageText(kind, stamp) {
+  if (kind === "span") {
+    const start = time(stamp);
+    if (!start) return "-";
+    return span((Date.now() - start) / 1000);
+  }
+  if (kind === "since") {
+    const label = ago(stamp);
+    return label === "-" ? "since -" : "since " + label;
+  }
+  return ago(stamp);
+}
+function ageNode(stamp, kind) {
+  const text = ageText(kind, stamp);
+  if (!time(stamp)) return el("span", { text });
+  return el("span", { "data-age": stamp, "data-age-kind": kind, text });
+}
+function elapsedNode(job) {
+  if (!time(job.created_at)) return el("span", { text: "-" });
+  if (time(job.finished_at)) return el("span", { text: elapsed(job) });
+  return ageNode(job.created_at, "span");
+}
+function paintAges() {
+  document.querySelectorAll("[data-age]").forEach((node) => {
+    const text = ageText(node.getAttribute("data-age-kind") || "ago", node.getAttribute("data-age"));
+    if (node.textContent !== text) node.textContent = text;
+  });
+}
 function waitingAudience(job) {
   const who = job.waiting && job.waiting.who;
   if (who === "author") return "the author (@" + job.author + ")";
@@ -467,7 +495,7 @@ function jobCard(job) {
     el("div", { class: "meta" },
       job.intake && job.intake.risk ? el("span", { class: riskClass(job.intake.risk), text: job.intake.risk }) : null,
       el("span", { text: job.cost_usd !== null && job.cost_usd !== undefined ? money(job.cost_usd) : "—" }),
-      el("span", { text: elapsed(job) })),
+      elapsedNode(job)),
     hint ? el("p", { class: "hint", text: hint }) : null);
 }
 const FILE_ORDER = ["issue.md", "intake.md", "spec.md", "build.md", "decision.md", "verify.md", "rejection.md"];
@@ -937,7 +965,7 @@ function jobTable(list) {
     el("td", { class: "mono dim", text: job.round || "-" }),
     el("td", { class: "mono dim", text: job.pr ? "#" + job.pr : "-" }),
     el("td", { class: "mono dim", text: job.cost_usd !== null && job.cost_usd !== undefined ? money(job.cost_usd) : "-" }),
-    el("td", { class: "mono dim", text: elapsed(job) }))));
+    el("td", { class: "mono dim" }, elapsedNode(job)))));
   return el("div", { class: "scroll" }, el("table", {},
     el("thead", {}, el("tr", {}, ["Job", "Title", "Step", "Round", "PR", "Cost", "Time"].map((t) => el("th", { scope: "col", text: t })))), body));
 }
@@ -1200,11 +1228,11 @@ function jobDetail(job) {
       job.intake ? el("span", {}, "Surfaces ", el("b", { text: (job.intake.surfaces || []).join(", ") || "none" })) : null,
       el("span", {}, "Round ", el("b", { text: `${job.round || 0}` + (job.attempt > 1 ? `, attempt ${job.attempt}` : "") })),
       job.cost_usd !== null && job.cost_usd !== undefined ? el("span", {}, "Cost ", el("b", { text: money(job.cost_usd) })) : null,
-      el("span", {}, "Started ", el("b", { text: ago(job.created_at) })))));
+      el("span", {}, "Started ", el("b", {}, ageNode(job.created_at, "ago"))))));
 
   if (job.waiting) {
     parts.push(el("div", { class: "ask" },
-      el("h2", { text: `Waiting for ${waitingAudience(job)} since ${ago(job.waiting.since)}` }),
+      el("h2", {}, "Waiting for " + waitingAudience(job) + " since ", ageNode(job.waiting && job.waiting.since, "ago")),
       el("p", { text: job.reason || (job.waiting.replies === "tool"
         ? `Step ${job.step} needs a reply in your coding tool. A comment on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} does not count.`
         : `Step ${job.step} needs a reply. Type one of these in your coding tool, or comment it on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} without the number.`) }),
@@ -1224,12 +1252,12 @@ function jobDetail(job) {
       el("span", { class: "what" }, el("span", { class: "mono", text: h.outcome + " → " + h.to }),
         h.skipped && h.skipped.length ? el("span", { class: "dim", text: "  skipped " + h.skipped.join(", ") }) : null,
         h.reason ? el("div", { class: "dim history-reason", text: h.reason.split("\n")[0].slice(0, 200) }) : null),
-      el("span", { class: "when", text: span((time(h.at) - time(h.entered_at)) / 1000) + " · " + ago(h.at) }));
+      el("span", { class: "when" }, span((time(h.at) - time(h.entered_at)) / 1000) + " · ", ageNode(h.at, "ago")));
   });
   if (!isEnd(job.step, job)) {
     items.push(el("li", { class: "now" }, el("span", { class: "mark" }), el("span", { class: "mono", text: job.step }),
       el("span", { class: "what dim", text: job.waiting ? "waiting for a person" : step ? `${step.type} step, in progress` : "this step is no longer in factory.toml" }),
-      el("span", { class: "when", text: "since " + ago(job.entered_at) })));
+      el("span", { class: "when" }, ageNode(job.entered_at, "since"))));
   }
   parts.push(el("div", { class: "panel" }, el("h2", { text: "Steps" }), el("p", { class: "sub", text: "In the order the job took them" }), el("ol", { class: "steps" }, items)));
 
@@ -1270,7 +1298,7 @@ function jobsView(id, projectId) {
     el("div", { class: "jobview" },
       el("nav", { class: "panel joblist", "aria-label": "Jobs" }, shown.length ? shown.map((job) => el("a", { href: jobHref(job), "aria-current": !!current && sameJob(job, current.project || null, current.id) ? "true" : null },
         el("div", { class: "id", text: state.workspace && state.selected === "all" ? (job.projectName || job.project) + " · " + job.id : job.id }),
-        el("div", { class: "meta" }, el("span", { text: "#" + job.issue + " · " + ago(job.updated_at) }), chip(job)))) : el("div", { class: "empty", text: "No job matches." })),
+        el("div", { class: "meta" }, el("span", {}, "#" + job.issue + " · ", ageNode(job.updated_at, "ago")), chip(job)))) : el("div", { class: "empty", text: "No job matches." })),
       current ? jobDetail(current) : el("div", { class: "notice", text: "Pick a job." })),
   ];
 }
@@ -1357,6 +1385,7 @@ function connectionLabel() {
   return "live";
 }
 function paintLive() {
+  paintAges();
   const live = document.getElementById("live");
   if (!live) return;
   const stale = !!(state.error || (state.workspace && state.queueStale));
