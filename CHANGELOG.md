@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- The Agent activity tab reads Cursor's agent transcripts too, so a project that runs only Cursor shows what each agent did. Each run is a list of steps you can open. A closed step shows counts such as "Read 6". An open step shows each file read, search, edit and command. A command's full text opens under its row.
+
 ## 0.13.1
 
 - Job times on the dashboard move while the page is open. A running job's age, and the "just now" and "since" labels, no longer wait for a refresh.
