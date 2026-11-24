@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.11.0
+
 - `[reviewers.<name>].prompt` and `[steps.<name>].instructions_file` name a file in the repo. The agent reads it after its role prompt. A reviewer you add needs `focus` or `prompt`. A custom step needs `instructions` or `instructions_file`. A missing file, or a path outside the repo, fails sync. Schema stays 1.
 
 ## 0.10.0
