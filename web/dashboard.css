@@ -196,14 +196,16 @@ h2.job-title { font-size: var(--fs-title); overflow-wrap: anywhere; }
 .explore-list { display: grid; gap: 3px; margin-top: 6px; }
 .sh { border: 1px solid var(--line); border-radius: 8px; background: #121212; overflow: hidden; }
 .sh-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 7px 12px; font: var(--fs-meta) var(--sans); color: var(--muted); }
-.sh-icon { flex: none; font: var(--fs-floor) var(--mono); }
+.sh-icon { flex: none; font: var(--fs-floor) var(--mono); color: var(--text-2); }
 .sh-title { flex: none; color: var(--text-2); }
-.sh-progs { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--fs-floor) var(--mono); }
+.sh-progs { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--fs-floor) var(--mono); color: var(--muted); }
 .sh-body { border-top: 1px solid var(--line); padding: 8px 12px 10px; }
 .sh-body pre { margin: 0; font: var(--fs-floor)/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
-.sh-cmd { color: #7ab7ff; }
-.sh-prompt { color: var(--muted); }
+.sh-cmd, .sh-prompt, .sh-path { color: #7ab7ff; }
+.sh-meta { color: var(--muted); }
 .sh-out { margin-top: 8px !important; max-height: 220px; overflow: auto; color: var(--muted); }
+.sh-edit .sh-icon { color: var(--warn); }
+.sh-tool .sh-icon { color: var(--text-2); }
 .chev {
   width: 0; height: 0; margin-top: 6px; flex: none;
   border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 5px solid var(--muted);
