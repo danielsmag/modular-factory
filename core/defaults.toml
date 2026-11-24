@@ -28,8 +28,8 @@ concurrency = 3           # jobs this project works on at once
 start = "intake"          # the step a new job starts in
 escalate_to = "escalated" # the human step a job goes to when an edge's max is reached
 
-[fleet]
-concurrency = 3           # new and resume rows across every project; fleet.toml or --concurrency overrides
+[workspace]
+concurrency = 3           # new and resume rows across every project; workspace.toml or --concurrency overrides
 
 [checks]
 commands = []             # worktree cwd; FACTORY_CHECKOUT is the main checkout; first failure stops

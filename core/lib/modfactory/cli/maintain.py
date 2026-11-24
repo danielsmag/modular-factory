@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Literal
 
 from .. import config
-from .. import fleet as fleet_mod
 from .. import sync as syncer
+from .. import workspace as workspace_mod
 from ..install import fetch_release, is_personal, layout, project_cli, upgrade
 from ..util import (
     CORE,
@@ -104,7 +104,7 @@ def status(repo: Path, say: Callable[[str], None] = print) -> int:
 
 
 def project_summary(repo: Path) -> str:
-    """A short status for one subscribed project, using that project's own `sync --check`."""
+    """A short status for one project in the workspace, using that project's own `sync --check`."""
     version_file: Path = Path(repo) / ".factory" / "VERSION"
     if not version_file.is_file():
         return "not installed"
@@ -125,10 +125,10 @@ def project_summary(repo: Path) -> str:
 
 
 def status_all(say: Callable[[str], None] = print) -> int:
-    """One row per subscribed project."""
-    group: fleet_mod.Fleet = fleet_mod.Fleet.find()
+    """One row per project in the workspace."""
+    group: workspace_mod.Workspace = workspace_mod.Workspace.find()
     if not group.projects:
-        say("no projects yet. Run `mfactory fleet subscribe` inside a project.")
+        say("no projects yet. Run `mfactory workspace add` inside a project.")
         return 0
     latest: str | None = latest_release()
     behind: bool = False
@@ -222,7 +222,7 @@ def _remove_worktrees(repo: Path, folder: Path) -> None:
 
 def _forget(repo: Path, say: Callable[[str], None]) -> None:
     try:
-        group: fleet_mod.Fleet = fleet_mod.Fleet.find(repo)
+        group: workspace_mod.Workspace = workspace_mod.Workspace.find(repo)
     except Refused:
         return
     try:
@@ -428,7 +428,7 @@ def _project_followup(target: Target) -> str:
 
 
 def _replace_global(home: Path, root: Path, before: str, after: str, say: Callable[[str], None]) -> None:
-    """Replace the global CLI tree with root, keeping fleet.toml."""
+    """Replace the global CLI tree with root, keeping workspace.toml."""
     located: tuple[Path, Path, Path, Path] = layout(root)
     core: Path = located[0]
     adapters: Path = located[1]
@@ -446,9 +446,11 @@ def _replace_global(home: Path, root: Path, before: str, after: str, say: Callab
             if src.is_file():
                 shutil.copy2(src, tree / name)
         (tree / ".global").write_text(f"{home}\n")
-        fleet_list: Path = home / "fleet.toml"
-        if fleet_list.is_file():
-            shutil.copy2(fleet_list, tree / "fleet.toml")
+        for name in ("workspace.toml", "fleet.toml"):
+            workspace_list: Path = home / name
+            if workspace_list.is_file():
+                shutil.copy2(workspace_list, tree / "workspace.toml")
+                break
         previous: Path = home.with_name(home.name + ".previous")
         if previous.exists():
             shutil.rmtree(previous)
@@ -549,12 +551,12 @@ def _installed_checkout() -> Path | None:
     return None
 
 
-def _fleet() -> fleet_mod.Fleet | None:
-    """The fleet in effect. None when nobody has subscribed a project yet."""
+def _workspace() -> workspace_mod.Workspace | None:
+    """The workspace in effect. None when no project has been added yet."""
     try:
-        return fleet_mod.Fleet.find()
+        return workspace_mod.Workspace.find()
     except Refused as error:
-        if str(error).startswith("no fleet"):
+        if str(error).startswith("no workspace"):
             return None
         raise
 
@@ -583,10 +585,10 @@ def upgrade_all(
     *,
     dry_run: bool = False,
 ) -> int:
-    """Upgrade every subscribed project. One failure does not stop the others."""
-    group: fleet_mod.Fleet = fleet_mod.Fleet.find()
+    """Upgrade every project in the workspace. One failure does not stop the others."""
+    group: workspace_mod.Workspace = workspace_mod.Workspace.find()
     if not group.projects:
-        say("no projects yet. Run `mfactory fleet subscribe` inside a project.")
+        say("no projects yet. Run `mfactory workspace add` inside a project.")
         return 0
     with _release_root(ref, source) as root:
         facts: tuple[str, object] = _release_facts(root)
@@ -605,14 +607,14 @@ def upgrade_everything(
     *,
     dry_run: bool = False,
 ) -> int:
-    """Upgrade the global CLI, every subscribed project, and this checkout when it is not subscribed.
+    """Upgrade the global CLI, every project in the workspace, and this checkout when it is not listed.
 
     One download covers every target. One failure does not stop the others. A missing global install
-    or an empty fleet is reported and the rest still runs.
+    or an empty workspace is reported and the rest still runs.
     """
     home: Path | None = global_install()
-    group: fleet_mod.Fleet | None = _fleet()
-    projects: list[fleet_mod.Project] = group.projects if group is not None else []
+    group: workspace_mod.Workspace | None = _workspace()
+    projects: list[workspace_mod.Project] = group.projects if group is not None else []
     checkout: Path | None = _installed_checkout()
     covered: set[Path] = {project.path for project in projects}
     extra: Path | None = None if checkout is None or checkout.resolve() in covered else checkout.resolve()
@@ -621,7 +623,7 @@ def upgrade_everything(
     if home is None:
         say("warn  no global install. `install.sh --global` installs mfactory for your user.")
     if not projects:
-        say("no subscribed projects. Run `mfactory fleet subscribe` inside a project.")
+        say("no projects in the workspace. Run `mfactory workspace add` inside a project.")
     with _release_root(ref, source) as root:
         facts: tuple[str, object] = _release_facts(root)
         after: str = facts[0]

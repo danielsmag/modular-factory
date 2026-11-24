@@ -289,6 +289,7 @@ pre.file { margin: 0; background: var(--bg); border: 1px solid var(--line); padd
 .notice { border: 1px solid var(--line-2); padding: 14px 16px; border-radius: 4px; color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-prose); max-width: var(--measure); }
 .notice code { font-family: var(--mono); color: var(--text); }
 .error { color: var(--bad); font: var(--fs-body)/var(--lh-prose) var(--sans); margin: 0 0 12px; }
+.stale { color: var(--warn); font: var(--fs-body)/var(--lh-prose) var(--sans); margin: 0 0 12px; }
 .block-title { margin: 20px 0 8px; font: 500 var(--fs-section) var(--sans); }
 footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--text-2); font: var(--fs-meta)/var(--lh-prose) var(--sans); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 

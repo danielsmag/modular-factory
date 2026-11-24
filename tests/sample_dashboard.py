@@ -21,10 +21,11 @@ sys.path.insert(0, str(ROOT / "core" / "lib"))
 
 from modfactory.config import as_json as config_as_json  # noqa: E402
 from modfactory.config import load  # noqa: E402
-from modfactory.fleet.jobs import file_rows  # noqa: E402
-from modfactory.fleet.service import serve_one  # noqa: E402
 from modfactory.graph import as_json as graph_as_json  # noqa: E402
+from modfactory.store import SCHEMA  # noqa: E402
 from modfactory.util import version  # noqa: E402
+from modfactory.workspace.jobs import file_rows  # noqa: E402
+from modfactory.workspace.service import serve_one  # noqa: E402
 
 CONFIG = """\
 schema = 1
@@ -161,6 +162,7 @@ def publish(repo: Path, jobs_dir: Path) -> None:
     project: object = cfg["project"]
     labels: object = cfg["labels"]
     index: dict[str, object] = {
+        "schema": SCHEMA,
         "generated_at": stamp(datetime.now(UTC)),
         "version": version(),
         "project": project if isinstance(project, dict) else {},

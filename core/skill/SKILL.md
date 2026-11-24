@@ -208,16 +208,18 @@ feedback or asking for something new, ask.
   FACTORY_REPLY
   ```
 
-- **The dashboard**: `.factory/bin/mfactory dashboard` serves a read-only view
-  of every job on this machine and prints its address. Overview is the job
-  table, running slots, and merged jobs. Board is jobs by step. When this
-  checkout is in the fleet, that page includes the other subscribed projects
-  and can filter to one of them.
-- **Several projects**: `mfactory fleet` reads `~/.mfactory/fleet.toml`.
-  `mfactory fleet subscribe` adds the repository you are in. It does not build.
-  `[run].concurrency` caps one project. `[fleet].concurrency` caps `new` and
-  `resume` rows across every project. `fleet.toml` or `fleet queue --concurrency N`
-  overrides the fleet cap. Open the project and run `/mfactory run` there.
+- **The dashboard**: `mfactory start dashboard` serves a read-only view of
+  every project in the workspace and prints its address; `mfactory stop` ends
+  it. The page comes with the global install, so `.factory/bin/mfactory
+  dashboard` hands off to it. Overview is the job table, running slots, and
+  merged jobs. Board is jobs by step. Inside this checkout the page opens with
+  this project selected.
+- **Several projects**: the workspace is `~/.mfactory/workspace.toml`.
+  `mfactory install` adds the repository to it, and `mfactory workspace add`
+  adds one by hand. It does not build. `[run].concurrency` caps one project.
+  `[workspace].concurrency` caps `new` and `resume` rows across every project.
+  `workspace.toml` or `workspace queue --concurrency N` overrides that cap.
+  Open the project and run `/mfactory run` there.
 
 ## Guardrails
 

@@ -16,7 +16,7 @@ run jobs (the orchestrator skill uses these)
 other
   checks | dashboard | start dashboard | stop | version
 several projects
-  fleet subscribe [path] | unsubscribe [path] | list | queue | dashboard
+  workspace add [path] | remove [path] | list | queue | init
 
 A <job> is its id (004-dark-mode), the number in its id (004) or its issue (12 or #12).
 `install` is the same command as `init`.
@@ -51,14 +51,14 @@ def parser() -> argparse.ArgumentParser:
                          help="a release tag such as v0.2.0 (default: latest)")
     upgrade.add_argument("--source", help="a local copy of the factory to install from, instead of downloading")
     upgrade.add_argument("--self", action="store_true", help="update only the global CLI")
-    upgrade.add_argument("--all", action="store_true", help="upgrade only subscribed projects")
+    upgrade.add_argument("--all", action="store_true", help="upgrade only the projects in the workspace")
     upgrade.add_argument("--dry-run", action="store_true", help="print the plan and change nothing")
     remove: argparse.ArgumentParser = sub.add_parser("uninstall", help="remove the factory from this repository")
     remove.add_argument("--config", action="store_true", help="also delete factory.toml")
     remove.add_argument("--labels", action="store_true", help="also delete the factory labels on GitHub")
     status: argparse.ArgumentParser = sub.add_parser(
         "status", help="show the installed version and whether generated files are current")
-    status.add_argument("--all", action="store_true", help="one row per subscribed project")
+    status.add_argument("--all", action="store_true", help="one row per project in the workspace")
 
     show: argparse.ArgumentParser = sub.add_parser("config", help="show the merged configuration")
     show.add_argument("action", choices=["show"])
@@ -88,9 +88,9 @@ def parser() -> argparse.ArgumentParser:
     def dashboard_flags(target: argparse.ArgumentParser) -> None:
         target.add_argument("--port", type=int, default=4747)
         target.add_argument("--no-open", action="store_true", help="don't open a browser")
-        target.add_argument("--all", action="store_true", help="one board for every subscribed project")
 
-    board: argparse.ArgumentParser = sub.add_parser("dashboard", help="serve the read-only dashboard on this machine")
+    board: argparse.ArgumentParser = sub.add_parser(
+        "dashboard", help="serve the read-only dashboard for every project in the workspace")
     dashboard_flags(board)
     start: argparse.ArgumentParser = sub.add_parser("start", help="start a service in the background")
     start_sub: argparse._SubParsersAction[argparse.ArgumentParser] = start.add_subparsers(
@@ -100,31 +100,20 @@ def parser() -> argparse.ArgumentParser:
     dashboard_flags(start_board)
     stop: argparse.ArgumentParser = sub.add_parser("stop", help="stop the background dashboard")
     stop.add_argument("service", nargs="?", choices=["dashboard"], default="dashboard")
-    fleet: argparse.ArgumentParser = sub.add_parser(
-        "fleet", help="open the fleet dashboard; add a command to manage the list")
-    fleet.add_argument("--port", type=int, default=4747)
-    fleet.add_argument("--no-open", action="store_true", help="don't open a browser")
-    fleet_sub: argparse._SubParsersAction[argparse.ArgumentParser] = fleet.add_subparsers(
-        dest="fleet_command", required=False, metavar="<command>")
-    fleet_sub.add_parser("init", help="write fleet.toml in the current directory")
-    subscribe: argparse.ArgumentParser = fleet_sub.add_parser(
-        "subscribe", help="add this repository, or a path, to the user fleet")
-    subscribe.add_argument("path", nargs="?")
-    unsubscribe: argparse.ArgumentParser = fleet_sub.add_parser(
-        "unsubscribe", help="remove this repository, or a path, from the fleet")
-    unsubscribe.add_argument("path", nargs="?")
-    add: argparse.ArgumentParser = fleet_sub.add_parser(
-        "add", help="add a checkout where the factory is already installed")
-    add.add_argument("path")
-    drop: argparse.ArgumentParser = fleet_sub.add_parser("remove", help="remove a project by its path or folder name")
-    drop.add_argument("path")
-    fleet_sub.add_parser("list", help="list the projects in fleet.toml")
-    queue: argparse.ArgumentParser = fleet_sub.add_parser("queue", help="run each project's own factory queue")
+    workspace: argparse.ArgumentParser = sub.add_parser(
+        "workspace", help="the projects this machine's dashboard and queue cover")
+    workspace_sub: argparse._SubParsersAction[argparse.ArgumentParser] = workspace.add_subparsers(
+        dest="workspace_command", required=False, metavar="<command>")
+    workspace_sub.add_parser("init", help="write workspace.toml in the current directory")
+    add: argparse.ArgumentParser = workspace_sub.add_parser(
+        "add", help="add this repository, or a path, to the workspace")
+    add.add_argument("path", nargs="?")
+    drop: argparse.ArgumentParser = workspace_sub.add_parser(
+        "remove", help="remove this repository, or a project by its path or folder name")
+    drop.add_argument("path", nargs="?")
+    workspace_sub.add_parser("list", help="list the projects in workspace.toml")
+    queue: argparse.ArgumentParser = workspace_sub.add_parser("queue", help="run each project's own factory queue")
     queue.add_argument("--concurrency", type=int, metavar="N",
-                       help="fleet-wide cap for new and resume rows (default: [fleet].concurrency)")
-    fleet_board: argparse.ArgumentParser = fleet_sub.add_parser(
-        "dashboard", help="serve the dashboard for every subscribed project")
-    fleet_board.add_argument("--port", type=int, default=4747)
-    fleet_board.add_argument("--no-open", action="store_true", help="don't open a browser")
+                       help="cap for new and resume rows across projects (default: [workspace].concurrency)")
     sub.add_parser("version", help="print the factory's version")
     return command

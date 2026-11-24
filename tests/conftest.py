@@ -21,7 +21,7 @@ CLI = ROOT / "core" / "bin" / "mfactory"
 
 @pytest.fixture(autouse=True)
 def isolated_user_config(tmp_path, monkeypatch):
-    """Fleet commands and rule lookup must not read the developer's real home."""
+    """Workspace commands and rule lookup must not read the developer's real home."""
     monkeypatch.setenv("FACTORY_HOME", str(tmp_path / "mfactory"))
     home = tmp_path / "skill-home"
     home.mkdir()

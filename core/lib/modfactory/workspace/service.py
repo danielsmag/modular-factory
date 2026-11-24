@@ -1,4 +1,4 @@
-"""The dashboard server: every subscribed project, or one checkout that is not subscribed.
+"""The dashboard server: every project in the workspace, or one checkout that is not listed.
 
 `start_dashboard` and `stop_dashboard` run that server in the background.
 """
@@ -28,7 +28,7 @@ from ..config import load as load_config
 from ..util import FactoryError, Refused, dashboard_page, user_dir
 from .paths import FILE, SERVED
 from .project import Project
-from .registry import Fleet
+from .registry import Workspace
 
 QUEUE_TTL_SECONDS: float = 15.0
 STATE_NAME: str = "dashboard.json"
@@ -48,8 +48,8 @@ def queue_payload(
 class QueueCache:
     """One queue result, reused so the open page does not ask GitHub on every tick."""
 
-    def __init__(self, load: Callable[[], Fleet], ttl: float = QUEUE_TTL_SECONDS) -> None:
-        self._load: Callable[[], Fleet] = load
+    def __init__(self, load: Callable[[], Workspace], ttl: float = QUEUE_TTL_SECONDS) -> None:
+        self._load: Callable[[], Workspace] = load
         self._ttl: float = ttl
         self._lock: threading.Lock = threading.Lock()
         self._at: float | None = None
@@ -60,25 +60,25 @@ class QueueCache:
             now: float = time.monotonic()
             if self._at is not None and now - self._at < self._ttl:
                 return self._body
-            fleet: Fleet = self._load()
-            rows, errors = fleet.queue()
+            workspace: Workspace = self._load()
+            rows, errors = workspace.queue()
             self._body = queue_payload(rows, errors)
             self._at = time.monotonic()
             return self._body
 
 
-def solo(repo: Path) -> Fleet:
-    """One checkout, not written to a fleet file."""
+def solo(repo: Path) -> Workspace:
+    """One checkout, not written to a workspace file."""
     resolved: Path = repo.resolve()
-    return Fleet(resolved / FILE, [Project(resolved)])
+    return Workspace(resolved / FILE, [Project(resolved)])
 
 
-def _handler(load: Callable[[], Fleet]) -> type[BaseHTTPRequestHandler]:
+def _handler(load: Callable[[], Workspace]) -> type[BaseHTTPRequestHandler]:
     page: bytes = dashboard_page()
     cache: QueueCache = QueueCache(load)
 
     class Handler(BaseHTTPRequestHandler):
-        server_version = "mfactory-fleet"
+        server_version = "mfactory-workspace"
 
         def log_message(self, format: str, *args: object) -> None:
             pass
@@ -103,12 +103,12 @@ def _handler(load: Callable[[], Fleet]) -> type[BaseHTTPRequestHandler]:
                 return
             path: str = unquote(urlsplit(self.path).path)
             try:
-                fleet: Fleet = load()
+                workspace: Workspace = load()
                 if path in ("/", "/index.html"):
                     self.send(page, "text/html")
                     return
                 if path == "/projects.json":
-                    self.send(json.dumps(fleet.snapshot()), "application/json")
+                    self.send(json.dumps(workspace.snapshot()), "application/json")
                     return
                 if path == "/queue.json":
                     self.send(json.dumps(cache.get()), "application/json")
@@ -116,7 +116,7 @@ def _handler(load: Callable[[], Fleet]) -> type[BaseHTTPRequestHandler]:
                 if path.startswith("/projects/"):
                     rest: str = path.removeprefix("/projects/")
                     ident, separator, job_path = rest.partition("/jobs/")
-                    project: Project | None = fleet.project(ident) if separator else None
+                    project: Project | None = workspace.project(ident) if separator else None
                     if project is not None and job_path.endswith("/activity"):
                         body: dict[str, object] | None = job_activity_response(project, job_path[: -len("/activity")])
                         if body is None:
@@ -157,11 +157,11 @@ def job_activity_response(project: Project, job_id: str) -> dict[str, object] | 
 
 
 def handler(file: Path) -> type[BaseHTTPRequestHandler]:
-    return _handler(lambda: Fleet.load(file))
+    return _handler(lambda: Workspace.load(file))
 
 
 def one_handler(repo: Path) -> type[BaseHTTPRequestHandler]:
-    group: Fleet = solo(repo)
+    group: Workspace = solo(repo)
     return _handler(lambda: group)
 
 
@@ -243,7 +243,7 @@ class DashboardServer(ThreadingHTTPServer):
 
 
 def _listen(
-    load: Callable[[], Fleet], port: int, open_browser: bool, say: Callable[[str], None],
+    load: Callable[[], Workspace], port: int, open_browser: bool, say: Callable[[str], None],
     project: str | None, label: str,
 ) -> None:
     try:
@@ -271,11 +271,11 @@ def serve(
     file: Path, port: int = 4747, open_browser: bool = True,
     say: Callable[[str], None] = print, project: str | None = None,
 ) -> None:
-    _listen(lambda: Fleet.load(file), port, open_browser, say, project, "mfactory fleet")
+    _listen(lambda: Workspace.load(file), port, open_browser, say, project, "mfactory dashboard")
 
 
 def serve_one(repo: Path, port: int = 4747, open_browser: bool = True, say: Callable[[str], None] = print) -> None:
-    group: Fleet = solo(repo)
+    group: Workspace = solo(repo)
     label: str = group.label(group.projects[0])
     _listen(lambda: group, port, open_browser, say, label, "mfactory dashboard")
 
@@ -285,8 +285,6 @@ def dashboard_argv(args: argparse.Namespace) -> list[str]:
     argv: list[str] = [sys.executable, str(script), "dashboard", "--port", str(args.port)]
     if args.no_open:
         argv.append("--no-open")
-    if args.all:
-        argv.append("--all")
     return argv
 
 

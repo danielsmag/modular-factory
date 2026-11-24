@@ -84,7 +84,7 @@ concurrency = 3
 | `[tools.claude] cost` | `true` | Work out each job's cost from Claude Code's transcripts. Other tools record no cost. |
 | `[tools.codex] intake_shell` | `false` | Let the Codex intake agent run commands. See [Design notes](design.md#intake-has-no-shell). |
 | `[run] concurrency` | `3` | Jobs this project works on at once. A job waiting for a person, or being validated after merge, does not count. |
-| `[fleet] concurrency` | `3` | `new` and `resume` rows kept across every project when this factory runs `fleet queue`. `fleet.toml` or `--concurrency` overrides it. A project's `factory.toml` cannot. |
+| `[workspace] concurrency` | `3` | `new` and `resume` rows kept across every project when this factory runs `workspace queue`. `workspace.toml` or `--concurrency` overrides it. A project's `factory.toml` cannot. |
 | `[run] start` | `"intake"` | The step a new job starts in. |
 | `[run] escalate_to` | `"escalated"` | The human step a job goes to when a loop limit is reached. |
 

@@ -27,7 +27,7 @@
   </div>
   <div class="def">
     <div class="def-h"><code>upgrade</code> <span class="chip">--version</span> <span class="chip">--source</span> <span class="chip">--self</span> <span class="chip">--all</span></div>
-    <p>Upgrade the global CLI, every subscribed project, and the checkout you are in when that checkout is installed and not subscribed. Leaves <code>factory.toml</code> and <code>.factory/jobs/</code> alone. <code>--version</code> is a tag such as <code>v0.2.0</code> (default <code>latest</code>). <code>--source</code> is a local copy. <code>--self</code> updates only the global CLI. <code>--all</code> upgrades only subscribed projects. One project failing does not stop the others.</p>
+    <p>Upgrade the global CLI, every project in the workspace, and the checkout you are in when that checkout is installed and not listed. Leaves <code>factory.toml</code> and <code>.factory/jobs/</code> alone. <code>--version</code> is a tag such as <code>v0.2.0</code> (default <code>latest</code>). <code>--source</code> is a local copy. <code>--self</code> updates only the global CLI. <code>--all</code> upgrades only the projects in the workspace. One project failing does not stop the others.</p>
   </div>
   <div class="def">
     <div class="def-h"><code>uninstall</code> <span class="chip">--config</span> <span class="chip">--labels</span></div>
@@ -35,7 +35,7 @@
   </div>
   <div class="def">
     <div class="def-h"><code>status</code> <span class="chip">--all</span></div>
-    <p>The installed version, and whether generated files are current. <code>--all</code> prints one row per subscribed project. Outside a repository, status shows the fleet.</p>
+    <p>The installed version, and whether generated files are current. <code>--all</code> prints one row per project in the workspace. Outside a repository, status shows the workspace.</p>
   </div>
   <div class="def">
     <div class="def-h"><code>version</code></div>
@@ -93,8 +93,8 @@
 
   <h2 id="dashboard">Dashboard</h2>
   <div class="def">
-    <div class="def-h"><code>dashboard</code> <span class="chip">--port</span> <span class="chip">--no-open</span> <span class="chip">--all</span></div>
-    <p>Serve the read-only dashboard on this machine. Default port <code>4747</code>. Stays in the foreground until Ctrl C. <code>--all</code> is one board for every subscribed project.</p>
+    <div class="def-h"><code>dashboard</code> <span class="chip">--port</span> <span class="chip">--no-open</span></div>
+    <p>Serve the read-only dashboard for every project in the workspace. Default port <code>4747</code>. Stays in the foreground until Ctrl C. The page comes with the global install: a project's <code>.factory/bin/mfactory</code> hands <code>dashboard</code>, <code>start</code> and <code>stop</code> to the global <code>mfactory</code>.</p>
   </div>
   <div class="def">
     <div class="def-h"><code>start dashboard</code></div>
@@ -105,39 +105,27 @@
     <p>Stop the background dashboard.</p>
   </div>
 
-  <h2 id="fleet">Fleet</h2>
-  <p><code>mfactory fleet</code> with no subcommand opens the fleet dashboard. <code>--port</code> and <code>--no-open</code> apply there.</p>
+  <h2 id="workspace">Workspace</h2>
+  <p><code>mfactory workspace</code> with no subcommand lists the projects. <code>mfactory install</code> adds the checkout it installs into.</p>
   <div class="def">
-    <div class="def-h"><code>fleet init</code></div>
-    <p>Write <code>fleet.toml</code> in the current directory. A file here, or <code>FACTORY_FLEET</code>, wins over <code>~/.mfactory/fleet.toml</code>.</p>
+    <div class="def-h"><code>workspace init</code></div>
+    <p>Write <code>workspace.toml</code> in the current directory. A file here, or <code>FACTORY_WORKSPACE</code>, wins over <code>~/.mfactory/workspace.toml</code>.</p>
   </div>
   <div class="def">
-    <div class="def-h"><code>fleet subscribe [path]</code></div>
-    <p>Add this repository, or a path, to the user fleet.</p>
+    <div class="def-h"><code>workspace add [path]</code></div>
+    <p>Add this repository, or a path, to the workspace. The factory must be installed there.</p>
   </div>
   <div class="def">
-    <div class="def-h"><code>fleet unsubscribe [path]</code></div>
-    <p>Remove this repository, or a path, from the fleet.</p>
+    <div class="def-h"><code>workspace remove [path]</code></div>
+    <p>Remove this repository, or a project by its path or folder name.</p>
   </div>
   <div class="def">
-    <div class="def-h"><code>fleet add &lt;path&gt;</code></div>
-    <p>Add a checkout where the factory is already installed.</p>
+    <div class="def-h"><code>workspace list</code></div>
+    <p>List the projects in <code>workspace.toml</code>.</p>
   </div>
   <div class="def">
-    <div class="def-h"><code>fleet remove &lt;path&gt;</code></div>
-    <p>Remove a project by its path or folder name.</p>
-  </div>
-  <div class="def">
-    <div class="def-h"><code>fleet list</code></div>
-    <p>List the projects in <code>fleet.toml</code>.</p>
-  </div>
-  <div class="def">
-    <div class="def-h"><code>fleet queue</code> <span class="chip">--concurrency N</span></div>
-    <p>Run each project's own factory queue. <code>--concurrency</code> is the fleet-wide cap for <code>new</code> and <code>resume</code> rows. Default: <code>[fleet].concurrency</code>.</p>
-  </div>
-  <div class="def">
-    <div class="def-h"><code>fleet dashboard</code></div>
-    <p>Serve the dashboard for every subscribed project. Same page as <code>mfactory dashboard</code>.</p>
+    <div class="def-h"><code>workspace queue</code> <span class="chip">--concurrency N</span></div>
+    <p>Run each project's own factory queue. <code>--concurrency</code> caps <code>new</code> and <code>resume</code> rows across projects. Default: <code>[workspace].concurrency</code>.</p>
   </div>
 </article>
 <script src="docs.js"></script>

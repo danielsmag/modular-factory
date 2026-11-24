@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/i
 | `--version v0.1.0` | Install that release. Default: the latest release, or the `master` branch before the first release. |
 | `--source DIR` | Install from a local copy of this repository instead of downloading. |
 
-This creates `~/.mfactory` (`FACTORY_HOME` when set) and links `~/.local/bin/mfactory`. The fleet list is `~/.mfactory/fleet.toml`. Then, in each repository:
+This creates `~/.mfactory` (`FACTORY_HOME` when set) and links `~/.local/bin/mfactory`. It also serves the dashboard. The workspace, the list of your projects, is `~/.mfactory/workspace.toml`. Then, in each repository:
 
 ```bash
 mfactory install --tool claude
@@ -239,37 +239,38 @@ whose issues the factory builds.
 To watch the jobs:
 
 ```bash
-.factory/bin/mfactory dashboard
 mfactory start dashboard
 mfactory stop
+mfactory dashboard
 ```
 
-`dashboard` stays in the foreground until Ctrl C. `start dashboard` serves the same page and returns. `stop` ends that process.
+`start dashboard` serves the page in the background and returns. `stop` ends that process. `dashboard` serves the same page in the foreground until Ctrl C.
+
+The page comes with the global install (`install.sh --global`), so there is one dashboard per machine and no copy in `.factory/`. `.factory/bin/mfactory dashboard`, `start` and `stop` hand off to the global `mfactory`. Without a global install they say to run `install.sh --global`.
 
 ## Several projects
 
-The factory in a project only sees that project. Your fleet file is `~/.mfactory/fleet.toml`. Subscribe from inside a project that already has the factory:
+The factory in a project only sees that project. Your workspace is `~/.mfactory/workspace.toml`, the list of projects the dashboard and the shared queue cover. `mfactory install` adds the repository it installs into. To add a project that was installed earlier, run this inside it:
 
 ```bash
 cd /path/to/project-a
-mfactory fleet subscribe
-cd /path/to/project-b
-mfactory fleet subscribe
-mfactory fleet list
-mfactory fleet queue
-mfactory fleet dashboard
-mfactory fleet unsubscribe
+mfactory workspace add
+mfactory workspace list
+mfactory workspace queue
+mfactory workspace remove
 ```
 
-`subscribe` and `unsubscribe` take a path when you are not standing in the repository. `mfactory dashboard` outside a repository, or in a checkout with no `factory.toml`, uses this same list. `mfactory status` outside a repository does too. `mfactory upgrade` upgrades the global CLI and every subscribed project, then prints the next step for each one. A project that fails does not stop the others, and each repository still needs its own commit.
+`add` and `remove` take a path when you are not standing in the repository. `remove` also takes the project's folder name. `mfactory dashboard` outside a repository, or in a checkout with no `factory.toml`, uses this same list. `mfactory status` outside a repository does too. `mfactory upgrade` upgrades the global CLI and every project in the workspace, then prints the next step for each one. A project that fails does not stop the others, and each repository still needs its own commit.
 
-A `fleet.toml` in the current directory or a parent still wins, and so does `FACTORY_FLEET`. `mfactory fleet init` writes that local file. `fleet add` accepts a checkout only after the factory is installed there.
+A `workspace.toml` in the current directory or a parent still wins, and so does `FACTORY_WORKSPACE`. `mfactory workspace init` writes that local file. `workspace add` accepts a checkout only after the factory is installed there. An older `~/.mfactory/fleet.toml` is renamed to `workspace.toml` the first time it is read.
 
-`fleet queue` runs each project's own `.factory/bin/mfactory queue`. A project that fails is reported, and the others still print. `fleet dashboard` serves the same read-only dashboard as `mfactory dashboard`, with a filter for each project. Choose All for one board, one pipeline per project, one job list, and one config table per project. Choose one project for that project's board, pipeline, jobs, and config. Queue rows that are not jobs yet stay on the board.
+`workspace queue` runs each project's own `.factory/bin/mfactory queue`. A project that fails is reported, and the others still print. The dashboard has a filter for each project. Choose All for one board, one pipeline per project, one job list, and one config table per project. Choose one project for that project's board, pipeline, jobs, and config. Queue rows that are not jobs yet stay on the board.
 
-Each project caps its own jobs with `[run].concurrency` (default 3). The fleet has a second cap, `[fleet].concurrency` in `defaults.toml` (also 3): that many `new` and `resume` rows across every project. `concurrency` in `fleet.toml`, or `mfactory fleet queue --concurrency N`, overrides the fleet cap. Later rows print as `hold`. Projects earlier in the file get the slots. `wait`, `skip` and `hold` do not take a slot. A project's `factory.toml` cannot set the fleet cap.
+The global dashboard reads job files that each project's own factory wrote. When a project's files come from an older factory, the page says to run `mfactory upgrade` there, and still shows its jobs. When they come from a newer factory than the global one, the page says to run `mfactory upgrade --self` and hides that project's jobs until then.
 
-Building stays in the project. Open that project and run `/mfactory run`, or `/mfactory run 12` for one issue. Inside a subscribed project, `mfactory dashboard` opens this same page with that project selected. A project that is not in the fleet still opens only its own page.
+Each project caps its own jobs with `[run].concurrency` (default 3). The workspace has a second cap, `[workspace].concurrency` in `defaults.toml` (also 3): that many `new` and `resume` rows across every project. `concurrency` in `workspace.toml`, or `mfactory workspace queue --concurrency N`, overrides that cap. Later rows print as `hold`. Projects earlier in the file get the slots. `wait`, `skip` and `hold` do not take a slot. A project's `factory.toml` cannot set the cap across projects.
+
+Building stays in the project. Open that project and run `/mfactory run`, or `/mfactory run 12` for one issue. Inside a project in the workspace, `mfactory dashboard` opens the page with that project selected. A project that is not listed still opens only its own page.
 
 Two clones of one GitHub repository both appear if you add both paths. They do not share job files.
 
@@ -299,15 +300,15 @@ Codex, and Cursor may list the skill twice; the copies are identical.
 ## Upgrade
 
 ```bash
-mfactory upgrade                              # global CLI and every subscribed project
+mfactory upgrade                              # global CLI and every project in the workspace
 mfactory upgrade --dry-run                    # print the plan and change nothing
 mfactory upgrade --version v0.2.0
 mfactory upgrade --self                       # global CLI only
-mfactory upgrade --all                        # subscribed projects only
+mfactory upgrade --all                        # workspace projects only
 ```
 
 `mfactory upgrade` downloads one release and updates the CLI from `install.sh --global`
-and every subscribed project. Standing in an installed checkout that is not subscribed
+and every project in the workspace. Standing in an installed checkout that is not listed
 updates that checkout too. It prints a plan first, then replaces `.factory/` (not
 `.factory/jobs/`), runs `sync`, and leaves `factory.toml` alone. A checkout already on
 that version is left as it is.
@@ -320,7 +321,7 @@ One project failing does not stop the others. The summary ends with the next ste
 commit and push in a team checkout, or leave the files untracked in a personal checkout,
 then run doctor.
 
-`mfactory status --all` prints `run mfactory upgrade` when a subscribed project is behind
+`mfactory status --all` prints `run mfactory upgrade` when a project in the workspace is behind
 the latest release.
 
 ## Remove

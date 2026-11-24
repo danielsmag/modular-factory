@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 from conftest import ROOT, git
 from modfactory.cli.maintain import _changelog_note, status_all, upgrade_everything
-from modfactory.fleet.service import DashboardServer, one_handler
 from modfactory.util import dashboard_page
+from modfactory.workspace.service import DashboardServer, one_handler
 
 
 @pytest.fixture
@@ -39,11 +39,10 @@ def test_init_installs_everything_a_project_needs(bare):
     assert res.returncode == 0, res.stderr
     repo = bare.repo
     for item in ("bin/mfactory", "bin/factory", "lib/modfactory/cli/__init__.py", "roles/build.md", "skill/SKILL.md",
-                 "defaults.toml", "templates/factory.toml", "adapters/claude.toml",
-                 "web/dashboard.html", "web/dashboard.css",
-                 "web/dashboard.js", "VERSION", "LICENSE",
+                 "defaults.toml", "templates/factory.toml", "adapters/claude.toml", "VERSION", "LICENSE",
                  "NOTICE"):
         assert (repo / ".factory" / item).exists(), item
+    assert not (repo / ".factory" / "web").exists()
     assert not list((repo / ".factory").rglob("__pycache__"))
     assert installed(bare).stdout.strip() == (ROOT / "core/VERSION").read_text().strip()
 
@@ -436,14 +435,15 @@ def test_the_dashboard_script_parses(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
-def test_upgrade_updates_the_global_cli_and_every_subscribed_project(world):
+def test_upgrade_updates_the_global_cli_and_every_workspace_project(world):
     installed = world.cli("install", "--tool", "cursor")
     assert installed.returncode == 0, installed.stderr
+    assert "ok    added to" in installed.stdout
     other: Path = world.tmp / "other"
     shutil.copytree(world.repo, other)
+    added = world.cli("workspace", "add", other)
+    assert added.returncode == 0, added.stderr
     for repo in (world.repo, other):
-        subscribed = world.cli("fleet", "subscribe", repo)
-        assert subscribed.returncode == 0, subscribed.stderr
         (repo / ".factory" / "VERSION").write_text("0.0.0\n")
     home: Path = Path(os.environ["FACTORY_HOME"])
     (home / "core" / "bin").mkdir(parents=True)
@@ -458,8 +458,8 @@ def test_upgrade_updates_the_global_cli_and_every_subscribed_project(world):
     assert (other / ".factory" / "VERSION").read_text().strip() == expected
     assert "global install 0.0.0 ->" in result.stdout
     assert "3 upgraded, 0 current" in result.stdout
-    assert str(world.repo.resolve()) in (home / "fleet.toml").read_text()
-    assert str(other.resolve()) in (home / "fleet.toml").read_text()
+    assert str(world.repo.resolve()) in (home / "workspace.toml").read_text()
+    assert str(other.resolve()) in (home / "workspace.toml").read_text()
 
 
 def test_upgrade_with_nothing_installed_refuses(world):
@@ -485,9 +485,10 @@ def test_upgrade_downloads_the_release_once(world, monkeypatch):
         copy: Path = world.tmp / name
         shutil.copytree(world.repo, copy)
         repos.append(copy)
+    for repo in repos[1:]:
+        added = world.cli("workspace", "add", repo)
+        assert added.returncode == 0, added.stderr
     for repo in repos:
-        subscribed = world.cli("fleet", "subscribe", repo)
-        assert subscribed.returncode == 0, subscribed.stderr
         (repo / ".factory" / "VERSION").write_text("0.0.0\n")
     _global_home()
     calls: list[str] = []
@@ -512,7 +513,6 @@ def test_upgrade_downloads_the_release_once(world, monkeypatch):
 def test_upgrade_dry_run_writes_nothing(world):
     installed = world.cli("install", "--tool", "cursor")
     assert installed.returncode == 0, installed.stderr
-    assert world.cli("fleet", "subscribe").returncode == 0
     (world.repo / ".factory" / "VERSION").write_text("0.0.0\n")
     home: Path = _global_home()
     result = world.cli("upgrade", "--dry-run", "--source", str(ROOT), cwd=world.tmp)
@@ -529,9 +529,9 @@ def test_upgrade_skips_a_project_whose_schema_differs(world):
     assert installed.returncode == 0, installed.stderr
     other: Path = world.tmp / "other"
     shutil.copytree(world.repo, other)
+    added = world.cli("workspace", "add", other)
+    assert added.returncode == 0, added.stderr
     for repo in (world.repo, other):
-        subscribed = world.cli("fleet", "subscribe", repo)
-        assert subscribed.returncode == 0, subscribed.stderr
         (repo / ".factory" / "VERSION").write_text("0.0.0\n")
     config_path: Path = other / "factory.toml"
     config_path.write_text(config_path.read_text().replace("schema = 1", "schema = 99", 1))
@@ -549,7 +549,6 @@ def test_upgrade_skips_a_project_whose_schema_differs(world):
 def test_upgrade_leaves_a_current_project_in_place(world):
     installed = world.cli("install", "--tool", "cursor")
     assert installed.returncode == 0, installed.stderr
-    assert world.cli("fleet", "subscribe").returncode == 0
     expected: str = (ROOT / "core" / "VERSION").read_text()
     (world.repo / ".factory" / "VERSION").write_text(expected)
     _global_home(expected)
@@ -565,7 +564,6 @@ def test_upgrade_leaves_a_current_project_in_place(world):
 def test_status_all_points_at_upgrade_when_a_project_is_behind(world, monkeypatch):
     installed = world.cli("install", "--tool", "cursor")
     assert installed.returncode == 0, installed.stderr
-    assert world.cli("fleet", "subscribe").returncode == 0
     (world.repo / ".factory" / "VERSION").write_text("0.0.0\n")
     monkeypatch.chdir(world.tmp)
     monkeypatch.setattr("modfactory.cli.maintain.latest_release", lambda: "9.9.9")
@@ -598,7 +596,6 @@ def test_install_is_another_name_for_init(bare):
 
 def test_uninstall_keeps_factory_toml_unless_asked(world):
     world.cli("init")
-    assert world.cli("fleet", "subscribe").returncode == 0
     removed = world.cli("uninstall")
     assert removed.returncode == 0, removed.stderr
     assert "remove  .factory/" in removed.stdout

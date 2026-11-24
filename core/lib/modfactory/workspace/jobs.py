@@ -1,4 +1,4 @@
-"""Read each project's jobs, graph, and config for the fleet board."""
+"""Read each project's jobs, graph, and config for the workspace board."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+from ..store import SCHEMA as DATA_SCHEMA
 from ..util import first_line
 from .paths import SERVED
 from .project import Project
@@ -24,7 +25,7 @@ def file_rows(root: Path) -> list[dict[str, object]]:
 
 
 def read_graph(project: Project) -> dict[str, object] | None:
-    """Pipeline for the fleet board. None when graph.json is missing or not a graph."""
+    """Pipeline for the workspace board. None when graph.json is missing or not a graph."""
     path: Path = project.jobs_dir / "graph.json"
     if not path.is_file():
         return None
@@ -77,6 +78,46 @@ def read_config(project: Project) -> tuple[list[dict[str, object]] | None, str |
     return rows, None
 
 
+def _text(value: object, fallback: str) -> str:
+    return value if isinstance(value, str) else fallback
+
+
+def _number(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def normalize_job(raw: object) -> dict[str, object] | None:
+    """One job with the fields the page reads, whatever factory version wrote it. None without an id."""
+    if not isinstance(raw, dict):
+        return None
+    ident: object = raw.get("id")
+    if not isinstance(ident, str) or not ident:
+        return None
+    job: dict[str, object] = dict(raw)
+    job["title"] = _text(raw.get("title"), ident)
+    job["step"] = _text(raw.get("step"), "")
+    job["issue"] = _number(raw.get("issue"))
+    job["round"] = _number(raw.get("round")) or 0
+    job["updated_at"] = _text(raw.get("updated_at"), "")
+    history: object = raw.get("history")
+    job["history"] = [entry for entry in history if isinstance(entry, dict)] if isinstance(history, list) else []
+    files: object = raw.get("files")
+    job["files"] = [row for row in files if isinstance(row, dict)] if isinstance(files, list) else []
+    return job
+
+
+def schema_notice(schema: object, has_jobs: bool) -> tuple[str | None, bool]:
+    """(notice for the page, whether the jobs can be shown) for a project's job files."""
+    if isinstance(schema, int) and not isinstance(schema, bool):
+        if schema > DATA_SCHEMA:
+            return f"written by a newer factory (schema {schema}). Run `mfactory upgrade --self`.", False
+        if schema == DATA_SCHEMA:
+            return None, True
+    if not has_jobs:
+        return None, True
+    return "written by an older factory. Run `mfactory upgrade` in this project.", True
+
+
 def read_jobs(project: Project) -> dict[str, object]:
     index_path: Path = project.jobs_dir / "index.json"
     if index_path.is_file():
@@ -86,23 +127,31 @@ def read_jobs(project: Project) -> dict[str, object]:
             return {"jobs": [], "error": f"index.json: {error}"}
         if isinstance(loaded, dict):
             result: dict[str, object] = dict(loaded)
+            raw_jobs: object = loaded.get("jobs")
+            listed: list[object] = raw_jobs if isinstance(raw_jobs, list) else []
+            result["jobs"] = [job for job in map(normalize_job, listed) if job is not None]
             result["error"] = None
             return result
         return {"jobs": [], "error": "index.json is not an object"}
     jobs: list[dict[str, object]] = []
+    schemas: set[object] = set()
     if project.jobs_dir.is_dir():
         for child in sorted(project.jobs_dir.iterdir()):
             job_file: Path = child / "job.json"
             if not job_file.is_file():
                 continue
             try:
-                job: object = json.loads(job_file.read_text())
+                loaded_job: object = json.loads(job_file.read_text())
             except json.JSONDecodeError:
                 continue
-            if isinstance(job, dict):
-                job["files"] = file_rows(child)
+            if isinstance(loaded_job, dict):
+                loaded_job["files"] = file_rows(child)
+            job: dict[str, object] | None = normalize_job(loaded_job)
+            if job is not None:
+                schemas.add(job.get("schema"))
                 jobs.append(job)
-    return {"jobs": jobs, "project": {}, "error": None}
+    found: object = schemas.pop() if len(schemas) == 1 else None
+    return {"jobs": jobs, "project": {}, "error": None, "schema": found}
 
 
 def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) -> dict[str, object]:
@@ -119,6 +168,10 @@ def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) 
         if isinstance(info, dict) and isinstance(info.get("description"), str):
             description = info["description"]
         jobs: object = body.get("jobs")
+        listed_jobs: list[object] = jobs if isinstance(jobs, list) else []
+        notice: str | None
+        shown: bool
+        notice, shown = schema_notice(body.get("schema"), bool(listed_jobs))
         version_raw: object = body.get("version")
         version: str = version_raw if isinstance(version_raw, str) else ""
         generated_raw: object = body.get("generated_at")
@@ -150,7 +203,8 @@ def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) 
             "path": str(project.path),
             "description": description,
             "error": error,
-            "jobs": jobs if isinstance(jobs, list) else [],
+            "notice": notice,
+            "jobs": listed_jobs if shown else [],
             "version": version,
             "generated_at": generated_at,
             "tools": tools,

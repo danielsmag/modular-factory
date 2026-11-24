@@ -46,8 +46,11 @@ def layout(root):
 
 
 def copy_core(source, repo):
-    """Put the core into `<repo>/.factory/`, leaving `.factory/jobs/` alone."""
-    core, adapters, web, licence = layout(source)
+    """Put the core into `<repo>/.factory/`, leaving `.factory/jobs/` alone.
+
+    The dashboard page is not copied. It is served by the global install.
+    """
+    core, adapters, _web, licence = layout(source)
     dest = Path(repo) / ".factory"
     if core.resolve() == dest.resolve():
         return False
@@ -56,7 +59,6 @@ def copy_core(source, repo):
     sources = {item: core / item for item in ITEMS}
     sources |= {
         "adapters": adapters,
-        "web": web,
         "LICENSE": licence / "LICENSE",
         "NOTICE": licence / "NOTICE",
     }
@@ -72,10 +74,13 @@ def copy_core(source, repo):
             shutil.copytree(src, target, ignore=skip)
         else:
             shutil.copy2(src, target)
-    # The page used to be copied as .factory/dashboard.html.
+    # The page used to be copied as .factory/dashboard.html, then as .factory/web/.
     stale: Path = dest / "dashboard.html"
     if stale.is_file():
         stale.unlink()
+    stale_web: Path = dest / "web"
+    if stale_web.is_dir():
+        shutil.rmtree(stale_web)
     for name in ("mfactory", "factory"):
         binary = dest / "bin" / name
         if binary.is_file():
@@ -404,7 +409,7 @@ def doctor(repo, run_checks=True, say=print):
         fail(".factory/ isn't installed: run `mfactory install`")
     elif CORE.resolve() != installed.resolve():
         warn(f"this command runs from {CORE}, not from {installed}")
-    missing = [i for i in ITEMS + ["adapters", "web"] if not (installed / i).exists()]
+    missing = [i for i in ITEMS + ["adapters"] if not (installed / i).exists()]
     if missing and project_cli(repo).exists():
         fail(f".factory/ is incomplete, missing: {', '.join(missing)}. Run `.factory/bin/mfactory upgrade`.")
 

@@ -26,8 +26,7 @@ TOOL ?= claude
 	config graph models skills \
 	queue create next done answer summary route checks \
 	dashboard start-dashboard stop hook \
-	fleet fleet-init fleet-subscribe fleet-unsubscribe fleet-add fleet-remove \
-	fleet-list fleet-queue fleet-dashboard
+	workspace workspace-init workspace-add workspace-remove workspace-list workspace-queue
 
 define need
 	@test -n "$($(1))" || { echo "usage: make $(2)"; exit 1; }
@@ -46,10 +45,10 @@ help: ## list checks and mfactory targets
 	@echo "  make version"
 	@echo "  make install               TOOL=claude  or  TOOLS=\"claude cursor\"  PERSONAL=1"
 	@echo "  make init                  same command as install"
-	@echo "  make upgrade               global CLI and every subscribed project"
+	@echo "  make upgrade               global CLI and every project in the workspace"
 	@echo "                             SOURCE=.          install from this tree"
 	@echo "                             SELF=1            global CLI only"
-	@echo "                             ALL=1             subscribed projects only"
+	@echo "                             ALL=1             workspace projects only"
 	@echo "  make uninstall             CONFIG=1 LABELS=1"
 	@echo "  make doctor                SKIP_CHECKS=1"
 	@echo "  make status                ALL=1"
@@ -67,18 +66,15 @@ help: ## list checks and mfactory targets
 	@echo "  make summary               JOBS=\"004 005\""
 	@echo "  make route JOB=004"
 	@echo "  make checks                run [checks].commands in this directory"
-	@echo "  make dashboard             PORT=4747 NO_OPEN=1 ALL=1"
+	@echo "  make dashboard             PORT=4747 NO_OPEN=1"
 	@echo "  make start-dashboard       same flags, returns"
 	@echo "  make stop"
-	@echo "  make fleet                 no ARGS opens the fleet dashboard"
-	@echo "  make fleet-init"
-	@echo "  make fleet-subscribe       DIR=../other"
-	@echo "  make fleet-unsubscribe     DIR=../other"
-	@echo "  make fleet-add DIR=../other"
-	@echo "  make fleet-remove DIR=../other"
-	@echo "  make fleet-list"
-	@echo "  make fleet-queue           CONCURRENCY=3"
-	@echo "  make fleet-dashboard       PORT=4747 NO_OPEN=1"
+	@echo "  make workspace             ARGS=\"list\""
+	@echo "  make workspace-init"
+	@echo "  make workspace-add         DIR=../other (default: this repository)"
+	@echo "  make workspace-remove      DIR=../other (default: this repository)"
+	@echo "  make workspace-list"
+	@echo "  make workspace-queue       CONCURRENCY=3"
 
 check: lint syntax test ## ruff, bash -n install.sh, pytest
 
@@ -106,7 +102,7 @@ install: ## mfactory install. TOOL=claude or TOOLS="claude cursor". PERSONAL=1
 init: ## mfactory init (same as install). PERSONAL=1
 	$(MFACTORY) init $(foreach t,$(if $(TOOLS),$(TOOLS),$(TOOL)),--tool $(t)) $(if $(PERSONAL),--personal) $(ARGS)
 
-upgrade: ## global CLI and every subscribed project. SELF=1 only the CLI. ALL=1 only projects. SOURCE=. uses this tree
+upgrade: ## global CLI and every project in the workspace. SELF=1 only the CLI. ALL=1 only projects. SOURCE=. uses this tree
 	$(MFACTORY) upgrade $(if $(SELF),--self) $(if $(ALL),--all) $(if $(REF),--version $(REF)) $(if $(SOURCE),--source $(SOURCE)) $(ARGS)
 
 uninstall: ## mfactory uninstall. CONFIG=1 LABELS=1
@@ -166,11 +162,11 @@ route: ## mfactory route JOB=004
 checks: ## mfactory checks
 	$(MFACTORY) checks $(ARGS)
 
-dashboard: ## mfactory dashboard. PORT=4747 NO_OPEN=1 ALL=1
-	$(MFACTORY) dashboard $(if $(PORT),--port $(PORT)) $(if $(NO_OPEN),--no-open) $(if $(ALL),--all) $(ARGS)
+dashboard: ## mfactory dashboard. PORT=4747 NO_OPEN=1
+	$(MFACTORY) dashboard $(if $(PORT),--port $(PORT)) $(if $(NO_OPEN),--no-open) $(ARGS)
 
-start-dashboard: ## mfactory start dashboard. PORT= NO_OPEN=1 ALL=1
-	$(MFACTORY) start dashboard $(if $(PORT),--port $(PORT)) $(if $(NO_OPEN),--no-open) $(if $(ALL),--all) $(ARGS)
+start-dashboard: ## mfactory start dashboard. PORT= NO_OPEN=1
+	$(MFACTORY) start dashboard $(if $(PORT),--port $(PORT)) $(if $(NO_OPEN),--no-open) $(ARGS)
 
 stop: ## mfactory stop
 	$(MFACTORY) stop $(ARGS)
@@ -178,31 +174,20 @@ stop: ## mfactory stop
 hook: ## mfactory hook
 	$(MFACTORY) hook $(ARGS)
 
-fleet: ## mfactory fleet. ARGS="list" — no ARGS opens the dashboard
-	$(MFACTORY) fleet $(ARGS)
+workspace: ## mfactory workspace. ARGS="list"
+	$(MFACTORY) workspace $(ARGS)
 
-fleet-init: ## mfactory fleet init
-	$(MFACTORY) fleet init $(ARGS)
+workspace-init: ## mfactory workspace init
+	$(MFACTORY) workspace init $(ARGS)
 
-fleet-subscribe: ## mfactory fleet subscribe. DIR=../other
-	$(MFACTORY) fleet subscribe $(DIR) $(ARGS)
+workspace-add: ## mfactory workspace add. DIR=../other (default: this repository)
+	$(MFACTORY) workspace add $(if $(DIR),"$(DIR)") $(ARGS)
 
-fleet-unsubscribe: ## mfactory fleet unsubscribe. DIR=../other
-	$(MFACTORY) fleet unsubscribe $(DIR) $(ARGS)
+workspace-remove: ## mfactory workspace remove. DIR=../other (default: this repository)
+	$(MFACTORY) workspace remove $(if $(DIR),"$(DIR)") $(ARGS)
 
-fleet-add: ## mfactory fleet add DIR=../other
-	$(call need,DIR,fleet-add DIR=../other)
-	$(MFACTORY) fleet add "$(DIR)" $(ARGS)
+workspace-list: ## mfactory workspace list
+	$(MFACTORY) workspace list $(ARGS)
 
-fleet-remove: ## mfactory fleet remove DIR=../other
-	$(call need,DIR,fleet-remove DIR=../other)
-	$(MFACTORY) fleet remove "$(DIR)" $(ARGS)
-
-fleet-list: ## mfactory fleet list
-	$(MFACTORY) fleet list $(ARGS)
-
-fleet-queue: ## mfactory fleet queue. CONCURRENCY=3
-	$(MFACTORY) fleet queue $(if $(CONCURRENCY),--concurrency $(CONCURRENCY)) $(ARGS)
-
-fleet-dashboard: ## mfactory fleet dashboard. PORT=4747 NO_OPEN=1
-	$(MFACTORY) fleet dashboard $(if $(PORT),--port $(PORT)) $(if $(NO_OPEN),--no-open) $(ARGS)
+workspace-queue: ## mfactory workspace queue. CONCURRENCY=3
+	$(MFACTORY) workspace queue $(if $(CONCURRENCY),--concurrency $(CONCURRENCY)) $(ARGS)

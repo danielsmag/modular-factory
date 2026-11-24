@@ -337,7 +337,7 @@ TABLES = {
                 "pr_title": a_string, "pr_title_pattern": a_regex,
                 "branch_prefix": a_branch_prefix, "branch_pattern": a_regex},
     "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string},
-    "fleet": {"concurrency": an_int(1)},
+    "workspace": {"concurrency": an_int(1)},
     "checks": {"commands": a_string_list, "timeout_minutes": an_int(1)},
     "labels": {"queue": a_filled_string, "needs_info": a_filled_string, "needs_human": a_filled_string},
     "paths": {"worktrees": a_filled_string, "protected": a_string_list},
@@ -403,16 +403,19 @@ def check(cfg):
                 out.append(f"[{label}].{key} {problem} (got {json.dumps(value)})")
 
     for key in d:
-        if key not in TOP:
+        if key == "fleet":
+            out.append("[fleet] is now [workspace]. The cap across projects is set in workspace.toml, "
+                       "or with --concurrency on `mfactory workspace queue`.")
+        elif key not in TOP:
             out.append(f"[{key}] is not a section. Known: {', '.join(sorted(TOP))}")
     if d.get("schema") != SCHEMA:
         out.append(f"schema = {d.get('schema')!r}, but this factory reads schema {SCHEMA}. "
                    "Run `mfactory upgrade`, or set schema to match.")
     for name, spec in TABLES.items():
         test_table(name, d.get(name, {}), spec)
-    if cfg.sources.get(("fleet", "concurrency")) == FILE:
-        out.append("[fleet].concurrency is the cap across projects. Set it in fleet.toml, "
-                   "or pass --concurrency to `mfactory fleet queue`.")
+    if cfg.sources.get(("workspace", "concurrency")) == FILE:
+        out.append("[workspace].concurrency is the cap across projects. Set it in workspace.toml, "
+                   "or pass --concurrency to `mfactory workspace queue`.")
     out.extend(_branch_pattern_gaps(d.get("project")))
 
     # tools

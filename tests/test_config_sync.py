@@ -25,16 +25,23 @@ def test_tables_merge_key_by_key_and_other_values_replace(world):
     cfg = load(world, '[run]\nconcurrency = 5\n[checks]\ncommands = ["make test"]\n')
     assert cfg["run"] == {"concurrency": 5, "start": "intake", "escalate_to": "escalated"}
     assert cfg["checks"] == {"commands": ["make test"], "timeout_minutes": 30}
-    assert cfg["fleet"] == {"concurrency": 3}
-    assert cfg.sources[("fleet", "concurrency")] == "default"
+    assert cfg["workspace"] == {"concurrency": 3}
+    assert cfg.sources[("workspace", "concurrency")] == "default"
     assert cfg.base == "master"
     assert cfg.sources[("project", "base_branch")] == "default"
 
 
-def test_a_project_cannot_set_the_fleet_cap(world):
+def test_a_project_cannot_set_the_workspace_cap(world):
+    assert problems(world, "[workspace]\nconcurrency = 4\n") == [
+        "[workspace].concurrency is the cap across projects. Set it in workspace.toml, "
+        "or pass --concurrency to `mfactory workspace queue`.",
+    ]
+
+
+def test_an_old_fleet_table_names_its_new_home(world):
     assert problems(world, "[fleet]\nconcurrency = 4\n") == [
-        "[fleet].concurrency is the cap across projects. Set it in fleet.toml, "
-        "or pass --concurrency to `mfactory fleet queue`.",
+        "[fleet] is now [workspace]. The cap across projects is set in workspace.toml, "
+        "or with --concurrency on `mfactory workspace queue`.",
     ]
 
 
