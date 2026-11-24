@@ -781,91 +781,85 @@ function actionLabel(event) {
   if (verbOf(event) === "Used" && event.name) return summary ? event.name + "  " + summary : event.name;
   return summary;
 }
-function titleFromText(text) {
-  const line = String(text || "").split("\n").map((part) => part.trim()).find(Boolean) || "";
-  if (!line) return "";
-  const sentence = line.split(/(?<=[.!?])\s/)[0];
-  return sentence.length > 96 ? sentence.slice(0, 93) + "…" : sentence;
+const EXPLORE_NAMES = new Set(["read", "grep", "glob"]);
+function isExplore(event) {
+  return event.kind !== "edit" && EXPLORE_NAMES.has(String(event.name || "").toLowerCase());
 }
-function verbPhrase(event) {
-  const verb = verbOf(event);
-  const label = actionLabel(event);
-  if (!label || label === verb) return verb;
-  return verb + " " + label;
+function isShell(event) {
+  return SHELL_NAMES.has(String(event.name || "").toLowerCase());
 }
-function stepsOf(run) {
-  const steps = [];
-  let pending = [];
-  let current = null;
-  function start(title, fromTools) {
-    if (current && (current.text.length || current.actions.length)) steps.push(current);
-    current = { title: title || "Working", text: pending.slice(), actions: [], fromTools: !!fromTools, result: false };
-    pending = [];
-  }
+function feedOf(run) {
+  const feed = [];
   (run.events || []).forEach((event) => {
     if (isStepEvent(event)) {
-      start(event.summary || "Working", false);
+      feed.push({ type: "heading", text: event.summary || "Working" });
       return;
     }
     if (event.kind === "text") {
-      const text = event.text || "";
-      if (current && current.actions.length) pending.push(text);
-      else if (current) current.text.push(text);
-      else pending.push(text);
+      if (event.text) feed.push({ type: "text", text: event.text });
       return;
     }
-    if (!current || (pending.length && current.actions.length)) {
-      const heading = titleFromText(pending.join("\n"));
-      start(heading || verbPhrase(event), !heading);
+    const last = feed[feed.length - 1];
+    if (isExplore(event)) {
+      if (last && last.type === "explore") last.events.push(event);
+      else feed.push({ type: "explore", events: [event] });
+      return;
     }
-    current.actions.push(event);
-  });
-  if (pending.length) {
-    if (current && !current.actions.length) current.text.push(...pending);
-    else {
-      if (current && (current.text.length || current.actions.length)) steps.push(current);
-      const text = pending.join("\n\n");
-      steps.push({ title: titleFromText(text) || "Note", text: [text], actions: [], fromTools: false, result: false });
-      current = null;
+    if (isShell(event)) {
+      feed.push({ type: "shell", event });
+      return;
     }
-  } else if (current && (current.text.length || current.actions.length)) {
-    steps.push(current);
-  }
-  if (run.result) steps.push({ title: "Result", text: [run.result], actions: [], fromTools: false, result: true });
-  return steps;
-}
-function visibleText(step) {
-  const text = step.text.filter(Boolean).join("\n\n").trim();
-  if (!text || text === step.title) return "";
-  return text;
-}
-function groupsOf(actions) {
-  const groups = [];
-  actions.forEach((event) => {
-    const verb = verbOf(event);
-    const last = groups[groups.length - 1];
-    if (last && last.verb === verb) last.items.push(event);
-    else groups.push({ verb, items: [event] });
+    feed.push({ type: "action", event });
   });
-  return groups;
+  if (run.result) feed.push({ type: "text", text: run.result, result: true });
+  return feed;
 }
-function metaOf(step) {
-  if (step.actions.length < 2) return "";
-  const groups = groupsOf(step.actions);
-  const bits = groups.slice(0, 3).map((group) => group.items.length > 1 ? group.verb + " " + group.items.length : group.verb);
-  if (groups.length > 3) bits.push("+" + (groups.length - 3));
-  return bits.join(" · ");
+function runIdentity(run) {
+  return [run.agent || "", run.step || "", run.round, run.attempt, run.started_at || ""].join("|");
 }
-function stepIdentity(run, index) {
-  return [run.agent || "", run.step || "", run.round, run.attempt, run.started_at || "", index].join("|");
+function plural(count, word) {
+  return count + " " + word + (count === 1 ? "" : "s");
 }
-function stepOpen(run, key, index, total, step) {
+function exploreLabel(events) {
+  let files = 0;
+  let searches = 0;
+  events.forEach((event) => {
+    if (String(event.name || "").toLowerCase() === "read") files += 1;
+    else searches += 1;
+  });
+  const bits = [];
+  if (files) bits.push(plural(files, "file"));
+  if (searches) bits.push(plural(searches, "search"));
+  return "Explored " + bits.join(", ");
+}
+function shellCommand(event) {
+  return String(event.detail || event.summary || "");
+}
+function programsOf(command) {
+  const names = [];
+  String(command || "").split(/&&|\|\||;|\||\n/).forEach((part) => {
+    const tokens = part.trim().split(/\s+/).filter((token) => token && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(token));
+    if (!tokens.length) return;
+    const name = tokens[0].split("/").pop();
+    if (name && !names.includes(name)) names.push(name);
+  });
+  return names;
+}
+function programsLabel(command) {
+  const names = programsOf(command);
+  if (names.length <= 6) return names.join(", ");
+  return names.slice(0, 6).join(", ") + ", +" + (names.length - 6);
+}
+function workKey(run) {
+  return "work|" + runIdentity(run);
+}
+function workOpen(run) {
   const store = state.drawer && state.drawer.openSteps;
+  const key = workKey(run);
   if (store && Object.prototype.hasOwnProperty.call(store, key)) return !!store[key];
-  if (run.status === "running") return index === total - 1;
-  return !!(step && step.result);
+  return true;
 }
-function toggleStep(key, open) {
+function toggleWork(key, open) {
   if (!state.drawer) return;
   if (!state.drawer.openSteps) state.drawer.openSteps = {};
   state.drawer.openSteps[key] = open;
@@ -927,26 +921,41 @@ function actionNode(job, event, key, times) {
   if (open) extra.forEach((text) => box.append(el("pre", { class: "ev-out", text })));
   return box;
 }
-function foldedActions(actions) {
-  const rows = [];
-  actions.forEach((event, index) => {
-    const last = rows[rows.length - 1];
-    const plain = !actionExtra(event).length;
-    if (last && plain && last.plain && verbOf(last.event) === verbOf(event) && actionLabel(last.event) === actionLabel(event)) {
-      last.times += 1;
-      return;
-    }
-    rows.push({ event, index, times: 1, plain });
-  });
-  return rows;
+function exploreNode(job, events, key) {
+  const open = actionOpen(key);
+  const head = el("button", {
+    type: "button", class: "explore", "aria-expanded": String(open),
+    onclick: () => toggleAction(key, !open),
+  },
+    el("span", { class: "chev small", "aria-hidden": "true" }),
+    el("span", { text: exploreLabel(events) }));
+  const box = el("div", { class: "explore-wrap" + (open ? " open" : "") }, head);
+  if (open) {
+    const list = el("div", { class: "explore-list" });
+    events.forEach((event, at) => list.append(actionNode(job, event, key + "#" + at, 1)));
+    box.append(list);
+  }
+  return box;
 }
-function stepBody(job, step, key) {
-  const body = el("div", { class: "step-body" });
-  const text = visibleText(step);
-  if (text) body.append(el("p", { class: "step-text", text }));
-  foldedActions(step.actions).forEach((row) => body.append(actionNode(job, row.event, key + "#" + row.index, row.times)));
-  if (!text && !step.actions.length) body.append(el("p", { class: "kempty", text: "Nothing recorded for this step." }));
-  return body;
+function shellCard(event) {
+  const command = shellCommand(event);
+  const output = String(event.output || "");
+  const card = el("div", { class: "sh" },
+    el("div", { class: "sh-head" },
+      el("span", { class: "sh-icon", "aria-hidden": "true", text: ">_" }),
+      el("span", { class: "sh-title", text: "Ran command" }),
+      el("span", { class: "sh-progs", text: programsLabel(command) })),
+    el("div", { class: "sh-body" },
+      el("pre", { class: "sh-cmd" }, el("span", { class: "sh-prompt", text: "$ " }), command)));
+  if (output) card.querySelector(".sh-body").append(el("pre", { class: "sh-out", text: output }));
+  return card;
+}
+function feedNode(job, item, key) {
+  if (item.type === "text") return el("p", { class: "feed-text" + (item.result ? " result" : ""), text: item.text });
+  if (item.type === "heading") return el("p", { class: "feed-step", text: item.text });
+  if (item.type === "explore") return exploreNode(job, item.events, key);
+  if (item.type === "shell") return shellCard(item.event);
+  return actionNode(job, item.event, key, 1);
 }
 function timeline(job, run, error) {
   const box = el("div", { class: "d-doc d-timeline", tabindex: 0, "data-focus": "drawer-timeline" });
@@ -956,27 +965,27 @@ function timeline(job, run, error) {
   box.append(el("div", { class: "run-head" },
     el("h4", { text: heading.join("  ·  ") }),
     el("p", { text: runMeta(run) })));
-  const steps = stepsOf(run);
-  if (!steps.length) {
+  const feed = feedOf(run);
+  if (!feed.length) {
     box.append(el("p", { class: "kempty", text: run.status === "running" ? "Waiting for the first action." : "No actions recorded." }));
     return box;
   }
-  steps.forEach((step, index) => {
-    const key = stepIdentity(run, index);
-    const open = stepOpen(run, key, index, steps.length, step);
-    const head = el("button", {
-      type: "button", class: "step-head", "aria-expanded": String(open),
-      onclick: () => toggleStep(key, !open),
-    },
-      el("span", { class: "chev", "aria-hidden": "true" }),
-      el("span", { class: "step-copy" },
-        el("span", { class: "step-title", text: step.title }),
-        metaOf(step) ? el("span", { class: "step-meta", text: metaOf(step) }) : null),
-      run.status === "running" && index === steps.length - 1 ? el("i", { class: "pulse", "aria-hidden": "true" }) : null);
-    const section = el("section", { class: "step" + (open ? " open" : "") + (step.result ? " result" : "") }, head);
-    if (open) section.append(stepBody(job, step, key));
-    box.append(section);
-  });
+  const key = workKey(run);
+  const open = workOpen(run);
+  const running = run.status === "running";
+  const worked = run.duration_s == null ? "" : " for " + durationLabel(run.duration_s);
+  box.append(el("button", {
+    type: "button", class: "worked", "aria-expanded": String(open),
+    onclick: () => toggleWork(key, !open),
+  },
+    el("span", { text: (running ? "Working" : "Worked") + worked }),
+    el("span", { class: "chev small", "aria-hidden": "true" }),
+    running ? el("i", { class: "pulse", "aria-hidden": "true" }) : null));
+  if (open) {
+    const list = el("div", { class: "feed" });
+    feed.forEach((item, index) => list.append(feedNode(job, item, runIdentity(run) + "#" + index)));
+    box.append(list);
+  }
   return box;
 }
 function activityBody(job) {
@@ -1854,7 +1863,7 @@ function render() {
   const inside = !!(active && target.contains(active));
   const token = inside ? focusToken(active) : "";
   const keep = inside ? null : active;
-  const scrollers = ".joblist, pre.file, .d-doc, .d-files, .d-runs, .d-timeline, .filelist";
+  const scrollers = ".joblist, pre.file, .d-doc, .d-files, .d-runs, .d-timeline, .sh-out, .filelist";
   const scroll = [...target.querySelectorAll(scrollers)].map((n) => n.scrollTop);
   const kanban = target.querySelector(".kanban");
   const kanbanLeft = kanban ? kanban.scrollLeft : 0;
