@@ -367,6 +367,33 @@ on = { DONE = "review", SKIP = "review" }
     assert frontmatter(docs)["model"] == "sonnet"           # [models.claude].default
 
 
+def test_a_prompt_file_is_read_after_the_role(world) -> None:
+    (world.repo / "docs").mkdir()
+    (world.repo / "docs" / "review-data.md").write_text("# Data\n")
+    (world.repo / "docs" / "docs-step.md").write_text("# Docs\n")
+    files: dict[str, str]
+    files, _ = plan(world, """
+[reviewers.data]
+prompt = "docs/review-data.md"
+
+[surfaces.pipelines]
+when = "it changes a pipeline"
+reviewers = ["data"]
+
+[steps.gate]
+on = { PASS = "docs" }
+
+[steps.docs]
+type = "agent"
+instructions_file = "docs/docs-step.md"
+on = { DONE = "review", SKIP = "review" }
+""")
+    data: str = files[".claude/agents/mfactory-reviewer-data.md"]
+    docs: str = files[".claude/agents/mfactory-docs.md"]
+    assert "1. `.factory/roles/common.md`\n2. `.factory/roles/reviewer.md`\n3. `docs/review-data.md`" in data
+    assert "1. `.factory/roles/common.md`\n2. `.factory/roles/step.md`\n3. `docs/docs-step.md`" in docs
+
+
 def test_a_custom_reviewer_is_only_configuration(world):
     text = """
 [reviewers.perf]

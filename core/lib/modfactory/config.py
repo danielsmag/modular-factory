@@ -349,8 +349,8 @@ TOOL_KEYS = {"claude": {"stop_hook": a_bool, "cost": a_bool}, "codex": {"intake_
 STEP_COMMON = {"type": one_of(*graph.TYPES), "enabled": a_bool, "skip": a_filled_string}
 STEP_KEYS = {
     "agent": {"role": one_of(*graph.ROLE_OUTCOMES, "custom"), "instructions": a_filled_string,
-              "writes": a_filled_string, "skills": a_string_list, "rules": a_string_list,
-              "context": a_string, "port": a_bool},
+              "instructions_file": a_filled_string, "writes": a_filled_string, "skills": a_string_list,
+              "rules": a_string_list, "context": a_string, "port": a_bool},
     "checks": {},
     "review": {},
     "human": {"who": a_who, "shows": a_string, "ask": a_string, "pr_ready": a_bool,
@@ -361,10 +361,31 @@ STEP_KEYS = {
                "wait": a_string, "timeout_minutes": an_int(1), "url": a_string,
                "skills": a_string_list, "rules": a_string_list, "context": a_string, "port": a_bool},
 }
-REVIEWER_KEYS = {"focus": a_filled_string, "context": a_string, "skills": a_string_list,
-                 "rules": a_string_list, "port": a_bool}
+REVIEWER_KEYS = {"focus": a_filled_string, "prompt": a_filled_string, "context": a_string,
+                 "skills": a_string_list, "rules": a_string_list, "port": a_bool}
 BUILTIN_REVIEWERS = ("code", "security", "ux", "ui")
 TOP = set(TABLES) | {"schema", "tools", "steps", "reviewers", "surfaces", "models"}
+
+
+def _path_inside(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def prompt_path_problem(repo: Path, raw: str) -> str | None:
+    """Why `raw` cannot be a prompt file, or None when it is a file inside `repo`."""
+    parts: list[str] = raw.split("/")
+    outside: bool = raw.startswith("/") or "\\" in raw or not parts or any(
+        part in {"", ".", ".."} for part in parts)
+    if outside:
+        return f"must be a path inside the repository (got {json.dumps(raw)})"
+    path: Path = repo / raw
+    if not _path_inside(path, repo) or not path.is_file():
+        return f'"{raw}" not found in the repository'
+    return None
 
 
 def check(cfg):
@@ -423,8 +444,18 @@ def check(cfg):
             continue
         spec = STEP_COMMON | STEP_KEYS[step["type"]] | {"on": lambda v: None}
         test_table(label, step, spec)
-        if step["type"] == "agent" and graph.role(name, step) == "custom" and not step.get("instructions"):
+        role_name: str = graph.role(name, step) if step["type"] == "agent" else ""
+        if role_name == "custom" and not step.get("instructions") and not step.get("instructions_file"):
             out.append(f"[{label}].instructions is missing: say what this step's agent must do")
+        if step["type"] == "agent" and "instructions_file" in step:
+            if role_name != "custom":
+                out.append(f"[{label}].instructions_file is only for a custom step")
+            else:
+                file_value: object = step.get("instructions_file")
+                if isinstance(file_value, str) and file_value.strip():
+                    file_problem: str | None = prompt_path_problem(cfg.repo, file_value)
+                    if file_problem:
+                        out.append(f"[{label}].instructions_file {file_problem}")
         if step["type"] == "verify" and graph.enabled(step):
             if not step.get("commands") and not step.get("agent"):
                 out.append(f"[{label}] is on but checks nothing: set commands, or agent = true")
@@ -439,8 +470,14 @@ def check(cfg):
         if not NAME.fullmatch(name):
             out.append(f"[reviewers.{name}]: a reviewer name is lowercase letters, digits and hyphens")
         test_table(f"reviewers.{name}", reviewer, REVIEWER_KEYS)
-        if name not in BUILTIN_REVIEWERS and isinstance(reviewer, dict) and not reviewer.get("focus"):
-            out.append(f"[reviewers.{name}].focus is missing: say what this reviewer looks for")
+        if isinstance(reviewer, dict):
+            if name not in BUILTIN_REVIEWERS and not reviewer.get("focus") and not reviewer.get("prompt"):
+                out.append(f"[reviewers.{name}].focus is missing: say what this reviewer looks for")
+            prompt_value: object = reviewer.get("prompt")
+            if isinstance(prompt_value, str) and prompt_value.strip():
+                prompt_problem: str | None = prompt_path_problem(cfg.repo, prompt_value)
+                if prompt_problem:
+                    out.append(f"[reviewers.{name}].prompt {prompt_problem}")
     for name, surface in d.get("surfaces", {}).items():
         if not NAME.fullmatch(name) or name == "none":
             out.append(f'[surfaces.{name}]: a surface name is lowercase letters, digits and hyphens, not "none"')

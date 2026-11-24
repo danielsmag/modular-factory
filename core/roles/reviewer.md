@@ -17,8 +17,8 @@ Other reviewers cover the other lenses at the same time. Stay in yours.
    Read the changed files in full where the diff isn't enough.
 4. From round 2 on, your own review from the last round that had one
    (`round-<M>/review-<lens>.md`). Check whether each finding was fixed.
-5. What to look for: the lens file listed after this one in your instructions,
-   or the "What to look for" section there.
+5. What to look for: every file listed after this one in your instructions,
+   and the "What to look for" section when it is there.
 
 ## The checks are done
 

@@ -309,7 +309,19 @@ on = { READY = "docs" }
 `mfactory sync` writes a `mfactory-docs` agent. It works in the job's worktree,
 commits what it changes to the job's branch, and writes `docs.md`, whose first
 line is `STATUS: DONE`. The outcomes of your step are the names you give in
-`on`:
+`on`.
+
+A long task can live in a file instead of, or as well as, `instructions`.
+`instructions_file` is a path from the repo root. The agent reads it after
+`step.md`. A missing file, or a path that leaves the repo, fails `mfactory
+sync`. Only a custom step can set it. This does not change `schema`.
+
+```toml
+[steps.docs]
+type = "agent"
+instructions_file = "docs/docs-step.md"
+on = { DONE = "gate", SKIP = "gate" }
+```
 
 ```toml
 [steps.license-check]
@@ -322,7 +334,8 @@ Keys of an `agent` step:
 
 | Key | Meaning |
 | --- | --- |
-| `instructions` | What the agent must do. Required for a step you add. |
+| `instructions` | What the agent must do. A step you add needs this or `instructions_file`. |
+| `instructions_file` | A file in the repo, read after `step.md`. Path from the repo root. The file must exist. Custom steps only. |
 | `writes` | The file it writes in the job folder. Default: `<step>.md`. |
 | `context` | Project facts added to the agent's prompt, such as where things live. Works on built-in steps too. |
 | `skills` | Skills this agent reads: a project skill, `user:name`, `plugin:skill`, or `all`. |
@@ -513,7 +526,8 @@ The `review` step runs every reviewer the job needs, in parallel. Four ship:
 `code` runs on every job; `security` runs on jobs intake marks with the
 `security` surface; `ux` and `ui` on jobs with the `ui` surface.
 
-A new reviewer is a table with a `focus`. No prompt file is needed:
+A new reviewer is a table with a `focus`, a `prompt` file, or both. `focus`
+alone needs no file:
 
 ```toml
 [reviewers.migrations]
@@ -522,6 +536,20 @@ focus = "Database migrations: reversibility, locks on large tables, data loss."
 [surfaces.database]
 when = "it adds or changes a migration or a table"
 reviewers = ["migrations"]
+```
+
+A long checklist can live in a markdown file in the repo. `prompt` is a path
+from the repo root. The agent reads that file after `reviewer.md`, and after
+`reviewer-<name>.md` when the reviewer is built in. A missing file, or a path
+that leaves the repo, fails `mfactory sync`. This does not change `schema`.
+
+```toml
+[reviewers.data]
+prompt = "docs/review-data.md"
+
+[surfaces.pipelines]
+when = "it changes a pipeline, a model, or a warehouse query"
+reviewers = ["data"]
 ```
 
 A surface is something a change can touch. Intake reads each `when` and names
@@ -541,7 +569,8 @@ reviewers = ["ux", "ui", "a11y"]
 
 | Key | Meaning |
 | --- | --- |
-| `[reviewers.<name>] focus` | What this reviewer looks for. Required for a reviewer you add. |
+| `[reviewers.<name>] focus` | What this reviewer looks for. A reviewer you add needs this or `prompt`. |
+| `[reviewers.<name>] prompt` | A file in the repo, read after the reviewer role. Path from the repo root. The file must exist. |
 | `[reviewers.<name>] context` | Project facts added to its prompt. |
 | `[reviewers.<name>] skills` | Skills it reads: a project skill, `user:name`, `plugin:skill`, or `all`. |
 | `[reviewers.<name>] rules` | Instruction files it reads: `AGENTS.md`, `CLAUDE.md`, a rule path, `user:CLAUDE.md`, or `all`. |

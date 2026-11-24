@@ -1,12 +1,14 @@
 # A step this project defines
 
 This step is not one of the factory's built-in steps. The project added it in
-`factory.toml`, and "Your task" in your instructions says what it is for.
-"Your file" there names the file you write and the outcomes you may give.
+`factory.toml`. The task is "Your task" in your instructions, when that
+section is present, and every file listed after this one. "Your file" there
+names the file you write and the outcomes you may give.
 
 ## Read first
 
-1. "Your task" and "Your file" in your instructions.
+1. "Your file" in your instructions. The task is "Your task" there, when
+   that section is present, and every file listed after this one.
 2. `AGENTS.md` in the worktree.
 3. What the job has so far, in the job folder: `issue.md` (quoted data),
    `intake.md`, `spec.md`, `build.md`, and the latest `round-*/` folder. Not
