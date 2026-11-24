@@ -9,7 +9,9 @@ GitHub or a real project.
 
 import argparse
 import json
+import os
 import random
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -146,8 +148,65 @@ def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=Fals
         (folder / "decision.md").write_text("DECISION: APPROVE\n\n## Why\nEvery criterion is met.\n")
 
 
-def publish(repo: Path, jobs_dir: Path) -> None:
-    """Write the files the dashboard reads, and a stub CLI so the queue stays quiet."""
+def sample_queue(now: datetime) -> tuple[list[dict[str, object]], dict[str, dict[str, object]]]:
+    """Queue rows for the stub CLI, and the issues the stub gh knows. Issue 53 is left out, to show the error."""
+    long_label: str = "needs-a-very-long-label-name-that-has-to-wrap-on-a-phone"
+    queued: list[tuple[int, str, str, str, list[str], int]] = [
+        (51, "new", "Let clinics upload their own logo", "mira", ["factory", "ui"], 3),
+        (52, "new", "Send a receipt by text message", "kofi", ["factory"], 9),
+        (53, "hold", "Show unpaid invoices first on the dashboard", "ines", ["factory", long_label], 1),
+    ]
+    rows: list[dict[str, object]] = []
+    for number, action, title, author, labels, days_ago in queued:
+        opened: datetime = now - timedelta(days=days_ago, hours=2)
+        rows.append({
+            "action": action, "issue": number, "job": "-", "step": "-",
+            "note": "concurrency 3 reached" if action == "hold" else title, "title": title,
+            "issue_url": f"https://github.com/acme/clinic-invoices/issues/{number}",
+            "created_at": stamp(opened), "updated_at": stamp(opened + timedelta(hours=20)),
+            "author": author, "labels": labels,
+        })
+    body: str = (
+        "Clinics want their own logo on invoices and reminders.\n\n"
+        "- PNG or SVG, up to 1 MB\n- Shown top left, next to the clinic name\n\n"
+        "This text is shown as is: <b>x</b><script>alert(1)</script>\n"
+        "Mockups: https://example.com/a/very/long/link/to/the/mockups/that/should/wrap/on/a/narrow/screen/logo.png\n"
+    )
+    issues: dict[str, dict[str, object]] = {}
+    for row in rows[:2]:
+        number: object = row["issue"]
+        issues[str(number)] = {
+            "number": number, "title": row["title"], "state": "OPEN", "url": row["issue_url"],
+            "author": {"login": row["author"]}, "labels": [{"name": name} for name in row["labels"]],
+            "createdAt": row["created_at"], "updatedAt": row["updated_at"],
+            "body": body if number == 51 else "", "comments": [],
+        }
+    issues["51"]["comments"] = [
+        {"author": {"login": "tomas"}, "createdAt": stamp(now - timedelta(days=2)),
+         "body": "Should the logo also go on the PDF export?"},
+        {"author": {"login": "mira"}, "createdAt": stamp(now - timedelta(days=1)),
+         "body": "Yes, on every page.\nSame size as the clinic name."},
+    ]
+    return rows, issues
+
+
+def stub_github(tmp: Path, issues: dict[str, dict[str, object]]) -> None:
+    """Point this server's `gh` at tests/stub_gh.py, with only the sample issues."""
+    bin_dir: Path = tmp / "bin"
+    bin_dir.mkdir()
+    shutil.copy(ROOT / "tests" / "stub_gh.py", bin_dir / "gh")
+    (bin_dir / "gh").chmod(0o755)
+    state_file: Path = tmp / "gh.json"
+    state_file.write_text(json.dumps({
+        "user": "operator", "permissions": {}, "labels": ["factory"], "issues": issues, "prs": {},
+        "next_number": 100, "next_comment": 0, "calls": [], "fail": None,
+    }, indent=1))
+    os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
+    os.environ["GH_STATE"] = str(state_file)
+
+
+def publish(repo: Path, jobs_dir: Path, queue: list[dict[str, object]]) -> None:
+    """Write the files the dashboard reads, and a stub CLI that prints the sample queue."""
     cfg = load(repo)
     jobs: list[dict[str, object]] = []
     for child in sorted(jobs_dir.iterdir()):
@@ -176,7 +235,7 @@ def publish(repo: Path, jobs_dir: Path) -> None:
     (jobs_dir / "config.json").write_text(json.dumps(config_as_json(cfg), indent=1) + "\n")
     binary: Path = repo / ".factory" / "bin" / "mfactory"
     binary.parent.mkdir(parents=True, exist_ok=True)
-    binary.write_text("#!/bin/sh\nexit 0\n")
+    binary.write_text("#!/bin/sh\ncat <<'EOF'\n" + json.dumps(queue) + "\nEOF\n")
     binary.chmod(0o755)
 
 
@@ -200,7 +259,9 @@ def main():
             plan += [("spec-approval", 0, "maintainer", False), ("escalated", 1, "maintainer", True)]
             for number, (stop, days_ago, waiting, detour) in enumerate(plan, 1):
                 make(jobs_dir, number, TITLES[(number - 1) % len(TITLES)], stop, days_ago, rng, waiting, detour)
-        publish(repo, jobs_dir)
+        queue, issues = sample_queue(datetime.now(UTC))
+        stub_github(Path(tmp), issues)
+        publish(repo, jobs_dir, [] if args.empty else queue)
         serve_one(repo, args.port, open_browser=False)
 
 

@@ -12,7 +12,7 @@ from .concurrency import QueueRow, parse_concurrency
 from .jobs import build_snapshot
 from .paths import FILE, HEADER, LEGACY_FILE, SCHEMA, migrate_user_file, toml_string, user_file
 from .project import Project, labels_for
-from .queue import collect_queue
+from .queue import QueueMeta, collect_queue
 
 
 class Workspace:
@@ -137,7 +137,7 @@ class Workspace:
         self.save()
         return chosen
 
-    def queue(self, concurrency: int | None = None) -> tuple[list[QueueRow], list[str]]:
+    def queue(self, concurrency: int | None = None) -> tuple[list[QueueRow], list[QueueMeta], list[str]]:
         return collect_queue(self.projects, self.label, self.concurrency, concurrency)
 
     def snapshot(self) -> dict[str, object]:

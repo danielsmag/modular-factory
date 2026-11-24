@@ -842,7 +842,7 @@ def _secret_path(path: str) -> bool:
     return name.endswith(".pem") or name.endswith(".key")
 
 
-def _redact(text: str) -> str:
+def redact(text: str) -> str:
     cleaned: str = text
     pattern: re.Pattern[str]
     replacement: str
@@ -866,7 +866,7 @@ def _clip(text: str) -> str:
 
 
 def _show(text: str) -> str:
-    return _clip(_redact(text))
+    return _clip(redact(text))
 
 
 def _public_events(events: object) -> list[dict[str, Any]]:
