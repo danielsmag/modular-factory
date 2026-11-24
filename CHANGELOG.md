@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.15.1
+
 - Agent activity rows are smaller and grey. Labels line up, and the same file edited several times in a row shows once with a count.
 
 ## 0.15.0
