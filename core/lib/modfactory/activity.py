@@ -1,8 +1,9 @@
-"""What each agent did, from Claude Code's subagent transcripts.
+"""What each agent did, from Claude Code and Cursor subagent transcripts.
 
-The files are the same ones `cost.py` reads. A transcript belongs to a job when
-its prompt contains `Job folder: <path>/`. The format is not a documented
-interface, so a bad file is skipped and the dashboard still answers.
+A transcript belongs to a job when its prompt contains `Job folder: <path>/`.
+Claude's files are the same ones `cost.py` reads. Cursor writes one jsonl per
+subagent under `~/.cursor/projects/<repo>/agent-transcripts`. Neither format is
+a documented interface, so a bad file is skipped and the dashboard still answers.
 
 Tool output is redacted and clipped before it is stored or sent.
 """
@@ -10,10 +11,11 @@ Tool output is redacted and clipped before it is stored or sent.
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -21,11 +23,15 @@ from .config import Config, shown_agent
 from .cost import _price, transcripts_dir
 from .util import parse_time, write_atomic
 
-NOTICE: str = "Agent activity is recorded for Claude Code."
+NOTICE: str = "Agent activity is recorded for Claude Code and Cursor."
 _MAX_LINES: int = 40
 _MAX_CHARS: int = 2048
-_EDIT_TOOLS: frozenset[str] = frozenset({"write", "edit", "multiedit", "notebookedit"})
+_EDIT_TOOLS: frozenset[str] = frozenset({
+    "write", "edit", "multiedit", "notebookedit", "strreplace", "search_replace", "delete",
+})
 _READ_TOOLS: frozenset[str] = frozenset({"read", "grep", "glob"})
+_SHELL_TOOLS: frozenset[str] = frozenset({"bash", "shell"})
+_STEP_TOOLS: frozenset[str] = frozenset({"updatecurrentstep", "update_current_step"})
 _STEP: re.Pattern[str] = re.compile(r"Step: ([a-z0-9-]+)\.")
 _AGENT: re.Pattern[str] = re.compile(r"Agent: (\S+?)\.")
 _ROUND: re.Pattern[str] = re.compile(r"Round: (\d+)\.")
@@ -35,6 +41,13 @@ _ROUND_ATTEMPT: re.Pattern[str] = re.compile(r"round (\d+), attempt (\d+)", re.I
 _REVIEW_ROUND: re.Pattern[str] = re.compile(r"Review round (\d+)")
 _FINAL_ROUND: re.Pattern[str] = re.compile(r"Final round: (\d+)")
 _FOLDER: re.Pattern[str] = re.compile(r"Job folder: (.+?)/\.(?:\s|$)")
+_CURSOR_STAMP: re.Pattern[str] = re.compile(r"<timestamp>(.*?)</timestamp>", re.DOTALL)
+_CURSOR_WHEN: re.Pattern[str] = re.compile(
+    r"^(?:[A-Za-z]+,\s+)?"
+    r"([A-Za-z]{3,9}\s+\d{1,2},\s+\d{4},\s+\d{1,2}:\d{2}\s*[AP]M)"
+    r"(?:\s*\(UTC(?:([+-])(\d{1,2})(?::?(\d{2}))?)?\))?\s*$",
+    re.IGNORECASE,
+)
 _PRIVATE_KEY: re.Pattern[str] = re.compile(
     r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
     re.DOTALL,
@@ -143,47 +156,60 @@ class ActivityLog:
         snap_error: str | None
         snapshot, snap_error = _read_snapshot(job_dir)
         claude: bool = "claude" in self._cfg.tools
+        cursor: bool = "cursor" in self._cfg.tools
+        supported: bool = claude or cursor
         errors: list[str] = []
         if snap_error:
             errors.append(snap_error)
         live: list[tuple[dict[str, Any], bool]] = []
-        available: bool = False
-        if claude:
-            live, count, available = self._live(job_dir)
+        if supported:
+            found: list[tuple[dict[str, Any], bool]]
+            count: int
+            found, count = self._live(job, job_dir, claude, cursor)
+            live = found
             if count:
                 word: str = "transcript" if count == 1 else "transcripts"
                 errors.append(f"{count} {word} unreadable")
-        runs: list[dict[str, Any]] = _merge(snapshot, live, job) if claude else _finished(snapshot)
-        if claude:
+        runs: list[dict[str, Any]] = _merge(snapshot, live, job) if supported else _finished(snapshot)
+        if supported:
             runs.extend(self._placeholders(job, runs))
         runs.sort(key=_sort_key)
         body: dict[str, Any] = {"runs": runs}
         if errors:
             body["error"] = "; ".join(errors)
-        if not runs and (not claude or not available):
+        if not runs and not supported:
             body["notice"] = NOTICE
         return body
 
-    def _live(self, job_dir: Path) -> tuple[list[tuple[dict[str, Any], bool]], int, bool]:
-        root: Path = transcripts_dir(self._cfg.repo)
-        if not root.is_dir():
-            return [], 0, False
+    def _live(
+        self, job: dict[str, Any], job_dir: Path, claude: bool, cursor: bool,
+    ) -> tuple[list[tuple[dict[str, Any], bool]], int]:
         found: list[tuple[dict[str, Any], bool]] = []
         errors: int = 0
-        try:
-            paths: list[Path] = sorted(root.glob("*/subagents/agent-*.jsonl"))
-        except OSError:
-            return [], 1, True
         prices: dict[str, dict[str, float]] = _prices_of(self._cfg)
-        for path in paths:
-            cached: CachedTranscript = self._cache.load(path, prices)
-            if cached.error:
+        roots: list[tuple[Path, str]] = []
+        if claude:
+            roots.append((transcripts_dir(self._cfg.repo), "*/subagents/agent-*.jsonl"))
+        if cursor:
+            for cursor_root in _cursor_roots(self._cfg.repo, job):
+                roots.append((cursor_root, "agent-transcripts/*/subagents/*.jsonl"))
+        for root, pattern in roots:
+            if not root.is_dir():
+                continue
+            try:
+                paths: list[Path] = sorted(root.glob(pattern))
+            except OSError:
                 errors += 1
                 continue
-            if cached.run is None or cached.folder is None or not _same_dir(cached.folder, job_dir):
-                continue
-            found.append((cached.run, cached.growing))
-        return found, errors, True
+            for path in paths:
+                cached: CachedTranscript = self._cache.load(path, prices)
+                if cached.error:
+                    errors += 1
+                    continue
+                if cached.run is None or cached.folder is None or not _same_dir(cached.folder, job_dir):
+                    continue
+                found.append((cached.run, cached.growing))
+        return found, errors
 
     def _placeholders(self, job: dict[str, Any], runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         step_name: object = job.get("step")
@@ -331,6 +357,31 @@ def _sort_key(run: dict[str, Any]) -> tuple[str, str]:
     return when, name
 
 
+def _cursor_roots(repo: Path, job: dict[str, Any]) -> list[Path]:
+    base: Path = Path(os.environ.get("CURSOR_CONFIG_DIR", Path.home() / ".cursor")) / "projects"
+    candidates: list[Path] = [Path(repo)]
+    worktree: object = job.get("worktree")
+    if isinstance(worktree, str) and worktree.strip():
+        candidates.append(Path(worktree))
+    roots: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        slug: str = _cursor_slug(candidate)
+        if not slug or slug in seen:
+            continue
+        seen.add(slug)
+        roots.append(base / slug)
+    return roots
+
+
+def _cursor_slug(path: Path) -> str:
+    try:
+        text: str = str(path.resolve())
+    except OSError:
+        text = str(path)
+    return re.sub(r"[^A-Za-z0-9]", "-", text).strip("-")
+
+
 def _same_dir(folder: str, job_dir: Path) -> bool:
     found: Path = Path(folder)
     wanted: Path = Path(job_dir)
@@ -385,16 +436,17 @@ def _parse(path: Path, prices: dict[str, dict[str, float]]) -> tuple[str | None,
             _assistant_blocks(message.get("content"), job_dir, stamp, events, open_tools)
         else:
             _attach_results(message.get("content"), open_tools)
-    result: str = _hoist_result(events)
+    result: str = _finish_result(events)
     run: dict[str, Any] = dict(identity)
     run["events"] = events
     if result:
         run["result"] = result
+    modified: str = datetime.fromtimestamp(path.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     if stamps:
         run["started_at"] = stamps[0]
-        run["ended_at"] = stamps[-1]
+        later: bool = len(stamps) == 1 and modified > stamps[0]
+        run["ended_at"] = modified if later else stamps[-1]
     else:
-        modified: str = datetime.fromtimestamp(path.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         run["started_at"] = modified
         run["ended_at"] = modified
     _add_cost(run, usage_by_message, prices)
@@ -416,8 +468,50 @@ def _records(path: Path) -> list[dict[str, Any]]:
         loaded: object = json.loads(row)
         if not isinstance(loaded, dict):
             raise ValueError("transcript line is not an object")
-        records.append(loaded)
+        records.append(_normalize_record(loaded))
     return records
+
+
+def _normalize_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Claude records already carry `type`. Cursor records carry `role` and a display timestamp."""
+    if record.get("type") in {"assistant", "user"}:
+        return record
+    role: object = record.get("role")
+    if role not in {"assistant", "user"}:
+        return record
+    message: object = record.get("message")
+    normalized: dict[str, Any] = {"type": role, "message": message if isinstance(message, dict) else {}}
+    stamp: object = record.get("timestamp")
+    if isinstance(stamp, str) and stamp:
+        normalized["timestamp"] = stamp
+        return normalized
+    if role == "user" and isinstance(message, dict):
+        found: re.Match[str] | None = _CURSOR_STAMP.search(_content_text(message.get("content")))
+        if found:
+            iso: str | None = _cursor_iso(found.group(1).strip())
+            if iso:
+                normalized["timestamp"] = iso
+    return normalized
+
+
+def _cursor_iso(raw: str) -> str | None:
+    match: re.Match[str] | None = _CURSOR_WHEN.match(raw.strip())
+    if match is None:
+        return None
+    try:
+        local: datetime = datetime.strptime(match.group(1), "%b %d, %Y, %I:%M %p")
+    except ValueError:
+        return None
+    sign: str | None = match.group(2)
+    if sign is None:
+        aware: datetime = local.replace(tzinfo=UTC)
+    else:
+        hours: int = int(match.group(3) or 0)
+        minutes: int = int(match.group(4) or 0)
+        direction: int = 1 if sign == "+" else -1
+        offset: timezone = timezone(timedelta(hours=direction * hours, minutes=direction * minutes))
+        aware = local.replace(tzinfo=offset).astimezone(UTC)
+    return aware.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _prompt_text(records: list[dict[str, Any]]) -> str:
@@ -525,6 +619,8 @@ def _assistant_blocks(
             secret: bool
             tool_event, secret = _tool_event(tool_name, block.get("input"), job_dir, stamp)
             events.append(tool_event)
+            if tool_event.get("kind") == "step":
+                continue
             tool_id: object = block.get("id")
             open_tools.append({
                 "event": tool_event,
@@ -548,15 +644,21 @@ def _blocks(content: object) -> list[dict[str, Any]]:
 
 def _tool_event(name: str, raw: object, job_dir: Path, at: str | None) -> tuple[dict[str, Any], bool]:
     data: dict[str, Any] = raw if isinstance(raw, dict) else {}
+    lowered: str = name.strip().lower().rsplit(".", 1)[-1]
+    if lowered in _STEP_TOOLS:
+        return _step_event(data, at), False
     path: str = _first(data, ("file_path", "path", "file", "notebook_path"))
     secret: bool = bool(path) and _secret_path(path)
-    lowered: str = name.lower()
     kind: str = "edit" if lowered in _EDIT_TOOLS else "tool"
     event: dict[str, Any] = {"kind": kind, "name": name}
     if at:
         event["at"] = at
-    if lowered == "bash":
-        event["summary"] = _show(_first(data, ("command", "cmd")))
+    if lowered in _SHELL_TOOLS:
+        command: str = _show(_first(data, ("command", "cmd")))
+        description: str = _show(_first(data, ("description",)))
+        event["summary"] = description or command
+        if description and command and command != description:
+            event["detail"] = command
     elif lowered in _READ_TOOLS:
         pattern: str = _first(data, ("pattern", "query", "glob", "regex"))
         bits: list[str] = [bit for bit in (path, pattern) if bit]
@@ -639,13 +741,41 @@ def _result_text(content: object) -> str:
     return str(content)
 
 
-def _hoist_result(events: list[dict[str, Any]]) -> str:
-    indexes: list[int] = [index for index, event in enumerate(events) if event.get("kind") == "text"]
-    if not indexes:
-        return ""
-    last: int = indexes[-1]
-    text: object = events[last].get("text")
-    del events[last]
+def _step_event(data: dict[str, Any], at: str | None) -> dict[str, Any]:
+    title: str = _show(_first(data, ("current_step", "currentStep", "title"))) or "Working"
+    event: dict[str, Any] = {"kind": "step", "name": "step", "summary": title}
+    if at:
+        event["at"] = at
+    final: str = _show(_first(data, ("final_summary", "finalSummary")))
+    if final:
+        event["result"] = final
+    return event
+
+
+def _finish_result(events: list[dict[str, Any]]) -> str:
+    """The answer is the last prose after the last step, else that step's summary, else the last prose."""
+    last_step: int = -1
+    last_text: int = -1
+    for index, event in enumerate(events):
+        if event.get("kind") == "step":
+            last_step = index
+        elif event.get("kind") == "text":
+            last_text = index
+    if last_text > last_step:
+        return _pop_text(events, last_text)
+    if last_step >= 0:
+        found: object = events[last_step].get("result")
+        if isinstance(found, str) and found:
+            del events[last_step]["result"]
+            return found
+    if last_text >= 0:
+        return _pop_text(events, last_text)
+    return ""
+
+
+def _pop_text(events: list[dict[str, Any]], index: int) -> str:
+    text: object = events[index].get("text")
+    del events[index]
     return text if isinstance(text, str) else ""
 
 
