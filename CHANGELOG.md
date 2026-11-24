@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.17.0
+
 - Agent activity reads like a Cursor chat. A "Worked for" line opens a flat feed: replies as text, reads and searches folded into "Explored N files", and each shell command as a card with the command and its output.
 
 ## 0.16.0
