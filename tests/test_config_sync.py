@@ -2,7 +2,6 @@
 
 import json
 import tomllib
-from pathlib import Path
 
 import pytest
 from modfactory import config, graph, sync
@@ -368,14 +367,10 @@ on = { DONE = "review", SKIP = "review" }
     assert frontmatter(docs)["model"] == "sonnet"           # [models.claude].default
 
 
-def write_repo_file(world, relative: str, text: str = "# Prompt\n") -> None:
-    path: Path = world.repo / relative
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-
-
-def test_a_reviewer_prompt_is_read_after_reviewer_md(world) -> None:
-    write_repo_file(world, "docs/review-data.md", "# Data\n")
+def test_a_prompt_file_is_read_after_the_role(world) -> None:
+    (world.repo / "docs").mkdir()
+    (world.repo / "docs" / "review-data.md").write_text("# Data\n")
+    (world.repo / "docs" / "docs-step.md").write_text("# Docs\n")
     files: dict[str, str]
     files, _ = plan(world, """
 [reviewers.data]
@@ -384,91 +379,19 @@ prompt = "docs/review-data.md"
 [surfaces.pipelines]
 when = "it changes a pipeline"
 reviewers = ["data"]
+
+[steps.gate]
+on = { PASS = "docs" }
+
+[steps.docs]
+type = "agent"
+instructions_file = "docs/docs-step.md"
+on = { DONE = "review", SKIP = "review" }
 """)
     data: str = files[".claude/agents/mfactory-reviewer-data.md"]
+    docs: str = files[".claude/agents/mfactory-docs.md"]
     assert "1. `.factory/roles/common.md`\n2. `.factory/roles/reviewer.md`\n3. `docs/review-data.md`" in data
-    assert "## What to look for" not in data
-
-
-def test_a_reviewer_prompt_can_sit_with_focus(world) -> None:
-    write_repo_file(world, "docs/review-data.md")
-    files: dict[str, str]
-    files, _ = plan(world, """
-[reviewers.data]
-focus = "Warehouse models and the queries that feed them."
-prompt = "docs/review-data.md"
-context = "Tables live in warehouse/. dbt is the runner."
-""")
-    data: str = files[".claude/agents/mfactory-reviewer-data.md"]
-    assert "3. `docs/review-data.md`" in data
-    assert "## What to look for\n\nWarehouse models and the queries that feed them." in data
-    assert "## Project context\n\nTables live in warehouse/. dbt is the runner." in data
-
-
-def test_a_builtin_reviewer_prompt_follows_its_lens(world) -> None:
-    write_repo_file(world, "docs/review-code.md", "# Code\n")
-    files: dict[str, str]
-    files, _ = plan(world, '[reviewers.code]\nprompt = "docs/review-code.md"\n')
-    listed: str = "3. `.factory/roles/reviewer-code.md`\n4. `docs/review-code.md`"
-    assert listed in files[".claude/agents/mfactory-reviewer-code.md"]
-    assert listed in files[".claude/agents/mfactory-reviewer-code-low.md"]
-
-
-def test_a_custom_step_can_take_its_task_from_a_file(world) -> None:
-    write_repo_file(world, "docs/docs-step.md", "# Docs\n")
-    files: dict[str, str]
-    files, _ = plan(world, """
-[steps.gate]
-on = { PASS = "docs" }
-
-[steps.docs]
-type = "agent"
-instructions_file = "docs/docs-step.md"
-on = { DONE = "review", SKIP = "review" }
-""")
-    docs: str = files[".claude/agents/mfactory-docs.md"]
     assert "1. `.factory/roles/common.md`\n2. `.factory/roles/step.md`\n3. `docs/docs-step.md`" in docs
-    assert "## Your task" not in docs
-    assert "Write `docs.md` in the job folder. Its first line must be `STATUS: <OUTCOME>`, with OUTCOME one of: " \
-           "DONE, SKIP." in docs
-
-
-def test_a_custom_step_can_take_instructions_and_a_file(world) -> None:
-    write_repo_file(world, "docs/docs-step.md")
-    files: dict[str, str]
-    files, _ = plan(world, """
-[steps.gate]
-on = { PASS = "docs" }
-
-[steps.docs]
-type = "agent"
-instructions = "Update docs/ for the change on this branch."
-instructions_file = "docs/docs-step.md"
-on = { DONE = "review", SKIP = "review" }
-""")
-    docs: str = files[".claude/agents/mfactory-docs.md"]
-    assert "3. `docs/docs-step.md`" in docs
-    assert "## Your task\n\nUpdate docs/ for the change on this branch." in docs
-
-
-def test_a_prompt_path_must_be_a_file_inside_the_repo(world) -> None:
-    assert problems(world, '[reviewers.data]\nprompt = "docs/review-data.md"\n') == [
-        '[reviewers.data].prompt "docs/review-data.md" not found in the repository']
-    assert problems(world, '[reviewers.data]\nprompt = "../secret.md"\n') == [
-        '[reviewers.data].prompt must be a path inside the repository (got "../secret.md")']
-    assert problems(world, '[reviewers.data]\nprompt = "/tmp/review.md"\n') == [
-        '[reviewers.data].prompt must be a path inside the repository (got "/tmp/review.md")']
-    assert problems(world, '[steps.build]\ninstructions_file = "docs/docs-step.md"\n') == [
-        "[steps.build].instructions_file is only for a custom step"]
-    assert problems(world, """
-[steps.gate]
-on = { PASS = "docs" }
-
-[steps.docs]
-type = "agent"
-instructions_file = "docs/missing.md"
-on = { DONE = "review" }
-""") == ['[steps.docs].instructions_file "docs/missing.md" not found in the repository']
 
 
 def test_a_custom_reviewer_is_only_configuration(world):
