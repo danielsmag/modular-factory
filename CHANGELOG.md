@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.12.0
+
 - Breaking: the fleet is now the workspace. `~/.mfactory/fleet.toml` is renamed to `workspace.toml` the first time it is read. `mfactory fleet subscribe | unsubscribe | add | remove | list | queue | init` is now `mfactory workspace add | remove | list | queue | init`; `add` and `remove` take a path or default to the repository you are in. `FACTORY_FLEET` is now `FACTORY_WORKSPACE`. `[fleet].concurrency` is now `[workspace].concurrency`; a `[fleet]` table in `factory.toml` names the new key. `mfactory fleet dashboard` and `mfactory dashboard --all` are gone: `mfactory dashboard` and `mfactory start dashboard` always serve every project in the workspace.
 - The dashboard page lives only in the global install. `.factory/web/` is no longer copied, and install or upgrade removes a leftover copy. `.factory/bin/mfactory dashboard`, `start` and `stop` hand off to the global `mfactory`, and say to run `install.sh --global` when there is none.
 - `mfactory install` adds the repository to the workspace.
