@@ -111,6 +111,18 @@ h2.job-title { font-size: var(--fs-title); overflow-wrap: anywhere; }
 .bar .pct { text-align: right; font: var(--fs-floor) var(--mono); color: var(--text-2); margin-top: 3px; }
 .empty { color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-prose); max-width: var(--measure); margin-left: auto; margin-right: auto; padding: 26px 0; text-align: center; }
 
+/* ---- now ---- */
+.now { margin: 0 0 18px; }
+.now h2 { margin: 0 0 8px; }
+.now-rows { display: flex; flex-direction: column; gap: 6px; }
+.now-row {
+  display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px;
+}
+.now-job, .now-elapsed { font: var(--fs-floor) var(--mono); color: var(--text-2); }
+.now-agent { font: var(--fs-meta)/var(--lh-prose) var(--sans); color: var(--text); }
+.now-step, .now-action { font: var(--fs-floor) var(--mono); color: var(--text-2); overflow-wrap: anywhere; }
+
 /* ---- kanban ---- */
 .kanban { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
 .kcol { flex: 0 0 248px; width: 248px; min-width: 248px; max-width: 248px; }

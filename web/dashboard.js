@@ -57,7 +57,7 @@ function writeSplit(px) {
 const state = {
   index: null, graph: null, config: null, error: null, query: "", range: "30", file: null, source: "all", drawer: null,
   workspace: false, projects: [], selected: readChoice(), queueRows: [], queueErrors: [], queueStale: false,
-  split: readSplit(),
+  split: readSplit(), now: {}, nowSeq: 0,
 };
 if (queryProject()) writeChoice(state.selected);
 
@@ -677,11 +677,13 @@ function durationLabel(seconds) {
   return minutes + "m " + String(remain).padStart(2, "0") + "s";
 }
 function runMeta(run) {
-  const bits = [roundAttempt(run)];
+  const bits = [];
+  if (run.step) bits.push(String(run.step));
+  if (run.model) bits.push(String(run.model));
+  if (run.effort) bits.push(String(run.effort));
+  bits.push(roundAttempt(run));
   if (run.duration_s != null) bits.push(durationLabel(run.duration_s));
-  bits.push(run.status === "running" ? "running" : "done");
-  if (run.cost_usd != null && run.cost_usd !== undefined) bits.push(money(run.cost_usd));
-  else if (run.input_tokens || run.output_tokens) bits.push((run.input_tokens || 0) + " in / " + (run.output_tokens || 0) + " out");
+  if (typeof run.cost_usd === "number") bits.push(money(run.cost_usd));
   return bits.join("  ");
 }
 function clock(at) {
@@ -693,11 +695,6 @@ function pickRun(index) {
   state.drawer.run = index;
   state.drawer.runPicked = true;
   render();
-}
-function openJobFile(job, path) {
-  if (!state.drawer) return;
-  state.drawer.tab = "files";
-  pickFile(job, path);
 }
 function runList(job, runs, index) {
   const box = el("div", { class: "d-runs" });
@@ -714,39 +711,37 @@ function runList(job, runs, index) {
   });
   return box;
 }
-function eventMain(job, event) {
+function toolEvents(run) {
+  return (run.events || []).filter((event) => event && event.kind !== "text" && !event.text);
+}
+function eventMain(event) {
+  if (!event || event.kind === "text" || event.text) return null;
   const main = el("div", { class: "ev-main" });
-  if (event.kind === "text") {
-    main.append(el("p", { class: "ev-text", text: event.text || "" }));
-  } else if (event.job_file) {
-    main.append(el("button", {
-      type: "button", class: "ev-link",
-      onclick: () => openJobFile(job, event.job_file),
-    }, el("span", { text: (event.name || "Edit") + "  " + event.job_file })));
-  } else {
-    const summary = event.summary || event.path || "";
-    main.append(el("p", { class: "ev-tool", text: (event.name || "") + (summary ? "  " + summary : "") }));
+  main.append(document.createTextNode(event.name || ""));
+  const summary = event.summary || "";
+  if (summary) {
+    main.append(document.createTextNode(" "));
+    main.append(document.createTextNode(summary));
   }
-  if (event.output) main.append(el("pre", { class: "ev-out", text: event.output }));
   return main;
 }
-function timeline(job, run, error) {
+function timeline(run, error) {
   const box = el("div", { class: "d-doc d-timeline", tabindex: 0 });
   if (error) box.append(el("p", { class: "error", text: error }));
-  (run.events || []).forEach((event) => {
+  toolEvents(run).forEach((event) => {
+    const main = eventMain(event);
+    if (!main) return;
     box.append(el("div", { class: "ev" },
       el("span", { class: "ev-time", text: clock(event.at) }),
-      eventMain(job, event)));
+      main));
   });
-  if (run.result) {
-    box.append(el("div", { class: "ev" },
-      el("span", { class: "ev-time", text: "result" }),
-      el("p", { class: "ev-text", text: run.result })));
-  }
-  if (!(run.events || []).length && !run.result) box.append(el("p", { class: "kempty", text: "No events yet." }));
+  if (!toolEvents(run).length) box.append(el("p", { class: "kempty", text: "has not acted" }));
   return box;
 }
 function activityBody(job) {
+  if (!jobUsesClaude(job)) {
+    return el("div", { class: "d-activity" }, el("p", { class: "kempty", text: ACTIVITY_NOTICE }));
+  }
   const data = state.drawer.activity;
   if (!data) return el("div", { class: "d-activity" }, el("p", { class: "kempty", text: "Loading..." }));
   const runs = Array.isArray(data.runs) ? data.runs : [];
@@ -759,7 +754,7 @@ function activityBody(job) {
   if (index >= runs.length) index = runs.length - 1;
   if (index < 0) index = 0;
   return el("div", { class: "d-body", style: splitStyle() },
-    runList(job, runs, index), grip(), timeline(job, runs[index], data.error || ""));
+    runList(job, runs, index), grip(), timeline(runs[index], data.error || ""));
 }
 function drawer() {
   if (!state.drawer) return null;
@@ -806,6 +801,77 @@ function column(col, shown) {
       el("span", { class: "count", text: String(mine.length) })),
     mine.length ? mine.map((item) => col.queue ? queueCard(item) : jobCard(item)) : el("p", { class: "kempty", text: "—" }));
 }
+const ACTIVITY_NOTICE = "Agent activity is recorded for Claude Code.";
+function projectTools(project) {
+  return project && Array.isArray(project.tools) ? project.tools : [];
+}
+function jobUsesClaude(job) {
+  if (!state.workspace) {
+    const tools = state.index && Array.isArray(state.index.tools) ? state.index.tools : [];
+    return tools.indexOf("claude") >= 0;
+  }
+  const project = state.projects.find((item) => item.id === job.project);
+  return projectTools(project).indexOf("claude") >= 0;
+}
+function visibleUsesClaude() {
+  if (!state.workspace) return jobUsesClaude({});
+  return visibleProjects().some((project) => projectTools(project).indexOf("claude") >= 0);
+}
+function nowKey(job) {
+  return (job.project || "") + "\n" + job.id;
+}
+function lastTool(run) {
+  let tool = null;
+  (run.events || []).forEach((event) => {
+    if (!event || event.kind === "text" || event.text) return;
+    tool = event;
+  });
+  return tool;
+}
+function nowAction(tool) {
+  const node = el("span", { class: "now-action" });
+  if (!tool) {
+    node.append(document.createTextNode("has not acted"));
+    return node;
+  }
+  node.append(document.createTextNode(tool.name || ""));
+  if (tool.summary) {
+    node.append(document.createTextNode(" "));
+    node.append(document.createTextNode(tool.summary));
+  }
+  return node;
+}
+function nowRow(job, run) {
+  const who = state.workspace && state.selected === "all" && job.projectName
+    ? job.projectName + " · " + job.id
+    : job.id;
+  const tool = lastTool(run);
+  const started = tool && typeof run.started_at === "string" && run.started_at ? run.started_at : "";
+  return el("div", { class: "now-row" },
+    el("span", { class: "now-job", text: who }),
+    el("span", { class: "now-agent", text: run.agent || "" }),
+    el("span", { class: "now-step", text: run.step || "" }),
+    started ? el("span", { class: "now-elapsed", "data-started": started }) : null,
+    nowAction(tool));
+}
+function nowPanel(shown) {
+  const head = el("h2", { text: "Now" });
+  if (!visibleUsesClaude()) {
+    return el("section", { class: "now", "aria-label": "Now" },
+      head, el("p", { class: "kempty", text: ACTIVITY_NOTICE }));
+  }
+  const rows = [];
+  shown.forEach((job) => {
+    if (!jobUsesClaude(job)) return;
+    const body = state.now && state.now[nowKey(job)];
+    if (!body || !Array.isArray(body.runs)) return;
+    body.runs.forEach((run) => {
+      if (run && run.status === "running") rows.push(nowRow(job, run));
+    });
+  });
+  return el("section", { class: "now", "aria-label": "Now" },
+    head, rows.length ? el("div", { class: "now-rows" }, rows) : el("p", { class: "kempty", text: "Nothing running" }));
+}
 function boardSub() {
   if (!state.workspace) return (state.index.project && state.index.project.description) || "Jobs by step";
   const projects = visibleProjects();
@@ -837,6 +903,7 @@ function board() {
       el("div", {}, el("h1", { text: "Board" }), el("p", { class: "sub", text: boardSub() })),
       el("span", { class: "src", text: shown.length + " of " + all.length })),
     ...problemLines(),
+    nowPanel(shown),
     cols.length ? el("div", { class: "kanban" }, cols.map((col) => column(col, shown))) : el("p", { class: "kempty", text: state.workspace && !state.projects.length ? "no projects yet" : "no jobs" }),
   ];
   const panel = drawer();
@@ -1335,7 +1402,7 @@ function normalizeSelection() {
 function filterButton(id, text) {
   return el("button", {
     type: "button", text, "aria-pressed": state.selected === id ? "true" : "false",
-    onclick: () => { state.selected = id; writeChoice(id); render(); },
+    onclick: () => { state.selected = id; writeChoice(id); render(); refreshNow(); },
   });
 }
 function renderFilters() {
@@ -1366,6 +1433,18 @@ function paintLive() {
   const clock = document.getElementById("clock");
   if (status) status.textContent = label;
   if (clock) clock.textContent = label === "live" ? new Date().toLocaleTimeString() : "";
+  paintNowElapsed();
+}
+function paintNowElapsed() {
+  if (route().view !== "board") return;
+  document.querySelectorAll(".now-elapsed[data-started]").forEach((node) => {
+    const started = time(node.getAttribute("data-started"));
+    if (!started) {
+      node.textContent = "";
+      return;
+    }
+    node.textContent = durationLabel((Date.now() - started) / 1000);
+  });
 }
 function workspaceTitle() {
   const projects = visibleProjects();
@@ -1424,6 +1503,7 @@ function render() {
     if (close) close.focus();
     state.drawer.focus = false;
   } else if (keep && keep !== document.body) keep.focus({ preventScroll: true });
+  paintNowElapsed();
 }
 async function load(path) {
   const res = await fetch(path, { cache: "no-store" });
@@ -1438,6 +1518,29 @@ function openJob() {
 function refetchDrawer() {
   const open = openJob();
   if (open && state.drawer.path) fetchDrawer(open, state.drawer.path);
+}
+async function refreshNow() {
+  const seq = (state.nowSeq = (state.nowSeq || 0) + 1);
+  let list = [];
+  try {
+    list = jobs();
+  } catch (error) {
+    return;
+  }
+  const entries = await Promise.all(list.map(async (job) => {
+    try {
+      const res = await fetch(activityUrl(job), { cache: "no-store" });
+      if (!res.ok) return [nowKey(job), null];
+      return [nowKey(job), await res.json()];
+    } catch (error) {
+      return [nowKey(job), null];
+    }
+  }));
+  if (seq !== state.nowSeq) return;
+  const next = {};
+  entries.forEach((entry) => { next[entry[0]] = entry[1]; });
+  state.now = next;
+  if (route().view === "board") render();
 }
 function refreshActivity() {
   if (!state.drawer || state.drawer.tab !== "activity" || route().view !== "board") return;
@@ -1499,6 +1602,7 @@ async function refreshWorkspace() {
     paintLive();
   }
   refreshActivity();
+  refreshNow();
 }
 async function refreshSingle() {
   const [index, graph] = await Promise.all([load("jobs/index.json"), load("jobs/graph.json")]);
@@ -1512,6 +1616,7 @@ async function refreshSingle() {
     refetchDrawer();
   } else paintLive();
   refreshActivity();
+  refreshNow();
 }
 async function tryProjects() {
   // false: this server has no workspace. null: try again next tick. object: the workspace.
@@ -1539,6 +1644,7 @@ async function refresh() {
         render();
         refetchDrawer();
         refreshQueue();
+        refreshNow();
         if (!queueTimer) queueTimer = setInterval(refreshQueue, QUEUE_MS);
         return;
       }
