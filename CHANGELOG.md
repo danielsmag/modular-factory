@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.14.0
+
 - The dashboard tab shows the factory mark as its icon instead of the browser's default globe.
 
 ## 0.13.1
