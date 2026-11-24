@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- The Board has a Now panel of the agents still on the current step. Agent activity sends the tool name and a short label only, not tool output, file contents, or assistant replies.
+
 ## 0.15.1
 
 - Agent activity rows are smaller and grey. Labels line up, and the same file edited several times in a row shows once with a count.

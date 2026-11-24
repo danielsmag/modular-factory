@@ -147,7 +147,8 @@ def follow(job, step, outcome):
   requests with another `Host` header, serves only `.md` and `.log` files from
   `.factory/jobs/`, loads nothing from the network, and builds its page
   without ever turning text into markup, because job text comes from GitHub
-  issues.
+  issues. Agent activity sends the tool name and a short label only, not tool
+  output, file contents, or assistant replies.
 
 ## Differences between the tools
 
@@ -232,7 +233,7 @@ each tool allows.
 - **Overview is the job table.** Running slots, a running total of merged jobs
   with a steady-pace line, and cost or time by step. Not jobs per day: with a
   few merges a week, a per-day chart is mostly zeros. The board stays jobs by
-  step.
+  step, with a Now panel of the agents still on the current step.
 - **The pipeline view is a column of steps** with forward edges on the right
   and back edges on the left. A left-to-right drawing of twelve steps was too
   small to read.

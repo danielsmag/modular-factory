@@ -38,7 +38,7 @@
   <p>A reply to a human step counts only from the issue's author, from someone with write access, from the operator, or from named logins, depending on the step. <code>replies = "tool"</code> ignores comments and takes the reply from the coding tool. Comments from anyone else are ignored.</p>
 
   <h2 id="the-dashboard">The dashboard</h2>
-  <p>The dashboard changes nothing. It answers only on <code>127.0.0.1</code>, refuses requests with another <code>Host</code> header, serves only <code>.md</code> and <code>.log</code> files from <code>.factory/jobs/</code>, loads nothing from the network, and builds its page without ever turning text into markup, because job text comes from GitHub issues.</p>
+  <p>The dashboard changes nothing. It answers only on <code>127.0.0.1</code>, refuses requests with another <code>Host</code> header, serves only <code>.md</code> and <code>.log</code> files from <code>.factory/jobs/</code>, loads nothing from the network, and builds its page without ever turning text into markup, because job text comes from GitHub issues. Agent activity sends the tool name and a short label only, not tool output, file contents, or assistant replies.</p>
 
   <h2 id="what-is-untested">What is untested</h2>
   <aside class="callout bad">

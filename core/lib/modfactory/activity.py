@@ -5,7 +5,8 @@ Claude's files are the same ones `cost.py` reads. Cursor writes one jsonl per
 subagent under `~/.cursor/projects/<repo>/agent-transcripts`. Neither format is
 a documented interface, so a bad file is skipped and the dashboard still answers.
 
-Tool output is redacted and clipped before it is stored or sent.
+A run stores the tool name, a short label, and a step's final summary. It does
+not store or send tool output, file contents, or assistant replies.
 """
 
 from __future__ import annotations
@@ -174,6 +175,7 @@ class ActivityLog:
         if supported:
             runs.extend(self._placeholders(job, runs))
         runs.sort(key=_sort_key)
+        _annotate(self._cfg, runs)
         body: dict[str, Any] = {"runs": runs}
         if errors:
             body["error"] = "; ".join(errors)
@@ -303,11 +305,10 @@ def _merge(
     return chosen
 
 
-def _present(run: dict[str, Any], growing: bool, job: dict[str, Any]) -> dict[str, Any]:
+def _present(run: dict[str, Any], _growing: bool, job: dict[str, Any]) -> dict[str, Any]:
     shown: dict[str, Any] = {key: value for key, value in run.items() if key != "events"}
-    events: object = run.get("events")
-    shown["events"] = [dict(event) for event in events] if isinstance(events, list) else []
-    current: bool = growing and _current(shown, job)
+    shown["events"] = _public_events(run.get("events"))
+    current: bool = _current(shown, job)
     shown["status"] = "running" if current else "done"
     if current:
         shown.pop("ended_at", None)
@@ -406,7 +407,13 @@ def _read_snapshot(job_dir: Path) -> tuple[list[dict[str, Any]], str | None]:
     runs: object = loaded.get("runs")
     if not isinstance(runs, list):
         return [], "activity.json unreadable"
-    clean: list[dict[str, Any]] = [item for item in runs if isinstance(item, dict)]
+    clean: list[dict[str, Any]] = []
+    for item in runs:
+        if not isinstance(item, dict):
+            continue
+        stored: dict[str, Any] = {key: value for key, value in item.items() if key != "result"}
+        stored["events"] = _public_events(item.get("events"))
+        clean.append(stored)
     return clean, None
 
 
@@ -753,30 +760,17 @@ def _step_event(data: dict[str, Any], at: str | None) -> dict[str, Any]:
 
 
 def _finish_result(events: list[dict[str, Any]]) -> str:
-    """The answer is the last prose after the last step, else that step's summary, else the last prose."""
-    last_step: int = -1
-    last_text: int = -1
-    for index, event in enumerate(events):
-        if event.get("kind") == "step":
-            last_step = index
-        elif event.get("kind") == "text":
-            last_text = index
-    if last_text > last_step:
-        return _pop_text(events, last_text)
-    if last_step >= 0:
-        found: object = events[last_step].get("result")
+    """The answer is the last step's final summary. Assistant prose stays off the page."""
+    event: dict[str, Any]
+    for event in reversed(events):
+        if event.get("kind") != "step":
+            continue
+        found: object = event.get("result")
         if isinstance(found, str) and found:
-            del events[last_step]["result"]
+            del event["result"]
             return found
-    if last_text >= 0:
-        return _pop_text(events, last_text)
+        return ""
     return ""
-
-
-def _pop_text(events: list[dict[str, Any]], index: int) -> str:
-    text: object = events[index].get("text")
-    del events[index]
-    return text if isinstance(text, str) else ""
 
 
 def _add_cost(
@@ -873,3 +867,83 @@ def _clip(text: str) -> str:
 
 def _show(text: str) -> str:
     return _clip(_redact(text))
+
+
+def _public_events(events: object) -> list[dict[str, Any]]:
+    """Tool name and short label only. Text, tool output, and file contents stay out."""
+    if not isinstance(events, list):
+        return []
+    clean: list[dict[str, Any]] = []
+    for event in events:
+        if not isinstance(event, dict) or event.get("kind") == "text":
+            continue
+        item: dict[str, Any] = {
+            key: value for key, value in event.items() if key not in {"output", "path", "job_file"}
+        }
+        summary: object = item.get("summary")
+        if isinstance(summary, str):
+            item["summary"] = _show(summary)
+        clean.append(item)
+    return clean
+
+
+_EFFORT_RISKS: tuple[str | None, ...] = (None, "low", "medium", "high")
+
+
+def _effort_for(cfg: Config, agent: object) -> str | None:
+    """Configured Claude Code effort for the agent this run started.
+
+    The agent name has to select the key and risk. The job's current intake
+    risk is not consulted.
+    """
+    if not isinstance(agent, str) or not agent:
+        return None
+    wanted: str = shown_agent(agent)
+    best_key: str | None = None
+    best_risk: str | None = None
+    best_len: int = -1
+    for key in cfg.agent_keys(every=True):
+        if not isinstance(key, str):
+            continue
+        for risk in _EFFORT_RISKS:
+            if shown_agent(cfg.agent_name(key, risk)) != wanted:
+                continue
+            if len(key) <= best_len:
+                continue
+            best_key = key
+            best_risk = risk
+            best_len = len(key)
+    if best_key is None:
+        return None
+    chosen: object = cfg.model_for("claude", best_key, best_risk)
+    if not isinstance(chosen, dict):
+        return None
+    effort: object = chosen.get("effort")
+    if isinstance(effort, str) and effort:
+        return effort
+    return None
+
+
+def _cost_enabled(cfg: Config) -> bool:
+    """Same gate as `job_cost`: Claude Code is on, and `[tools.claude].cost` is not false."""
+    if "claude" not in cfg.tools:
+        return False
+    tools: object = cfg["tools"]
+    if not isinstance(tools, dict):
+        return False
+    claude: object = tools.get("claude", {})
+    if not isinstance(claude, dict):
+        return True
+    return bool(claude.get("cost", True))
+
+
+def _annotate(cfg: Config, runs: list[dict[str, Any]]) -> None:
+    priced: bool = _cost_enabled(cfg)
+    for run in runs:
+        effort: str | None = _effort_for(cfg, run.get("agent"))
+        if effort is None:
+            run.pop("effort", None)
+        else:
+            run["effort"] = effort
+        if not priced:
+            run["cost_usd"] = None
