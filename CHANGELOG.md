@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.19.0
+
 - Agent activity cards cover edits and other tools too. Shell cards show the program name in backticks, and the `$` line matches the command color.
 
 ## 0.18.0
