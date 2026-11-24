@@ -125,6 +125,41 @@ def test_an_unchanged_transcript_stays_running_and_drops_output(world) -> None:
     assert "TOOL_RESULT_SHOULD_NOT_LEAK" not in text
 
 
+def test_a_secret_in_a_read_path_is_not_sent(world) -> None:
+    activity.clear_cache()
+    job: str = world.create(world.issue())
+    folder: Path = world.dir(job)
+    secret_path: str = "notes/sk-live-secret123.md"
+    prompt: str = f"Job: {job}. Step: build. Agent: mfactory-build. Round: 1. Attempt: 1. Job folder: {folder}/. "
+    read_tool: dict[str, object] = {
+        "type": "tool_use", "id": "tool-read", "name": "Read", "input": {"file_path": secret_path},
+    }
+    edit_tool: dict[str, object] = {
+        "type": "tool_use", "id": "tool-edit", "name": "Edit", "input": {"file_path": str(folder / secret_path)},
+    }
+    _put(world.repo, "agent-read.jsonl", [
+        _user(prompt), _assistant("READ_PROSE_SHOULD_NOT_LEAK", tools=[read_tool, edit_tool]),
+    ])
+    state: dict[str, object] = {"step": "build", "round": 1, "attempt": 1, "intake": None, "agents": None}
+    payload: dict[str, object] = activity.job_activity(world.factory().cfg, state, folder)
+    text: str = json.dumps(payload)
+    assert "sk-live-secret123" not in text
+    run: dict[str, object] = _runs(payload)[0]
+    events: object = run["events"]
+    assert isinstance(events, list) and len(events) == 2
+    found: dict[str, dict[str, object]] = {}
+    event: object
+    for event in events:
+        assert isinstance(event, dict)
+        name: object = event.get("name")
+        assert isinstance(name, str)
+        found[name] = event
+    assert found["Read"]["summary"] == "notes/[redacted].md"
+    assert "path" not in found["Read"]
+    assert "path" not in found["Edit"]
+    assert "job_file" not in found["Edit"]
+
+
 def test_a_past_attempt_is_done_and_a_placeholder_has_no_start(world) -> None:
     activity.clear_cache()
     job: str = world.create(world.issue())

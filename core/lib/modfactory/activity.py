@@ -760,7 +760,9 @@ def _public_events(events: object) -> list[dict[str, Any]]:
     for event in events:
         if not isinstance(event, dict) or event.get("kind") == "text":
             continue
-        item: dict[str, Any] = {key: value for key, value in event.items() if key != "output"}
+        item: dict[str, Any] = {
+            key: value for key, value in event.items() if key not in {"output", "path", "job_file"}
+        }
         summary: object = item.get("summary")
         if isinstance(summary, str):
             item["summary"] = _show(summary)
