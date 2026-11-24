@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- The Board has a Now panel of the agents still on the current step. Agent activity sends the tool name and a short label only, not tool output, file contents, or assistant replies.
+
 ## 0.13.0
 
 - The dashboard draws a project's pipeline from `factory.toml` when that project has no `graph.json`, including when it has no jobs. A `graph.json` already on disk is still the pipeline for that project.

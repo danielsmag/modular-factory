@@ -20,7 +20,7 @@ mfactory dashboard --port 4747 --no-open</code></pre>
   <p>The page comes with the global install (<code>install.sh --global</code>), so a machine has one dashboard and no copy sits in <code>.factory/</code>. <code>.factory/bin/mfactory dashboard</code>, <code>start</code> and <code>stop</code> hand off to the global <code>mfactory</code>.</p>
   <p>The page has five views:</p>
   <ul>
-    <li><strong>Board.</strong> Jobs by step.</li>
+    <li><strong>Board.</strong> Jobs by step, with a Now panel of the agents still on the current step.</li>
     <li><strong>Pipeline.</strong> A column of steps. Forward edges on the right, back edges on the left, and how many jobs sit in each step.</li>
     <li><strong>Jobs.</strong> What each job wrote: spec, build, checks, reviews.</li>
     <li><strong>Overview.</strong> Running slots, a running total of merged jobs with a steady-pace line, cost or time by step, and the job table. With a few merges a week, a per-day chart is mostly zeros.</li>
