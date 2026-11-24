@@ -155,3 +155,23 @@ all = ["all"]
 
 [steps.build]
 rules = ["AGENTS.md", "user:CLAUDE.md"]
+
+# ---- Reviewers and custom steps --------------------------------------------
+#
+# A reviewer you add needs a focus, a prompt file, or both.
+# A custom step needs instructions, an instructions file, or both.
+# Both paths are from the repo root. The file must exist, or sync fails.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#reviewers-and-surfaces
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#adding-a-step
+#
+# [reviewers.data]
+# prompt = "docs/review-data.md"
+#
+# [surfaces.pipelines]
+# when = "it changes a pipeline, a model, or a warehouse query"
+# reviewers = ["data"]
+#
+# [steps.docs]
+# type = "agent"
+# instructions_file = "docs/docs-step.md"
+# on = { DONE = "gate", SKIP = "gate" }

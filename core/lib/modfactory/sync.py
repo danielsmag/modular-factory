@@ -436,6 +436,7 @@ class Agent:
     sections: list = field(default_factory=list)   # (heading, text) from the project's config
     skills: list[SkillRef] = field(default_factory=list)
     rules: list[RuleRef] = field(default_factory=list)
+    prompt: str | None = None   # repo-relative file listed after the role files
 
 
 def _everything(cfg: Config, home: Path) -> list[SkillRef]:
@@ -513,12 +514,22 @@ def _pull_request_title(cfg: Config, kind: str) -> str | None:
     return "\n".join(lines)
 
 
+def _prompt_file(settings: dict[str, Any], key: str) -> str | None:
+    """The repo-relative prompt path on `settings`, or None when that key is unset."""
+    raw: object = settings.get(key)
+    if not isinstance(raw, str):
+        return None
+    text: str = raw.strip()
+    return text or None
+
+
 def agents(cfg: Config) -> list[Agent]:
     """Every agent the factory can start, one per risk variant."""
     out: list[Agent] = []
     problems: list[str] = []
     home: Path = skill_home()
     for key in cfg.agent_keys():
+        prompt_file: str | None = None
         if key.startswith("reviewer-") and key.removeprefix("reviewer-") in cfg.reviewers:
             reviewer = key.removeprefix("reviewer-")
             settings = cfg.reviewers[reviewer]
@@ -532,6 +543,7 @@ def agents(cfg: Config) -> list[Agent]:
                          f"You are the `{reviewer}` reviewer. Write `round-<N>/review-{reviewer}.md`.")]
             if settings.get("focus"):
                 sections.append(("What to look for", settings["focus"]))
+            prompt_file = _prompt_file(settings, "prompt")
         else:
             settings = cfg.steps[key]
             where = f"[steps.{key}]"
@@ -548,9 +560,12 @@ def agents(cfg: Config) -> list[Agent]:
                                  + (surfaces or "(none defined)") + "\n\nUse only these names, or `none`."))
             elif kind == "custom":
                 writes = settings.get("writes") or f"{key}.md"
-                sections.append(("Your task", settings["instructions"].strip()))
+                task: str = (settings.get("instructions") or "").strip()
+                if task:
+                    sections.append(("Your task", task))
                 sections.append(("Your file", f"Write `{writes}` in the job folder. Its first line must be "
                                  f"`STATUS: <OUTCOME>`, with OUTCOME one of: {', '.join(settings['on'])}."))
+                prompt_file = _prompt_file(settings, "instructions_file")
             if key == "approve":
                 merge_step: dict = cfg.steps.get("merge", {})
                 who_merges: str
@@ -571,7 +586,7 @@ def agents(cfg: Config) -> list[Agent]:
         for risk in [None] + cfg.variants(key):
             note = f" For {risk}-risk jobs." if risk else ""
             out.append(Agent(key, cfg.agent_name(key, risk), risk, kind, description + note, roles,
-                             sections, skills, rules))
+                             sections, skills, rules, prompt_file))
     if problems:
         raise ConfigError(problems)
     return out
@@ -604,6 +619,8 @@ def body(cfg: Config, tool: str, agent: Agent, index: SkillIndex | None = None) 
     lines = ["You are one agent of this project's software factory. Your prompt names the main checkout.",
              "Read these files there, in this order, and follow them exactly:", ""]
     lines += [f"{i}. `.factory/roles/{name}`" for i, name in enumerate(agent.roles, 1)]
+    if agent.prompt:
+        lines.append(f"{len(agent.roles) + 1}. `{agent.prompt}`")
     if agent.rules:
         lines += ["", "## Instruction files", "",
                   "Read each of these before you start, and follow it for this job:", ""]

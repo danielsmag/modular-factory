@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- `[reviewers.<name>].prompt` and `[steps.<name>].instructions_file` name a file in the repo. The agent reads it after its role prompt. A reviewer you add needs `focus` or `prompt`. A custom step needs `instructions` or `instructions_file`. A missing file, or a path outside the repo, fails sync. Schema stays 1.
+
 ## 0.10.0
 
 - `rules` names instruction files for an agent: `AGENTS.md`, `CLAUDE.md`, a rule file, `user:CLAUDE.md`, or `all` for every one found in the repo and on this machine. The default is `[rules] all = ["all"]`, and the builder also reads `AGENTS.md` and `user:CLAUDE.md`. Empty `rules` still reads `AGENTS.md`, or `CLAUDE.md` when `AGENTS.md` is missing. A missing project file fails sync. A missing user file does not; `doctor` warns. Schema stays 1.
