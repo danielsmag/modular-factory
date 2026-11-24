@@ -8,6 +8,22 @@ changes when it does, and this file says what to change.
 
 - The Board has a Now panel of the agents still on the current step. Agent activity sends the tool name and a short label only, not tool output, file contents, or assistant replies.
 
+## 0.15.1
+
+- Agent activity rows are smaller and grey. Labels line up, and the same file edited several times in a row shows once with a count.
+
+## 0.15.0
+
+- The Agent activity tab reads Cursor's agent transcripts too, so a project that runs only Cursor shows what each agent did. Each run is a list of steps you can open. A closed step shows counts such as "Read 6". An open step shows each file read, search, edit and command. A command's full text opens under its row.
+
+## 0.14.0
+
+- The dashboard tab shows the factory mark as its icon instead of the browser's default globe.
+
+## 0.13.1
+
+- Job times on the dashboard move while the page is open. A running job's age, and the "just now" and "since" labels, no longer wait for a refresh.
+
 ## 0.13.0
 
 - The dashboard draws a project's pipeline from `factory.toml` when that project has no `graph.json`, including when it has no jobs. A `graph.json` already on disk is still the pipeline for that project.

@@ -351,6 +351,34 @@ function elapsed(job) {
   if (!start) return "-";
   return span(((time(job.finished_at) || Date.now()) - start) / 1000);
 }
+function ageText(kind, stamp) {
+  if (kind === "span") {
+    const start = time(stamp);
+    if (!start) return "-";
+    return span((Date.now() - start) / 1000);
+  }
+  if (kind === "since") {
+    const label = ago(stamp);
+    return label === "-" ? "since -" : "since " + label;
+  }
+  return ago(stamp);
+}
+function ageNode(stamp, kind) {
+  const text = ageText(kind, stamp);
+  if (!time(stamp)) return el("span", { text });
+  return el("span", { "data-age": stamp, "data-age-kind": kind, text });
+}
+function elapsedNode(job) {
+  if (!time(job.created_at)) return el("span", { text: "-" });
+  if (time(job.finished_at)) return el("span", { text: elapsed(job) });
+  return ageNode(job.created_at, "span");
+}
+function paintAges() {
+  document.querySelectorAll("[data-age]").forEach((node) => {
+    const text = ageText(node.getAttribute("data-age-kind") || "ago", node.getAttribute("data-age"));
+    if (node.textContent !== text) node.textContent = text;
+  });
+}
 function waitingAudience(job) {
   const who = job.waiting && job.waiting.who;
   if (who === "author") return "the author (@" + job.author + ")";
@@ -468,7 +496,7 @@ function jobCard(job) {
     el("div", { class: "meta" },
       job.intake && job.intake.risk ? el("span", { class: riskClass(job.intake.risk), text: job.intake.risk }) : null,
       el("span", { text: job.cost_usd !== null && job.cost_usd !== undefined ? money(job.cost_usd) : "—" }),
-      el("span", { text: elapsed(job) })),
+      elapsedNode(job)),
     hint ? el("p", { class: "hint", text: hint }) : null);
 }
 const FILE_ORDER = ["issue.md", "intake.md", "spec.md", "build.md", "decision.md", "verify.md", "rejection.md"];
@@ -688,10 +716,6 @@ function runMeta(run) {
   if (typeof run.cost_usd === "number") bits.push(money(run.cost_usd));
   return bits.join("  ");
 }
-function clock(at) {
-  const match = String(at || "").match(/T(\d{2}:\d{2}:\d{2})/);
-  return match ? match[1] : "";
-}
 function pickRun(index) {
   if (!state.drawer) return;
   state.drawer.run = index;
@@ -714,35 +738,248 @@ function runList(job, runs, index) {
   });
   return box;
 }
-function toolEvents(run) {
-  return (run.events || []).filter((event) => event && event.kind !== "text" && !event.text);
+const EDIT_NAMES = new Set(["write", "edit", "strreplace", "search_replace", "multiedit", "notebookedit", "delete"]);
+const SHELL_NAMES = new Set(["bash", "shell"]);
+function isStepEvent(event) {
+  if (!event) return false;
+  if (event.kind === "step") return true;
+  const name = String(event.name || "").toLowerCase();
+  return name === "updatecurrentstep" || name === "update_current_step";
 }
-function eventMain(event) {
-  if (!event || event.kind === "text" || event.text) return null;
-  const main = el("div", { class: "ev-main ev-tool" });
-  main.append(document.createTextNode(event.name || ""));
-  const summary = event.summary || "";
-  if (summary) {
-    main.append(document.createTextNode(" "));
-    main.append(document.createTextNode(summary));
+function verbOf(event) {
+  const name = String(event.name || "").toLowerCase();
+  if (event.kind === "edit" || EDIT_NAMES.has(name)) return "Edited";
+  if (name === "read") return "Read";
+  if (name === "grep" || name === "glob") return name === "glob" ? "Found" : "Searched";
+  if (SHELL_NAMES.has(name)) return "Ran";
+  if (name === "webfetch" || name === "websearch") return "Searched";
+  return "Used";
+}
+function shortPath(path) {
+  const parts = String(path || "").split("/").filter(Boolean);
+  if (parts.length <= 2) return parts.join("/");
+  return parts.slice(-2).join("/");
+}
+function clipLine(text, max) {
+  const line = String(text || "").split("\n")[0].trim();
+  if (line.length <= max) return line;
+  return line.slice(0, max - 1) + "…";
+}
+function actionLabel(event) {
+  const name = String(event.name || "").toLowerCase();
+  if (event.job_file) return event.job_file;
+  if ((name === "grep" || name === "glob") && event.summary) {
+    const summary = String(event.summary);
+    const pattern = event.path && summary.startsWith(event.path) ? summary.slice(event.path.length).trim() : summary;
+    const where = event.path ? shortPath(event.path) : "";
+    if (pattern && where) return clipLine(pattern, 48) + "  in " + where;
+    return clipLine(pattern || where, 72);
   }
-  return main;
+  if (event.path) return shortPath(event.path);
+  const summary = clipLine(event.summary, 72);
+  if (verbOf(event) === "Used" && event.name) return summary ? event.name + "  " + summary : event.name;
+  return summary;
 }
-function timeline(run, error) {
+function titleFromText(text) {
+  const line = String(text || "").split("\n").map((part) => part.trim()).find(Boolean) || "";
+  if (!line) return "";
+  const sentence = line.split(/(?<=[.!?])\s/)[0];
+  return sentence.length > 96 ? sentence.slice(0, 93) + "…" : sentence;
+}
+function verbPhrase(event) {
+  const verb = verbOf(event);
+  const label = actionLabel(event);
+  if (!label || label === verb) return verb;
+  return verb + " " + label;
+}
+function stepsOf(run) {
+  const steps = [];
+  let pending = [];
+  let current = null;
+  function start(title, fromTools) {
+    if (current && (current.text.length || current.actions.length)) steps.push(current);
+    current = { title: title || "Working", text: pending.slice(), actions: [], fromTools: !!fromTools, result: false };
+    pending = [];
+  }
+  (run.events || []).forEach((event) => {
+    if (isStepEvent(event)) {
+      start(event.summary || "Working", false);
+      return;
+    }
+    if (event.kind === "text") {
+      const text = event.text || "";
+      if (current && current.actions.length) pending.push(text);
+      else if (current) current.text.push(text);
+      else pending.push(text);
+      return;
+    }
+    if (!current || (pending.length && current.actions.length)) {
+      const heading = titleFromText(pending.join("\n"));
+      start(heading || verbPhrase(event), !heading);
+    }
+    current.actions.push(event);
+  });
+  if (pending.length) {
+    if (current && !current.actions.length) current.text.push(...pending);
+    else {
+      if (current && (current.text.length || current.actions.length)) steps.push(current);
+      const text = pending.join("\n\n");
+      steps.push({ title: titleFromText(text) || "Note", text: [text], actions: [], fromTools: false, result: false });
+      current = null;
+    }
+  } else if (current && (current.text.length || current.actions.length)) {
+    steps.push(current);
+  }
+  if (run.result) steps.push({ title: "Result", text: [run.result], actions: [], fromTools: false, result: true });
+  return steps;
+}
+function visibleText(step) {
+  const text = step.text.filter(Boolean).join("\n\n").trim();
+  if (!text || text === step.title) return "";
+  return text;
+}
+function groupsOf(actions) {
+  const groups = [];
+  actions.forEach((event) => {
+    const verb = verbOf(event);
+    const last = groups[groups.length - 1];
+    if (last && last.verb === verb) last.items.push(event);
+    else groups.push({ verb, items: [event] });
+  });
+  return groups;
+}
+function metaOf(step) {
+  if (step.actions.length < 2) return "";
+  const groups = groupsOf(step.actions);
+  const bits = groups.slice(0, 3).map((group) => group.items.length > 1 ? group.verb + " " + group.items.length : group.verb);
+  if (groups.length > 3) bits.push("+" + (groups.length - 3));
+  return bits.join(" · ");
+}
+function stepIdentity(run, index) {
+  return [run.agent || "", run.step || "", run.round, run.attempt, run.started_at || "", index].join("|");
+}
+function stepOpen(run, key, index, total, step) {
+  const store = state.drawer && state.drawer.openSteps;
+  if (store && Object.prototype.hasOwnProperty.call(store, key)) return !!store[key];
+  if (run.status === "running") return index === total - 1;
+  return !!(step && step.result);
+}
+function toggleStep(key, open) {
+  if (!state.drawer) return;
+  if (!state.drawer.openSteps) state.drawer.openSteps = {};
+  state.drawer.openSteps[key] = open;
+  render();
+}
+function actionOpen(key) {
+  return !!(state.drawer && state.drawer.openActions && state.drawer.openActions[key]);
+}
+function toggleAction(key, open) {
+  if (!state.drawer) return;
+  if (!state.drawer.openActions) state.drawer.openActions = {};
+  state.drawer.openActions[key] = open;
+  render();
+}
+function actionExtra(event) {
+  const chunks = [];
+  if (event.detail) chunks.push(event.detail);
+  if (event.output) chunks.push(event.output);
+  const summary = String(event.summary || "");
+  if (!event.detail && !event.path && summary && (summary.includes("\n") || summary.length > 72) && summary !== actionLabel(event)) {
+    chunks.push(summary);
+  }
+  return chunks;
+}
+function actionNode(job, event, key, times) {
+  const verb = verbOf(event);
+  const label = actionLabel(event) || verb;
+  const full = event.path || event.detail || event.summary || "";
+  const extra = actionExtra(event);
+  const count = times > 1 ? el("span", { class: "act-count", text: "×" + times }) : null;
+  const spacer = el("span", { class: "chev-space", "aria-hidden": "true" });
+  if (event.job_file && !extra.length) {
+    return el("div", { class: "act", title: full },
+      spacer,
+      el("span", { class: "act-verb", text: verb }),
+      el("button", {
+        type: "button", class: "ev-link",
+        onclick: () => openJobFile(job, event.job_file),
+      }, el("span", { text: event.job_file })),
+      count);
+  }
+  if (!extra.length) {
+    return el("div", { class: "act", title: full },
+      spacer,
+      el("span", { class: "act-verb", text: verb }),
+      el("span", { class: "act-label", text: label }),
+      count);
+  }
+  const open = actionOpen(key);
+  const row = el("button", {
+    type: "button", class: "act", "aria-expanded": String(open), title: full,
+    onclick: () => toggleAction(key, !open),
+  },
+    el("span", { class: "chev-space", "aria-hidden": "true" }, el("span", { class: "chev small" })),
+    el("span", { class: "act-verb", text: verb }),
+    el("span", { class: "act-label", text: label }),
+    count);
+  const box = el("div", { class: "act-wrap" + (open ? " open" : "") }, row);
+  if (open) extra.forEach((text) => box.append(el("pre", { class: "ev-out", text })));
+  return box;
+}
+function foldedActions(actions) {
+  const rows = [];
+  actions.forEach((event, index) => {
+    const last = rows[rows.length - 1];
+    const plain = !actionExtra(event).length;
+    if (last && plain && last.plain && verbOf(last.event) === verbOf(event) && actionLabel(last.event) === actionLabel(event)) {
+      last.times += 1;
+      return;
+    }
+    rows.push({ event, index, times: 1, plain });
+  });
+  return rows;
+}
+function stepBody(job, step, key) {
+  const body = el("div", { class: "step-body" });
+  const text = visibleText(step);
+  if (text) body.append(el("p", { class: "step-text", text }));
+  foldedActions(step.actions).forEach((row) => body.append(actionNode(job, row.event, key + "#" + row.index, row.times)));
+  if (!text && !step.actions.length) body.append(el("p", { class: "kempty", text: "Nothing recorded for this step." }));
+  return body;
+}
+function timeline(job, run, error) {
   const box = el("div", { class: "d-doc d-timeline", tabindex: 0, "data-focus": "drawer-timeline" });
   if (error) box.append(el("p", { class: "error", text: error }));
-  toolEvents(run).forEach((event) => {
-    const main = eventMain(event);
-    if (!main) return;
-    box.append(el("div", { class: "ev" },
-      el("span", { class: "ev-time", text: clock(event.at) }),
-      main));
+  const heading = [run.agent || "Agent"];
+  if (run.model) heading.push(run.model);
+  box.append(el("div", { class: "run-head" },
+    el("h4", { text: heading.join("  ·  ") }),
+    el("p", { text: runMeta(run) })));
+  const steps = stepsOf(run);
+  if (!steps.length) {
+    box.append(el("p", { class: "kempty", text: run.status === "running" ? "Waiting for the first action." : "No actions recorded." }));
+    return box;
+  }
+  steps.forEach((step, index) => {
+    const key = stepIdentity(run, index);
+    const open = stepOpen(run, key, index, steps.length, step);
+    const head = el("button", {
+      type: "button", class: "step-head", "aria-expanded": String(open),
+      onclick: () => toggleStep(key, !open),
+    },
+      el("span", { class: "chev", "aria-hidden": "true" }),
+      el("span", { class: "step-copy" },
+        el("span", { class: "step-title", text: step.title }),
+        metaOf(step) ? el("span", { class: "step-meta", text: metaOf(step) }) : null),
+      run.status === "running" && index === steps.length - 1 ? el("i", { class: "pulse", "aria-hidden": "true" }) : null);
+    const section = el("section", { class: "step" + (open ? " open" : "") + (step.result ? " result" : "") }, head);
+    if (open) section.append(stepBody(job, step, key));
+    box.append(section);
   });
-  if (!toolEvents(run).length) box.append(el("p", { class: "kempty", text: "has not acted" }));
   return box;
 }
 function activityBody(job) {
-  if (!jobUsesClaude(job)) {
+  if (!jobRecordsActivity(job)) {
     return el("div", { class: "d-activity" }, el("p", { class: "kempty", text: ACTIVITY_NOTICE }));
   }
   const data = state.drawer.activity;
@@ -757,7 +994,7 @@ function activityBody(job) {
   if (index >= runs.length) index = runs.length - 1;
   if (index < 0) index = 0;
   return el("div", { class: "d-body", style: splitStyle() },
-    runList(job, runs, index), grip(), timeline(runs[index], data.error || ""));
+    runList(job, runs, index), grip(), timeline(job, runs[index], data.error || ""));
 }
 function drawer() {
   if (!state.drawer) return null;
@@ -804,21 +1041,24 @@ function column(col, shown) {
       el("span", { class: "count", text: String(mine.length) })),
     mine.length ? mine.map((item) => col.queue ? queueCard(item) : jobCard(item)) : el("p", { class: "kempty", text: "—" }));
 }
-const ACTIVITY_NOTICE = "Agent activity is recorded for Claude Code.";
+const ACTIVITY_NOTICE = "Agent activity is recorded for Claude Code and Cursor.";
 function projectTools(project) {
   return project && Array.isArray(project.tools) ? project.tools : [];
 }
-function jobUsesClaude(job) {
+function recordsActivity(tools) {
+  return tools.indexOf("claude") >= 0 || tools.indexOf("cursor") >= 0;
+}
+function jobRecordsActivity(job) {
   if (!state.workspace) {
     const tools = state.index && Array.isArray(state.index.tools) ? state.index.tools : [];
-    return tools.indexOf("claude") >= 0;
+    return recordsActivity(tools);
   }
   const project = state.projects.find((item) => item.id === job.project);
-  return projectTools(project).indexOf("claude") >= 0;
+  return recordsActivity(projectTools(project));
 }
-function visibleUsesClaude() {
-  if (!state.workspace) return jobUsesClaude({});
-  return visibleProjects().some((project) => projectTools(project).indexOf("claude") >= 0);
+function visibleRecordsActivity() {
+  if (!state.workspace) return jobRecordsActivity({});
+  return visibleProjects().some((project) => recordsActivity(projectTools(project)));
 }
 function nowKey(job) {
   return (job.project || "") + "\n" + job.id;
@@ -859,13 +1099,13 @@ function nowRow(job, run) {
 }
 function nowPanel(shown) {
   const head = el("h2", { text: "Now" });
-  if (!visibleUsesClaude()) {
+  if (!visibleRecordsActivity()) {
     return el("section", { class: "now", "aria-label": "Now" },
       head, el("p", { class: "kempty", text: ACTIVITY_NOTICE }));
   }
   const rows = [];
   shown.forEach((job) => {
-    if (!jobUsesClaude(job)) return;
+    if (!jobRecordsActivity(job)) return;
     const body = state.now && state.now[nowKey(job)];
     if (!body || !Array.isArray(body.runs)) return;
     body.runs.forEach((run) => {
@@ -880,15 +1120,15 @@ function nowPanel(shown) {
     head, rows.length ? el("div", { class: "now-rows" }, rows) : el("p", { class: "kempty", text: "Nothing running" }));
 }
 function nowPending(shown) {
-  return shown.some((job) => jobUsesClaude(job) && !(state.nowSeen && state.nowSeen[nowKey(job)]));
+  return shown.some((job) => jobRecordsActivity(job) && !(state.nowSeen && state.nowSeen[nowKey(job)]));
 }
 function nowPanelKey() {
-  if (!visibleUsesClaude()) return "notice";
+  if (!visibleRecordsActivity()) return "notice";
   const shown = jobs().filter(matches);
   if (nowPending(shown)) return "loading";
   const rows = [];
   shown.forEach((job) => {
-    if (!jobUsesClaude(job)) return;
+    if (!jobRecordsActivity(job)) return;
     const body = state.now && state.now[nowKey(job)];
     if (!body || !Array.isArray(body.runs)) return;
     body.runs.forEach((run) => {
@@ -1040,7 +1280,7 @@ function jobTable(list) {
     el("td", { class: "mono dim", text: job.round || "-" }),
     el("td", { class: "mono dim", text: job.pr ? "#" + job.pr : "-" }),
     el("td", { class: "mono dim", text: job.cost_usd !== null && job.cost_usd !== undefined ? money(job.cost_usd) : "-" }),
-    el("td", { class: "mono dim", text: elapsed(job) }))));
+    el("td", { class: "mono dim" }, elapsedNode(job)))));
   return el("div", { class: "scroll" }, el("table", {},
     el("thead", {}, el("tr", {}, ["Job", "Title", "Step", "Round", "PR", "Cost", "Time"].map((t) => el("th", { scope: "col", text: t })))), body));
 }
@@ -1303,11 +1543,11 @@ function jobDetail(job) {
       job.intake ? el("span", {}, "Surfaces ", el("b", { text: (job.intake.surfaces || []).join(", ") || "none" })) : null,
       el("span", {}, "Round ", el("b", { text: `${job.round || 0}` + (job.attempt > 1 ? `, attempt ${job.attempt}` : "") })),
       job.cost_usd !== null && job.cost_usd !== undefined ? el("span", {}, "Cost ", el("b", { text: money(job.cost_usd) })) : null,
-      el("span", {}, "Started ", el("b", { text: ago(job.created_at) })))));
+      el("span", {}, "Started ", el("b", {}, ageNode(job.created_at, "ago"))))));
 
   if (job.waiting) {
     parts.push(el("div", { class: "ask" },
-      el("h2", { text: `Waiting for ${waitingAudience(job)} since ${ago(job.waiting.since)}` }),
+      el("h2", {}, "Waiting for " + waitingAudience(job) + " since ", ageNode(job.waiting && job.waiting.since, "ago")),
       el("p", { text: job.reason || (job.waiting.replies === "tool"
         ? `Step ${job.step} needs a reply in your coding tool. A comment on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} does not count.`
         : `Step ${job.step} needs a reply. Type one of these in your coding tool, or comment it on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} without the number.`) }),
@@ -1327,12 +1567,12 @@ function jobDetail(job) {
       el("span", { class: "what" }, el("span", { class: "mono", text: h.outcome + " → " + h.to }),
         h.skipped && h.skipped.length ? el("span", { class: "dim", text: "  skipped " + h.skipped.join(", ") }) : null,
         h.reason ? el("div", { class: "dim history-reason", text: h.reason.split("\n")[0].slice(0, 200) }) : null),
-      el("span", { class: "when", text: span((time(h.at) - time(h.entered_at)) / 1000) + " · " + ago(h.at) }));
+      el("span", { class: "when" }, span((time(h.at) - time(h.entered_at)) / 1000) + " · ", ageNode(h.at, "ago")));
   });
   if (!isEnd(job.step, job)) {
     items.push(el("li", { class: "now" }, el("span", { class: "mark" }), el("span", { class: "mono", text: job.step }),
       el("span", { class: "what dim", text: job.waiting ? "waiting for a person" : step ? `${step.type} step, in progress` : "this step is no longer in factory.toml" }),
-      el("span", { class: "when", text: "since " + ago(job.entered_at) })));
+      el("span", { class: "when" }, ageNode(job.entered_at, "since"))));
   }
   parts.push(el("div", { class: "panel" }, el("h2", { text: "Steps" }), el("p", { class: "sub", text: "In the order the job took them" }), el("ol", { class: "steps" }, items)));
 
@@ -1373,7 +1613,7 @@ function jobsView(id, projectId) {
     el("div", { class: "jobview" },
       el("nav", { class: "panel joblist", "aria-label": "Jobs" }, shown.length ? shown.map((job) => el("a", { href: jobHref(job), "aria-current": !!current && sameJob(job, current.project || null, current.id) ? "true" : null },
         el("div", { class: "id", text: state.workspace && state.selected === "all" ? (job.projectName || job.project) + " · " + job.id : job.id }),
-        el("div", { class: "meta" }, el("span", { text: "#" + job.issue + " · " + ago(job.updated_at) }), chip(job)))) : el("div", { class: "empty", text: "No job matches." })),
+        el("div", { class: "meta" }, el("span", {}, "#" + job.issue + " · ", ageNode(job.updated_at, "ago")), chip(job)))) : el("div", { class: "empty", text: "No job matches." })),
       current ? jobDetail(current) : el("div", { class: "notice", text: "Pick a job." })),
   ];
 }
@@ -1460,6 +1700,7 @@ function connectionLabel() {
   return "live";
 }
 function paintLive() {
+  paintAges();
   const live = document.getElementById("live");
   if (!live) return;
   const stale = !!(state.error || (state.workspace && state.queueStale));

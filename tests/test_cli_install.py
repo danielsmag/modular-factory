@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -422,8 +423,11 @@ def test_the_dashboard_page_never_puts_job_text_into_html_unescaped():
 
 def test_the_dashboard_page_loads_nothing_from_elsewhere():
     page = dashboard_page().decode()
-    for remote in ("<script src", "<link", "@import", "url(http", 'src="http', "<iframe", "<img"):
+    for remote in ("<script src", "@import", "url(http", 'src="http', "<iframe", "<img"):
         assert remote not in page, remote
+    # The tab icon is inlined as a data: URI; any other <link> would load from elsewhere.
+    for link in re.findall(r"<link\b[^>]*>", page):
+        assert 'href="data:' in link, link
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="needs node to parse the page's script")
