@@ -9,15 +9,17 @@ import sys
 from pathlib import Path
 
 from .. import checks, config, graph, install
-from .. import fleet as fleet_mod
 from .. import sync as syncer
+from .. import workspace as workspace_mod
 from ..engine import Factory
-from ..fleet import service as fleet_http
-from ..fleet.command import fleet_command
 from ..store import Store
-from ..util import ConfigError, FactoryError, Refused, find_repo, version
+from ..util import ConfigError, FactoryError, Refused, find_repo, global_binary, has_dashboard_page, version
+from ..workspace import service as workspace_http
+from ..workspace.command import workspace_command
 from .maintain import status, status_all, uninstall, upgrade_all, upgrade_everything, upgrade_self
 from .parser import parser
+
+DASHBOARD_COMMANDS: frozenset[str] = frozenset({"dashboard", "start", "stop"})
 
 
 def _stale_note(cfg) -> None:
@@ -54,12 +56,12 @@ def _project_repo() -> Path | None:
     return repo
 
 
-def _subscribed(repo: Path) -> tuple[fleet_mod.Fleet, str] | None:
-    """The fleet and this checkout's label, when the checkout is in the fleet file."""
+def _listed(repo: Path) -> tuple[workspace_mod.Workspace, str] | None:
+    """The workspace and this checkout's label, when the checkout is in the workspace file."""
     try:
-        group: fleet_mod.Fleet = fleet_mod.Fleet.find()
+        group: workspace_mod.Workspace = workspace_mod.Workspace.find()
     except Refused as error:
-        if not str(error).startswith("no fleet"):
+        if not str(error).startswith("no workspace"):
             raise
         return None
     resolved: Path = repo.resolve()
@@ -69,17 +71,36 @@ def _subscribed(repo: Path) -> tuple[fleet_mod.Fleet, str] | None:
     return None
 
 
+def _add_to_workspace(repo: Path) -> None:
+    """List a fresh install in the user's workspace, so the dashboard shows it."""
+    if _listed(repo) is not None:
+        return
+    group: workspace_mod.Workspace = workspace_mod.Workspace.locate(create=True)
+    group.add(repo)
+    print(f"ok    added to {group.file}")
+
+
+def _hand_off(argv: list[str]) -> None:
+    """Run a dashboard command with the global `mfactory`, which has the page. Does not return."""
+    binary: Path | None = global_binary()
+    if binary is None:
+        raise Refused("the dashboard comes with the global install. Run install.sh --global.")
+    if binary.resolve() == Path(sys.argv[0]).resolve():
+        raise Refused(f"{binary.parents[2] / 'web'} is missing. Run `mfactory upgrade --self`.")
+    os.execv(sys.executable, [sys.executable, str(binary), *argv])
+
+
 def run(args: argparse.Namespace) -> int:
     command: str | None = args.command
     if command == "version":
         print(version())
         return 0
     if command == "start":
-        return fleet_http.start_dashboard(args)
+        return workspace_http.start_dashboard(args)
     if command == "stop":
-        return fleet_http.stop_dashboard()
-    if command == "fleet":
-        return fleet_command(args)
+        return workspace_http.stop_dashboard()
+    if command == "workspace":
+        return workspace_command(args)
     if command == "hook":
         repo = find_repo(os.environ.get("CLAUDE_PROJECT_DIR"))
         cfg = config.load(repo)
@@ -92,14 +113,15 @@ def run(args: argparse.Namespace) -> int:
         return upgrade_everything(args.ref, args.source, dry_run=args.dry_run)
     if command == "status" and (args.all or not _inside_repo()):
         return status_all()
-    if command == "dashboard" and (args.all or _project_repo() is None):
-        group: fleet_mod.Fleet = fleet_mod.Fleet.find()
-        fleet_http.serve(group.file, args.port, not args.no_open)
+    if command == "dashboard" and _project_repo() is None:
+        group: workspace_mod.Workspace = workspace_mod.Workspace.find()
+        workspace_http.serve(group.file, args.port, not args.no_open)
         return 0
 
     repo = find_repo()
     if command in ("init", "install"):
         install.init(repo, args.tool, personal=args.personal)
+        _add_to_workspace(repo)
         return 0
     if command == "uninstall":
         uninstall(repo, remove_config=args.config, labels=args.labels)
@@ -132,13 +154,13 @@ def run(args: argparse.Namespace) -> int:
     elif command == "checks":
         return checks.run_here(cfg)
     elif command == "dashboard":
-        subscribed: tuple[fleet_mod.Fleet, str] | None = _subscribed(repo)
-        if subscribed is None:
-            fleet_http.serve_one(repo, args.port, not args.no_open)
+        listed: tuple[workspace_mod.Workspace, str] | None = _listed(repo)
+        if listed is None:
+            workspace_http.serve_one(repo, args.port, not args.no_open)
         else:
-            group: fleet_mod.Fleet = subscribed[0]
-            label: str = subscribed[1]
-            fleet_http.serve(group.file, args.port, not args.no_open, project=label)
+            group: workspace_mod.Workspace = listed[0]
+            label: str = listed[1]
+            workspace_http.serve(group.file, args.port, not args.no_open, project=label)
     else:
         factory: Factory = Factory(cfg)
         if command == "queue":
@@ -170,6 +192,8 @@ def main(argv: list[str]) -> int:
         arguments.print_help()
         return 0
     try:
+        if args.command in DASHBOARD_COMMANDS and not has_dashboard_page():
+            _hand_off(argv)
         return run(args)
     except ConfigError as error:
         print(f"mfactory: {config.FILE} has {len(error.problems)} problem(s):", file=sys.stderr)

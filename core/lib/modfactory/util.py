@@ -53,11 +53,19 @@ def adapters_dir():
 
 
 def web_dir() -> Path:
-    """`web/` sits next to `core/` in the source repo and the global install, and inside `.factory/` once installed."""
-    installed: Path = CORE / "web"
-    if (installed / "dashboard.html").is_file():
-        return installed
+    """`web/` sits next to `core/` in the source repo and the global install. A project has no copy."""
     return CORE.parent / "web"
+
+
+def global_binary() -> Path | None:
+    """`mfactory` from `install.sh --global`. None when there is no global install."""
+    binary: Path = user_dir() / "core" / "bin" / "mfactory"
+    return binary if binary.is_file() else None
+
+
+def has_dashboard_page() -> bool:
+    """True when `web/` is next to this copy: the global install or the source repo."""
+    return (web_dir() / "dashboard.html").is_file()
 
 
 def dashboard_page() -> bytes:

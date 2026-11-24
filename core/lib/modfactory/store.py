@@ -8,6 +8,8 @@ from . import config, graph
 from .util import Refused, first_line, now, version, write_atomic
 
 RUNNING_TYPES = {"agent", "checks", "review", "merge"}
+# The shape of job.json and index.json that the dashboard reads. Raise it when a field changes meaning.
+SCHEMA: int = 1
 
 
 class Store:
@@ -74,6 +76,7 @@ class Store:
         return number, f"{number:03d}-{'-'.join(words) or 'issue'}"
 
     def save(self, job):
+        job["schema"] = SCHEMA
         job["updated_at"] = now()
         self.path(job["id"]).mkdir(parents=True, exist_ok=True)
         write_atomic(self.path(job["id"]) / "job.json", json.dumps(job, indent=2) + "\n")
@@ -104,6 +107,7 @@ class Store:
     def index(self):
         cfg = self.cfg
         return {
+            "schema": SCHEMA,
             "generated_at": now(),
             "version": version(),
             "project": cfg["project"],

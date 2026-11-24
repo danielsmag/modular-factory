@@ -6,8 +6,8 @@ import re
 from pathlib import Path
 
 from modfactory import activity
-from modfactory.fleet.project import Project
-from modfactory.fleet.service import job_activity_response
+from modfactory.workspace.project import Project
+from modfactory.workspace.service import job_activity_response
 
 
 def _put(repo: Path, name: str, records: list[dict[str, object]]) -> None:

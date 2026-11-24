@@ -194,9 +194,12 @@ rules = ["AGENTS.md", "user:CLAUDE.md"]
 ## Dashboard
 
 ```bash
-.factory/bin/mfactory dashboard
+mfactory start dashboard
+mfactory stop
 ```
 
+The page comes with the global install (`install.sh --global`), not with each
+project. `.factory/bin/mfactory dashboard` hands off to the global `mfactory`.
 It serves a read-only page on your machine: jobs by step, the pipeline, what
 each job wrote, an overview with the job table, and the merged configuration
 with the source of each value. It changes nothing;
@@ -206,15 +209,15 @@ approvals and feedback go through `/mfactory` or an issue comment.
 
 ## Several projects
 
-Install the factory in each project, then subscribe that checkout. The list lives in `~/.mfactory/fleet.toml`.
+`mfactory install` adds each project to your workspace, `~/.mfactory/workspace.toml`. A checkout that was installed before can be added by hand.
 
 ```bash
-cd /path/to/project-a && mfactory fleet subscribe
-cd /path/to/project-b && mfactory fleet subscribe
-mfactory fleet dashboard
+cd /path/to/project-a && mfactory workspace add
+mfactory workspace list
+mfactory start dashboard
 ```
 
-`mfactory dashboard` and `mfactory fleet dashboard` open the same page. It lists every subscribed project, and a filter can show one of them. Inside a subscribed checkout, `mfactory dashboard` opens with that project selected. Outside a repository, or with `--all`, it opens on every project. A checkout that is not subscribed still has its own page. `mfactory status` outside a repository shows every subscribed project. `mfactory upgrade` upgrades the global CLI and each subscribed project. Each job stays in its own checkout. Open that project and run `/mfactory run` there. The [install guide](docs/install.md#several-projects) has the rest.
+The dashboard lists every project in the workspace, and a filter can show one of them. Inside a listed checkout, it opens with that project selected. A checkout that is not listed still opens its own page. A project whose job files were written by an older factory shows a note to upgrade it, and its jobs still show. `mfactory status` outside a repository shows every project in the workspace. `mfactory upgrade` upgrades the global CLI and each of those projects. Each job stays in its own checkout. Open that project and run `/mfactory run` there. The [install guide](docs/install.md#several-projects) has the rest.
 
 ## Commands
 
@@ -223,7 +226,7 @@ mfactory install | upgrade | uninstall | doctor | status | sync
 mfactory config show | graph | models | skills     see the configuration
 mfactory queue | create | next | done | answer     run jobs (the /mfactory skill uses these)
 mfactory checks | dashboard | start dashboard | stop | version
-mfactory fleet subscribe | unsubscribe | list | queue | dashboard
+mfactory workspace add | remove | list | queue | init
 ```
 
 Run them as `.factory/bin/mfactory <command>` from anywhere in the repository.

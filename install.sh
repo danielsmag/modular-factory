@@ -96,15 +96,17 @@ if [ "$GLOBAL" = 1 ]; then
   HOME_DIR="${FACTORY_HOME:-$HOME/.mfactory}"
   BIN_DIR="${FACTORY_BIN_DIR:-$HOME/.local/bin}"
   saved=""
-  if [ -f "$HOME_DIR/fleet.toml" ]; then
-    saved="$(mktemp)"
-    cp "$HOME_DIR/fleet.toml" "$saved"
-  fi
+  for list in workspace.toml fleet.toml; do
+    if [ -z "$saved" ] && [ -f "$HOME_DIR/$list" ]; then
+      saved="$(mktemp)"
+      cp "$HOME_DIR/$list" "$saved"
+    fi
+  done
   rm -rf "$HOME_DIR"
   mkdir -p "$HOME_DIR" "$BIN_DIR"
   cp -a "$SOURCE"/. "$HOME_DIR"/
   if [ -n "$saved" ]; then
-    cp "$saved" "$HOME_DIR/fleet.toml"
+    cp "$saved" "$HOME_DIR/workspace.toml"
     rm -f "$saved"
   fi
   printf '%s\n' "$HOME_DIR" > "$HOME_DIR/.global"

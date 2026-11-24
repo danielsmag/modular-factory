@@ -56,7 +56,7 @@ concurrency = 3</code></pre>
         <tr><td class="mono">[tools.claude] cost</td><td><code>true</code></td><td>Work out each job's cost from Claude Code's transcripts. Other tools record no cost.</td></tr>
         <tr><td class="mono">[tools.codex] intake_shell</td><td><code>false</code></td><td>Let the Codex intake agent run commands. See <a href="guards.html#intake-has-no-shell">intake</a>.</td></tr>
         <tr><td class="mono">[run] concurrency</td><td><code>3</code></td><td>Jobs this project works on at once. A job waiting for a person, or being validated after merge, does not count.</td></tr>
-        <tr><td class="mono">[fleet] concurrency</td><td><code>3</code></td><td><code>new</code> and <code>resume</code> rows across every project. <code>fleet.toml</code> or <code>--concurrency</code> overrides it. A project's <code>factory.toml</code> cannot.</td></tr>
+        <tr><td class="mono">[workspace] concurrency</td><td><code>3</code></td><td><code>new</code> and <code>resume</code> rows across every project. <code>workspace.toml</code> or <code>--concurrency</code> overrides it. A project's <code>factory.toml</code> cannot.</td></tr>
         <tr><td class="mono">[run] start</td><td><code>intake</code></td><td>The step a new job starts in.</td></tr>
         <tr><td class="mono">[run] escalate_to</td><td><code>escalated</code></td><td>The human step a job goes to when a loop limit is reached.</td></tr>
       </tbody>

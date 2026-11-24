@@ -32,7 +32,7 @@
       </tbody>
     </table>
   </div>
-  <p>This creates <code>~/.mfactory</code> (<code>FACTORY_HOME</code> when set) and links <code>~/.local/bin/mfactory</code>. The fleet list is <code>~/.mfactory/fleet.toml</code>.</p>
+  <p>This creates <code>~/.mfactory</code> (<code>FACTORY_HOME</code> when set) and links <code>~/.local/bin/mfactory</code>. It also serves the dashboard. The workspace, the list of your projects, is <code>~/.mfactory/workspace.toml</code>.</p>
   <p>To read the script before running it, download it first:</p>
   <pre data-lang="bash"><code>curl -fsSL -o install.sh https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh
 less install.sh
@@ -180,14 +180,14 @@ enabled = ["claude", "cursor"]</code></pre>
 mfactory upgrade --version v0.2.0
 mfactory upgrade --self
 mfactory upgrade --all</code></pre>
-  <p><code>mfactory upgrade</code> updates the CLI from <code>install.sh --global</code> and every subscribed project. Standing in an installed checkout that is not subscribed updates that checkout too. It replaces <code>.factory/</code> (not <code>.factory/jobs/</code>), runs <code>sync</code>, and leaves <code>factory.toml</code> alone. It refuses a release whose <code>schema</code> number differs from your <code>factory.toml</code>. The <a href="changelog.html">changelog</a> says what to change when that number moves. One project failing does not stop the others. Commit the result in each repository. A personal install stays untracked: upgrade tells you to leave <code>factory.toml</code>, <code>.factory/</code> and the generated files untracked.</p>
-  <p><code>--self</code> updates only the global CLI. <code>--all</code> upgrades only subscribed projects.</p>
+  <p><code>mfactory upgrade</code> updates the CLI from <code>install.sh --global</code> and every project in the workspace. Standing in an installed checkout that is not listed updates that checkout too. It replaces <code>.factory/</code> (not <code>.factory/jobs/</code>), runs <code>sync</code>, and leaves <code>factory.toml</code> alone. It refuses a release whose <code>schema</code> number differs from your <code>factory.toml</code>. The <a href="changelog.html">changelog</a> says what to change when that number moves. One project failing does not stop the others. Commit the result in each repository. A personal install stays untracked: upgrade tells you to leave <code>factory.toml</code>, <code>.factory/</code> and the generated files untracked.</p>
+  <p><code>--self</code> updates only the global CLI. <code>--all</code> upgrades only the projects in the workspace.</p>
 
   <h2 id="remove">Remove</h2>
   <pre data-lang="bash"><code>mfactory uninstall
 mfactory uninstall --config
 mfactory uninstall --labels</code></pre>
-  <p><code>uninstall</code> removes <code>.factory/</code>, the generated agent and skill files, the job worktrees, and the checkout from the fleet list. <code>factory.toml</code> stays unless you pass <code>--config</code>. <code>--labels</code> deletes the three factory labels on GitHub. It needs <code>factory.toml</code> still readable, so pass <code>--labels</code> together with <code>--config</code> or before deleting the file yourself.</p>
+  <p><code>uninstall</code> removes <code>.factory/</code>, the generated agent and skill files, the job worktrees, and the checkout from the workspace. <code>factory.toml</code> stays unless you pass <code>--config</code>. <code>--labels</code> deletes the three factory labels on GitHub. It needs <code>factory.toml</code> still readable, so pass <code>--labels</code> together with <code>--config</code> or before deleting the file yourself.</p>
 </article>
 <script src="docs.js"></script>
 </body>

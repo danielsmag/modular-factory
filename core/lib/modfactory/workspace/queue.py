@@ -1,4 +1,4 @@
-"""Run each project's own `mfactory queue`, then apply the fleet-wide cap."""
+"""Run each project's own `mfactory queue`, then apply the workspace-wide cap."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def collect_queue(
     """Rows of `project action issue job step note`, and one error string per project that failed.
 
     Each project has already applied its own `[run].concurrency`. This cap is
-    across projects: `--concurrency`, then `fleet.toml`, then `[fleet].concurrency`
+    across projects: `--concurrency`, then `workspace.toml`, then `[workspace].concurrency`
     in defaults.toml. It keeps that many `new` and `resume` rows, in project
     order, and marks the rest `hold`. `wait`, `skip` and `hold` do not take a slot.
     """

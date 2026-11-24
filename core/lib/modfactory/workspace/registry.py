@@ -1,20 +1,21 @@
-"""The fleet file: which checkouts are subscribed, and where that list lives."""
+"""The workspace file: which checkouts are listed, and where that list lives."""
 
 from __future__ import annotations
 
 import os
+import sys
 import tomllib
 from pathlib import Path
 
 from ..util import Refused, find_repo, write_atomic
 from .concurrency import QueueRow, parse_concurrency
 from .jobs import build_snapshot
-from .paths import FILE, HEADER, SCHEMA, toml_string, user_file
+from .paths import FILE, HEADER, LEGACY_FILE, SCHEMA, migrate_user_file, toml_string, user_file
 from .project import Project, labels_for
 from .queue import collect_queue
 
 
-class Fleet:
+class Workspace:
     def __init__(self, file: Path, projects: list[Project], concurrency: int | None = None) -> None:
         self.file: Path = file
         self.projects: list[Project] = projects
@@ -34,44 +35,47 @@ class Fleet:
         file: Path = directory / FILE
         if file.exists():
             raise Refused(f"{file} already exists")
-        fleet: Fleet = Fleet(file, [])
-        fleet.save()
+        workspace: Workspace = Workspace(file, [])
+        workspace.save()
         return file
 
     @staticmethod
-    def find(start: Path | None = None) -> Fleet:
-        return Fleet.locate(start, create=False)
+    def find(start: Path | None = None) -> Workspace:
+        return Workspace.locate(start, create=False)
 
     @staticmethod
-    def locate(start: Path | None = None, create: bool = False) -> Fleet:
-        """The fleet in effect: FACTORY_FLEET, then a fleet.toml above here, then the user file.
+    def locate(start: Path | None = None, create: bool = False) -> Workspace:
+        """The workspace in effect: FACTORY_WORKSPACE, then a workspace.toml above here, then the user file.
 
         `create` writes the user file when the first two are absent. It never creates a file
-        for a missing FACTORY_FLEET path.
+        for a missing FACTORY_WORKSPACE path.
         """
-        override: str | None = os.environ.get("FACTORY_FLEET")
+        override: str | None = os.environ.get("FACTORY_WORKSPACE")
         if override:
             file: Path = Path(override).expanduser()
             if not file.is_file():
                 raise Refused(f"{file} does not exist")
-            return Fleet.load(file)
+            return Workspace.load(file)
         cwd: Path = (start or Path.cwd()).resolve()
         for directory in [cwd, *cwd.parents]:
             candidate: Path = directory / FILE
             if candidate.is_file():
-                return Fleet.load(candidate)
+                return Workspace.load(candidate)
+        moved: Path | None = migrate_user_file()
+        if moved is not None:
+            print(f"moved {LEGACY_FILE} -> {moved}", file=sys.stderr)
         user: Path = user_file()
         if user.is_file():
-            return Fleet.load(user)
+            return Workspace.load(user)
         if create:
             user.parent.mkdir(parents=True, exist_ok=True)
-            created: Fleet = Fleet(user, [])
+            created: Workspace = Workspace(user, [])
             created.save()
             return created
-        raise Refused("no fleet. Run `mfactory fleet subscribe` inside a project.")
+        raise Refused("no workspace. Run `mfactory workspace add` inside a project.")
 
     @staticmethod
-    def load(file: Path) -> Fleet:
+    def load(file: Path) -> Workspace:
         try:
             parsed: object = tomllib.loads(file.read_text())
         except tomllib.TOMLDecodeError as error:
@@ -91,7 +95,7 @@ class Fleet:
             if not isinstance(row, dict) or not isinstance(row.get("path"), str):
                 raise Refused(f"{file}: each [[projects]] entry needs a path")
             projects.append(Project(Path(row["path"]).expanduser().resolve()))
-        return Fleet(file, projects, limit)
+        return Workspace(file, projects, limit)
 
     def save(self) -> None:
         lines: list[str] = [HEADER.rstrip("\n")]

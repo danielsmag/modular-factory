@@ -1,4 +1,4 @@
-"""One checkout the fleet knows about."""
+"""One checkout the workspace knows about."""
 
 from __future__ import annotations
 

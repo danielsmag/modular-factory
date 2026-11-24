@@ -5,7 +5,7 @@ const SVG = "http://www.w3.org/2000/svg";
 const REFRESH_MS = 5000;
 const QUEUE_MS = 15000;
 const RUNNING = new Set(["agent", "checks", "review", "merge", "verify"]);
-const CHOICE_KEY = "mfactory.fleet.selected";
+const CHOICE_KEY = "mfactory.workspace.selected";
 const FOOT_NOTE = "read-only · approvals and feedback go through /mfactory or an issue comment";
 const FALLBACK = [
   ["intake", ["intake", "ask-author"]],
@@ -56,7 +56,7 @@ function writeSplit(px) {
 }
 const state = {
   index: null, graph: null, config: null, error: null, query: "", range: "30", file: null, source: "all", drawer: null,
-  fleet: false, projects: [], selected: readChoice(), queueRows: [], queueErrors: [], queueStale: false,
+  workspace: false, projects: [], selected: readChoice(), queueRows: [], queueErrors: [], queueStale: false,
   split: readSplit(),
 };
 if (queryProject()) writeChoice(state.selected);
@@ -139,7 +139,7 @@ function matches(job) {
   return [job.project, job.projectName, job.id, job.title, "#" + job.issue, job.step, job.author, job.pr ? "#" + job.pr : ""].some((v) => String(v || "").toLowerCase().includes(q));
 }
 function visibleProjects() {
-  if (!state.fleet) return [];
+  if (!state.workspace) return [];
   return state.projects.filter((project) => state.selected === "all" || state.selected === project.id);
 }
 function projectLabel(project) {
@@ -155,7 +155,7 @@ function taggedJob(project, job) {
   return copy;
 }
 function jobs() {
-  if (state.fleet) {
+  if (state.workspace) {
     const list = [];
     visibleProjects().forEach((project) => {
       (project.jobs || []).forEach((job) => list.push(taggedJob(project, job)));
@@ -327,7 +327,7 @@ function queueFor(projects) {
   return rows;
 }
 function boardColumns(all) {
-  if (!state.fleet) return columnsFor(state.graph, all);
+  if (!state.workspace) return columnsFor(state.graph, all);
   const projects = visibleProjects();
   const cols = projects.length === 1
     ? columnsOf(projects[0]).map((col) => Object.assign({}, col, { steps: col.steps.slice() }))
@@ -424,12 +424,12 @@ function cardHint(job) {
 }
 function sameDrawer(job) {
   if (!state.drawer || state.drawer.id !== job.id) return false;
-  if (!state.fleet) return true;
+  if (!state.workspace) return true;
   return state.drawer.project === (job.project || null);
 }
 function cardNum(job) {
   const num = jobNum(job.id);
-  if (state.fleet && state.selected === "all" && job.projectName) return job.projectName + " · " + num;
+  if (state.workspace && state.selected === "all" && job.projectName) return job.projectName + " · " + num;
   return num;
 }
 function cardClass(job) {
@@ -446,7 +446,7 @@ function jobCard(job) {
   const flag = flagOf(job);
   const hint = cardHint(job);
   const rounds = roundRows(job);
-  const label = (job.title || job.id) + (state.fleet && state.selected === "all" && job.projectName ? ", " + job.projectName : "");
+  const label = (job.title || job.id) + (state.workspace && state.selected === "all" && job.projectName ? ", " + job.projectName : "");
   return el("article", {
     class: cardClass(job), tabindex: 0, role: "button", "aria-label": label,
     onclick: (event) => { if (event.target.closest("a")) return; openDrawer(job); },
@@ -523,7 +523,7 @@ function closeDrawer() {
 }
 function fileUrl(job, path) {
   const tail = String(path).split("/").map(encodeURIComponent).join("/");
-  if (state.fleet && job.project) {
+  if (state.workspace && job.project) {
     return "/projects/" + encodeURIComponent(job.project) + "/jobs/" + encodeURIComponent(job.id) + "/" + tail;
   }
   return "jobs/" + encodeURIComponent(job.id) + "/" + tail;
@@ -659,7 +659,7 @@ function pickDrawerTab(name) {
   if (name === "activity") refreshActivity();
 }
 function activityUrl(job) {
-  if (state.fleet && job.project) {
+  if (state.workspace && job.project) {
     return "/projects/" + encodeURIComponent(job.project) + "/jobs/" + encodeURIComponent(job.id) + "/activity";
   }
   return "jobs/" + encodeURIComponent(job.id) + "/activity";
@@ -775,7 +775,7 @@ function drawer() {
     el("div", { class: "scrim", onclick: closeDrawer }),
     el("aside", { class: "drawer", role: "dialog", "aria-modal": "true", "aria-labelledby": "d-title" },
       el("div", { class: "d-head" },
-        el("div", { class: "num", text: (state.fleet && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id + " · " + (job.step || "") + (job.round ? " · round " + job.round : "") }),
+        el("div", { class: "num", text: (state.workspace && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id + " · " + (job.step || "") + (job.round ? " · round " + job.round : "") }),
         el("h3", { id: "d-title", text: job.title || job.id }),
         el("div", { class: "links" },
           link(job.issue_url, "issue #" + (job.issue == null ? "" : job.issue)),
@@ -788,7 +788,7 @@ function drawer() {
         : el("div", { class: "d-body", style: splitStyle() }, fileList(job, files), grip(), el("pre", { class: "file d-doc", tabindex: 0, text: state.drawer.text || "" }))));
 }
 function queueCard(row) {
-  const who = state.fleet && state.selected === "all" && row.projectName ? row.projectName + " · " : "";
+  const who = state.workspace && state.selected === "all" && row.projectName ? row.projectName + " · " : "";
   return el("article", { class: "kcard" },
     el("div", { class: "card-top" },
       el("span", { class: "num", text: who + (row.action || "new") }),
@@ -807,22 +807,26 @@ function column(col, shown) {
     mine.length ? mine.map((item) => col.queue ? queueCard(item) : jobCard(item)) : el("p", { class: "kempty", text: "—" }));
 }
 function boardSub() {
-  if (!state.fleet) return (state.index.project && state.index.project.description) || "Jobs by step";
+  if (!state.workspace) return (state.index.project && state.index.project.description) || "Jobs by step";
   const projects = visibleProjects();
   if (projects.length === 1) return projects[0].description || projects[0].path || "Jobs by step";
   return projects.length + " projects";
 }
 function problemLines() {
-  if (!state.fleet) return [];
+  if (!state.workspace) return [];
   const lines = [];
+  const notices = [];
   visibleProjects().forEach((project) => {
-    if (project.error) lines.push((state.selected === "all" ? (project.name || project.id) + ": " : "") + String(project.error));
+    const who = state.selected === "all" ? (project.name || project.id) + ": " : "";
+    if (project.error) lines.push(who + String(project.error));
+    if (project.notice) notices.push(who + String(project.notice));
   });
   state.queueErrors.forEach((item) => {
     const text = String(item);
     if (state.selected === "all" || text.indexOf(state.selected + ": ") === 0) lines.push(text);
   });
-  return lines.map((text) => el("p", { class: "error", text }));
+  return lines.map((text) => el("p", { class: "error", text }))
+    .concat(notices.map((text) => el("p", { class: "stale", text })));
 }
 function board() {
   const all = jobs();
@@ -833,7 +837,7 @@ function board() {
       el("div", {}, el("h1", { text: "Board" }), el("p", { class: "sub", text: boardSub() })),
       el("span", { class: "src", text: shown.length + " of " + all.length })),
     ...problemLines(),
-    cols.length ? el("div", { class: "kanban" }, cols.map((col) => column(col, shown))) : el("p", { class: "kempty", text: state.fleet && !state.projects.length ? "no projects yet" : "no jobs" }),
+    cols.length ? el("div", { class: "kanban" }, cols.map((col) => column(col, shown))) : el("p", { class: "kempty", text: state.workspace && !state.projects.length ? "no projects yet" : "no jobs" }),
   ];
   const panel = drawer();
   if (panel) nodes.push(panel);
@@ -862,12 +866,12 @@ function days(count) {
   return out;
 }
 function slotNote() {
-  const caps = state.fleet
+  const caps = state.workspace
     ? visibleProjects().map((project) => Number(project.concurrency)).filter((n) => n > 0)
     : [Number(state.index && state.index.concurrency)].filter((n) => n > 0);
   if (!caps.length) return "no cap";
   const cap = caps.reduce((sum, n) => sum + n, 0);
-  const projects = state.fleet ? visibleProjects().length : 1;
+  const projects = state.workspace ? visibleProjects().length : 1;
   return projects > 1 ? "of " + cap + " slots · " + projects + " projects" : "of " + cap + " slots";
 }
 function areaChart(all) {
@@ -927,7 +931,7 @@ function jobTable(list) {
     onclick: () => { location.hash = jobHref(job); },
     onkeydown: (e) => { if (e.key === "Enter") location.hash = jobHref(job); },
   },
-    el("td", { class: "mono", text: state.fleet && state.selected === "all" && job.projectName ? job.projectName + " · " + job.id : job.id }),
+    el("td", { class: "mono", text: state.workspace && state.selected === "all" && job.projectName ? job.projectName + " · " + job.id : job.id }),
     el("td", { class: "wrap", text: job.title || "" }),
     el("td", {}, chip(job)),
     el("td", { class: "mono dim", text: job.round || "-" }),
@@ -938,7 +942,7 @@ function jobTable(list) {
     el("thead", {}, el("tr", {}, ["Job", "Title", "Step", "Round", "PR", "Cost", "Time"].map((t) => el("th", { scope: "col", text: t })))), body));
 }
 function overviewSub() {
-  if (!state.fleet) return (state.index.project && state.index.project.description) || "Running slots, merged jobs, and every job";
+  if (!state.workspace) return (state.index.project && state.index.project.description) || "Running slots, merged jobs, and every job";
   const projects = visibleProjects();
   if (!projects.length) return "No projects yet";
   if (projects.length === 1) return projects[0].description || projects[0].path || "Running slots, merged jobs, and every job";
@@ -1139,7 +1143,7 @@ function pipelineIntro(graph) {
   return el("p", { class: "sub", text: `Starts at ${graph.start}. When an edge's max is used up, the job goes to ${graph.escalate_to}.` });
 }
 function pipeline() {
-  if (!state.fleet) {
+  if (!state.workspace) {
     return [el("h1", { text: "Pipeline" }), pipelineIntro(state.graph), ...pipelineDiagram(state.graph, jobs())];
   }
   const projects = visibleProjects();
@@ -1187,7 +1191,7 @@ function jobDetail(job) {
   const step = stepOf(job.step, job);
   const parts = [];
   parts.push(el("div", { class: "panel" },
-    el("div", { class: "head" }, el("div", { style: "min-width:0" }, el("h2", { class: "job-title", text: job.title }), el("div", { class: "mono dim", style: "margin-top:3px", text: (state.fleet && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id })), chip(job)),
+    el("div", { class: "head" }, el("div", { style: "min-width:0" }, el("h2", { class: "job-title", text: job.title }), el("div", { class: "mono dim", style: "margin-top:3px", text: (state.workspace && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id })), chip(job)),
     el("div", { class: "facts" },
       el("span", {}, "Issue ", link(job.issue_url, "#" + job.issue)),
       job.pr ? el("span", {}, "PR ", link(job.pr_url, "#" + job.pr)) : null,
@@ -1241,12 +1245,12 @@ function jobDetail(job) {
   return el("div", { class: "detail" }, parts);
 }
 function jobHref(job) {
-  if (state.fleet) return "#/jobs/" + encodeURIComponent(job.project) + "/" + encodeURIComponent(job.id);
+  if (state.workspace) return "#/jobs/" + encodeURIComponent(job.project) + "/" + encodeURIComponent(job.id);
   return "#/jobs/" + encodeURIComponent(job.id);
 }
 function sameJob(job, projectId, id) {
   if (!job || !id || job.id !== id) return false;
-  if (!state.fleet || !projectId) return true;
+  if (!state.workspace || !projectId) return true;
   return job.project === projectId;
 }
 function queueLabel() {
@@ -1265,7 +1269,7 @@ function jobsView(id, projectId) {
     el("p", { class: "sub", text: `${shown.length} of ${all.length}` + (state.query ? " match the search" : "") }),
     el("div", { class: "jobview" },
       el("nav", { class: "panel joblist", "aria-label": "Jobs" }, shown.length ? shown.map((job) => el("a", { href: jobHref(job), "aria-current": !!current && sameJob(job, current.project || null, current.id) ? "true" : null },
-        el("div", { class: "id", text: state.fleet && state.selected === "all" ? (job.projectName || job.project) + " · " + job.id : job.id }),
+        el("div", { class: "id", text: state.workspace && state.selected === "all" ? (job.projectName || job.project) + " · " + job.id : job.id }),
         el("div", { class: "meta" }, el("span", { text: "#" + job.issue + " · " + ago(job.updated_at) }), chip(job)))) : el("div", { class: "empty", text: "No job matches." })),
       current ? jobDetail(current) : el("div", { class: "notice", text: "Pick a job." })),
   ];
@@ -1296,7 +1300,7 @@ function configView() {
     el("h1", { text: "Config" }),
     el("p", { class: "sub", text: "factory.toml merged over the defaults, and where each value comes from" }),
   ];
-  if (!state.fleet) {
+  if (!state.workspace) {
     if (!state.config) return [el("h1", { text: "Config" }), el("p", { class: "sub", text: "Loading..." })];
     return intro.concat([sourceFilters(state.config), el("div", { class: "panel" }, configTable(state.config))]);
   }
@@ -1316,13 +1320,13 @@ function configView() {
 function route() {
   const parts = location.hash.replace(/^#\/?/, "").split("/").filter((part) => part.length);
   const view = ["board", "pipeline", "jobs", "overview", "config"].includes(parts[0]) ? parts[0] : "board";
-  if (view === "jobs" && state.fleet && parts.length >= 3) {
+  if (view === "jobs" && state.workspace && parts.length >= 3) {
     return { view, project: decodeURIComponent(parts[1]), id: decodeURIComponent(parts[2]) };
   }
   return { view, project: null, id: view === "jobs" && parts[1] ? decodeURIComponent(parts[1]) : null };
 }
 function normalizeSelection() {
-  if (!state.fleet || !state.projects.length) return;
+  if (!state.workspace || !state.projects.length) return;
   if (state.selected !== "all" && !state.projects.some((project) => project.id === state.selected)) {
     state.selected = "all";
     writeChoice("all");
@@ -1337,7 +1341,7 @@ function filterButton(id, text) {
 function renderFilters() {
   const box = document.getElementById("filters");
   if (!box) return;
-  if (!state.fleet || state.projects.length < 2) {
+  if (!state.workspace || state.projects.length < 2) {
     box.replaceChildren();
     return;
   }
@@ -1347,15 +1351,15 @@ function renderFilters() {
 }
 function connectionLabel() {
   if (state.error) return "not connected";
-  if (state.fleet && state.queueStale) return "queue stale";
-  if (state.fleet) return state.projects.length ? "live" : "connecting";
+  if (state.workspace && state.queueStale) return "queue stale";
+  if (state.workspace) return state.projects.length ? "live" : "connecting";
   if (!state.index) return "connecting";
   return "live";
 }
 function paintLive() {
   const live = document.getElementById("live");
   if (!live) return;
-  const stale = !!(state.error || (state.fleet && state.queueStale));
+  const stale = !!(state.error || (state.workspace && state.queueStale));
   live.className = "live" + (stale ? " stale" : "");
   const label = connectionLabel();
   const status = document.getElementById("live-status");
@@ -1363,12 +1367,12 @@ function paintLive() {
   if (status) status.textContent = label;
   if (clock) clock.textContent = label === "live" ? new Date().toLocaleTimeString() : "";
 }
-function fleetTitle() {
+function workspaceTitle() {
   const projects = visibleProjects();
   if (state.selected !== "all" && projects[0]) return projects[0].name || projects[0].id;
   return "all";
 }
-function fleetFoot() {
+function workspaceFoot() {
   const projects = visibleProjects();
   const versions = [...new Set(projects.map((project) => project.version).filter((version) => version))];
   const tools = [...new Set(projects.flatMap((project) => project.tools || []))];
@@ -1389,20 +1393,20 @@ function render() {
   const scrollers = ".joblist, pre.file, .d-doc, .d-files, .d-runs, .d-timeline, .filelist";
   const scroll = [...target.querySelectorAll(scrollers)].map((n) => n.scrollTop);
   let content;
-  const ready = state.fleet ? !state.error || state.projects.length : !!(state.index && state.graph);
+  const ready = state.workspace ? !state.error || state.projects.length : !!(state.index && state.graph);
   if (!ready) {
     content = [el("h1", { text: "factory" }), el("div", { class: "notice" }, state.error
-      ? el("span", {}, "The dashboard's data could not be loaded: ", el("code", { text: state.error }), ". Start it with ", el("code", { text: ".factory/bin/mfactory dashboard" }), ".")
+      ? el("span", {}, "The dashboard's data could not be loaded: ", el("code", { text: state.error }), ". Start it with ", el("code", { text: "mfactory start dashboard" }), ".")
       : "Loading...")];
     document.getElementById("foot-left").textContent = FOOT_NOTE;
     document.getElementById("foot-right").textContent = "";
-  } else if (state.fleet) {
+  } else if (state.workspace) {
     const totals = boardTotals(jobs());
     document.getElementById("foot-left").textContent = view === "board" || view === "overview"
       ? totals.running + " running · " + money(totals.cost) + " · " + FOOT_NOTE
       : FOOT_NOTE;
-    document.getElementById("foot-right").textContent = fleetFoot();
-    document.title = "factory · " + fleetTitle();
+    document.getElementById("foot-right").textContent = workspaceFoot();
+    document.title = "factory · " + workspaceTitle();
     content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id, project) : view === "overview" ? overview() : view === "config" ? configView() : board();
   } else {
     const totals = boardTotals(jobs());
@@ -1465,7 +1469,7 @@ async function fetchActivity(job) {
 let probed = false;
 let queueTimer = null;
 async function refreshQueue() {
-  if (!state.fleet) return;
+  if (!state.workspace) return;
   try {
     const body = await load("/queue.json");
     const rows = body.rows || [];
@@ -1481,7 +1485,7 @@ async function refreshQueue() {
     render();
   }
 }
-async function refreshFleet() {
+async function refreshWorkspace() {
   const body = await load("/projects.json");
   const next = body.projects || [];
   const changed = JSON.stringify(next) !== JSON.stringify(state.projects);
@@ -1510,7 +1514,7 @@ async function refreshSingle() {
   refreshActivity();
 }
 async function tryProjects() {
-  // false: this server has no fleet. null: try again next tick. object: the fleet.
+  // false: this server has no workspace. null: try again next tick. object: the workspace.
   try {
     const res = await fetch("/projects.json", { cache: "no-store" });
     if (res.status === 404) return false;
@@ -1524,12 +1528,12 @@ async function tryProjects() {
 }
 async function refresh() {
   try {
-    if (!state.fleet && !probed) {
+    if (!state.workspace && !probed) {
       const found = await tryProjects();
       if (found === null) return;
       if (found) {
         probed = true;
-        state.fleet = true;
+        state.workspace = true;
         state.projects = found.projects;
         state.error = null;
         render();
@@ -1540,8 +1544,8 @@ async function refresh() {
       }
       probed = true;
     }
-    if (state.fleet) {
-      await refreshFleet();
+    if (state.workspace) {
+      await refreshWorkspace();
       return;
     }
     await refreshSingle();

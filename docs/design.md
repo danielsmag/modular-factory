@@ -50,14 +50,14 @@ core/lib/modfactory/      the factory's code
   queue.py                queue, create
   sync.py                 agent and skill files for each tool
   install.py              copy, init, upgrade, doctor
-  fleet/                  several projects: fleet.toml, one queue, the dashboard
-    paths.py              fleet.toml name, schema, and the user file
+  workspace/              several projects: workspace.toml, one queue, the dashboard
+    paths.py              workspace.toml name, schema, and the user file
     project.py            one checkout: binary and jobs folder
-    registry.py           load, save, subscribe, locate
-    concurrency.py        fleet-wide cap on new and resume rows
+    registry.py           load, save, add, locate
+    concurrency.py        cap on new and resume rows across projects
     queue.py              run each project's own factory queue
-    jobs.py               read each project's jobs, graph, and config
-    command.py            `mfactory fleet` subcommands
+    jobs.py               read each project's jobs, graph, and config, tolerating old files
+    command.py            `mfactory workspace` subcommands
     service.py            the dashboard server, and start/stop
   service/                services the factory calls
     gh.py                 GitHub, through the `gh` CLI
@@ -67,7 +67,7 @@ core/roles/*.md           one prompt per agent step and reviewer
 core/skill/SKILL.md       the orchestrator
 core/defaults.toml        the default pipeline and settings
 core/templates/factory.toml  the factory.toml written on first install
-web/dashboard.html        the dashboard shell: one project, or every subscribed project with a filter
+web/dashboard.html        the dashboard shell: one project, or every project in the workspace with a filter
 web/dashboard.css         styles, inlined into the page when it is served
 web/dashboard.js          the page's script, inlined the same way
 adapters/*.toml           per tool: folders, agent file format, default models
@@ -75,7 +75,8 @@ install.sh
 tests/
 ```
 
-In a project, `core/` becomes `.factory/`, with `adapters/` and `web/` inside it.
+In a project, `core/` becomes `.factory/`, with `adapters/` inside it. `web/`
+stays in the global install, `~/.mfactory/web/`.
 
 Each job has a folder, `.factory/jobs/<id>/`, in the main checkout and ignored
 by git:
@@ -206,18 +207,27 @@ each tool allows.
 - **The dashboard reads each request.** The server rebuilds the project list
   from each checkout's job files. `index.json`, `graph.json`, and `config.json`
   are used when that project has written them.
-- **A fleet is a list of checkouts.** The default file is
-  `~/.mfactory/fleet.toml`. `install.sh --global` creates `~/.mfactory`.
-  `mfactory fleet subscribe` creates the fleet file.
-  A `fleet.toml` in the current directory or a parent, or `FACTORY_FLEET`, wins.
-  The fleet runs each project's own `mfactory queue` and reads that project's
-  job files. It does not merge pipelines or move a job between repositories.
-  The dashboard is one page for every subscribed project, with a filter for
-  all of them or one. Each project's pipeline stays its own.
-  Each project applies its own `[run].concurrency` first. The fleet then
-  applies `[fleet].concurrency` from this factory's `defaults.toml`.
-  `concurrency` in `fleet.toml`, or `--concurrency` on `fleet queue`, overrides
-  that fleet cap.
+- **A workspace is a list of checkouts.** The default file is
+  `~/.mfactory/workspace.toml`. `install.sh --global` creates `~/.mfactory`.
+  `mfactory install` and `mfactory workspace add` write the workspace file.
+  A `workspace.toml` in the current directory or a parent, or
+  `FACTORY_WORKSPACE`, wins. The workspace runs each project's own
+  `mfactory queue` and reads that project's job files. It does not merge
+  pipelines or move a job between repositories.
+  The dashboard is one page for every project in the workspace, with a filter
+  for all of them or one. Each project's pipeline stays its own.
+  Each project applies its own `[run].concurrency` first. The workspace then
+  applies `[workspace].concurrency` from this factory's `defaults.toml`.
+  `concurrency` in `workspace.toml`, or `--concurrency` on `workspace queue`,
+  overrides that cap.
+- **The dashboard lives in the global install.** `web/` is not copied into a
+  project's `.factory/`. A project's binary hands `dashboard`, `start` and
+  `stop` to the global `mfactory`, so a machine has one page and one version
+  of it.
+- **Job files carry a schema number.** `job.json` and `index.json` say which
+  shape they have. The global reader fills fields an older factory did not
+  write and shows a note to upgrade that project. Files from a newer factory
+  are not shown; the note says to upgrade the global CLI.
 - **Overview is the job table.** Running slots, a running total of merged jobs
   with a steady-pace line, and cost or time by step. Not jobs per day: with a
   few merges a week, a per-day chart is mostly zeros. The board stays jobs by

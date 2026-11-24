@@ -14,9 +14,9 @@ from pathlib import Path
 import pytest
 from conftest import CLI, git
 from modfactory.cli import main
-from modfactory.fleet import Fleet, Project
-from modfactory.fleet.service import DashboardServer, handler
 from modfactory.util import Refused, dashboard_page
+from modfactory.workspace import Project, Workspace
+from modfactory.workspace.service import DashboardServer, handler
 
 
 def factory_script(repo: Path, body: str) -> None:
@@ -39,42 +39,42 @@ def real_factory(repo: Path) -> None:
 
 
 def test_init_add_list_and_remove(tmp_path, monkeypatch, capsys):
-    fleet_dir: Path = tmp_path / "fleet"
-    fleet_dir.mkdir()
-    monkeypatch.chdir(fleet_dir)
-    assert main(["fleet", "init"]) == 0
-    assert main(["fleet", "init"]) == 1
+    workspace_dir: Path = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    monkeypatch.chdir(workspace_dir)
+    assert main(["workspace", "init"]) == 0
+    assert main(["workspace", "init"]) == 1
     assert "already exists" in capsys.readouterr().err
 
     plain: Path = tmp_path / "plain"
     plain.mkdir()
-    assert main(["fleet", "add", str(plain)]) == 1
+    assert main(["workspace", "add", str(plain)]) == 1
     assert "not inside a git repository" in capsys.readouterr().err
 
     bare: Path = tmp_path / "bare"
     bare.mkdir()
     git("init", "-q", "-b", "main", cwd=bare)
-    assert main(["fleet", "add", str(bare)]) == 1
+    assert main(["workspace", "add", str(bare)]) == 1
     assert "no .factory/bin/mfactory" in capsys.readouterr().err
 
     repo: Path = checkout(tmp_path, "alpha")
-    assert main(["fleet", "add", str(repo)]) == 0
-    assert main(["fleet", "add", str(repo)]) == 1
+    assert main(["workspace", "add", str(repo)]) == 0
+    assert main(["workspace", "add", str(repo)]) == 1
     assert "already in" in capsys.readouterr().err
-    assert main(["fleet", "list"]) == 0
+    assert main(["workspace", "list"]) == 0
     listed: str = capsys.readouterr().out
     assert "alpha" in listed and str(repo.resolve()) in listed and "ok" in listed
 
-    assert main(["fleet", "remove", "alpha"]) == 0
-    assert main(["fleet", "list"]) == 0
+    assert main(["workspace", "remove", "alpha"]) == 0
+    assert main(["workspace", "list"]) == 0
     assert "no projects yet" in capsys.readouterr().out
 
 
 def test_two_checkouts_with_the_same_folder_name_get_distinct_labels(tmp_path):
     left: Path = checkout(tmp_path / "a", "app")
     right: Path = checkout(tmp_path / "b", "app")
-    file: Path = tmp_path / "fleet.toml"
-    group: Fleet = Fleet(file, [])
+    file: Path = tmp_path / "workspace.toml"
+    group: Workspace = Workspace(file, [])
     group.add(left)
     group.add(right)
     labels: set[str] = {group.label(project) for project in group.projects}
@@ -86,18 +86,18 @@ def test_queue_keeps_the_projects_that_succeed(world, tmp_path, monkeypatch, cap
     real_factory(world.repo)
     number: int = world.issue(title="Add a widget")
     failed: Path = checkout(tmp_path, "beta", "#!/bin/sh\necho 'mfactory: queue broke' >&2\nexit 1\n")
-    fleet_dir: Path = tmp_path / "fleet"
-    fleet_dir.mkdir()
-    monkeypatch.chdir(fleet_dir)
-    assert main(["fleet", "init"]) == 0
+    workspace_dir: Path = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    monkeypatch.chdir(workspace_dir)
+    assert main(["workspace", "init"]) == 0
     capsys.readouterr()
-    group: Fleet = Fleet.find()
+    group: Workspace = Workspace.find()
     group.projects.append(Project(failed))
     group.save()
-    assert main(["fleet", "add", str(world.repo)]) == 0
+    assert main(["workspace", "add", str(world.repo)]) == 0
     capsys.readouterr()
 
-    code: int = main(["fleet", "queue"])
+    code: int = main(["workspace", "queue"])
     captured = capsys.readouterr()
     assert code == 1
     assert f"repo  new  {number}  -  -  Add a widget" in captured.out
@@ -108,29 +108,29 @@ def test_queue_keeps_the_projects_that_succeed(world, tmp_path, monkeypatch, cap
 def test_a_missing_binary_does_not_hide_the_other_project(tmp_path, monkeypatch, capsys):
     good: Path = checkout(tmp_path, "alpha", "#!/bin/sh\nprintf '%s\\n' 'resume  4  001-one  build  round 1'\nexit 0\n")
     missing: Path = tmp_path / "gone"
-    fleet_dir: Path = tmp_path / "fleet"
-    fleet_dir.mkdir()
-    monkeypatch.chdir(fleet_dir)
-    file: Path = fleet_dir / "fleet.toml"
-    Fleet.init(fleet_dir)
-    group: Fleet = Fleet.load(file)
+    workspace_dir: Path = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    monkeypatch.chdir(workspace_dir)
+    file: Path = workspace_dir / "workspace.toml"
+    Workspace.init(workspace_dir)
+    group: Workspace = Workspace.load(file)
     group.projects = [Project(missing), Project(good)]
     group.save()
-    code: int = main(["fleet", "queue"])
+    code: int = main(["workspace", "queue"])
     captured = capsys.readouterr()
     assert code == 1
     assert "alpha  resume  4  001-one  build  round 1" in captured.out
     assert "gone" in captured.err and "missing" in captured.err
 
 
-def test_factory_fleet_follows_factory_fleet_env(tmp_path, monkeypatch):
+def test_factory_workspace_follows_factory_workspace_env(tmp_path, monkeypatch):
     repo: Path = checkout(tmp_path, "alpha")
     file: Path = tmp_path / "elsewhere.toml"
-    Fleet(file, []).save()
-    group: Fleet = Fleet.load(file)
+    Workspace(file, []).save()
+    group: Workspace = Workspace.load(file)
     group.add(repo)
-    monkeypatch.setenv("FACTORY_FLEET", str(file))
-    found: Fleet = Fleet.find(tmp_path / "no-such")
+    monkeypatch.setenv("FACTORY_WORKSPACE", str(file))
+    found: Workspace = Workspace.find(tmp_path / "no-such")
     assert found.file.resolve() == file.resolve()
     assert found.projects[0].path == repo.resolve()
 
@@ -161,8 +161,8 @@ def served(tmp_path):
     write_jobs(one, alpha, True)
     write_jobs(two, {"id": "001-b", "issue": 2, "title": "Beta", "step": "spec"}, False)
     (one / "secret.md").write_text("secret\n")
-    file: Path = tmp_path / "fleet.toml"
-    group: Fleet = Fleet(file, [Project(one.resolve()), Project(two.resolve())])
+    file: Path = tmp_path / "workspace.toml"
+    group: Workspace = Workspace(file, [Project(one.resolve()), Project(two.resolve())])
     group.save()
     server: DashboardServer = DashboardServer(("127.0.0.1", 0), handler(file))
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -182,7 +182,7 @@ def test_the_dashboard_bind_does_not_reverse_resolve(monkeypatch: pytest.MonkeyP
         raise AssertionError(f"reverse lookup of {name}")
 
     monkeypatch.setattr(socket, "getfqdn", refuse)
-    server: DashboardServer = DashboardServer(("127.0.0.1", 0), handler(tmp_path / "fleet.toml"))
+    server: DashboardServer = DashboardServer(("127.0.0.1", 0), handler(tmp_path / "workspace.toml"))
     try:
         assert server.server_name == "127.0.0.1"
         assert server.server_port != 0
@@ -190,7 +190,7 @@ def test_the_dashboard_bind_does_not_reverse_resolve(monkeypatch: pytest.MonkeyP
         server.server_close()
 
 
-def test_the_fleet_dashboard_serves_both_projects(served):
+def test_the_workspace_dashboard_serves_both_projects(served):
     one, base = served
     rows: list[dict[str, object]] = [{"key": "run.concurrency", "value": 3, "source": "default"}]
     (one / ".factory" / "jobs" / "config.json").write_text(json.dumps(rows))
@@ -217,16 +217,16 @@ def test_the_fleet_dashboard_serves_both_projects(served):
     assert other == "STATUS: ok\n"
 
 
-def test_the_fleet_dashboard_serves_nothing_outside_a_jobs_folder(served):
+def test_the_workspace_dashboard_serves_nothing_outside_a_jobs_folder(served):
     _one, base = served
     for path in ("/projects/one/jobs/../../secret.md", "/projects/one/jobs/%2e%2e/%2e%2e/secret.md",
-                 "/projects/one/jobs/001-a/job.json", "/fleet.toml"):
+                 "/projects/one/jobs/001-a/job.json", "/workspace.toml"):
         with pytest.raises(urllib.error.HTTPError) as error:
             fetch(base + path)
         assert error.value.code == 404, path
 
 
-def test_the_fleet_dashboard_answers_only_to_its_own_address(served):
+def test_the_workspace_dashboard_answers_only_to_its_own_address(served):
     _one, base = served
     for path in ("/projects.json", "/queue.json"):
         with pytest.raises(urllib.error.HTTPError) as error:
@@ -234,7 +234,7 @@ def test_the_fleet_dashboard_answers_only_to_its_own_address(served):
         assert error.value.code == 403, path
 
 
-def test_the_fleet_dashboard_serves_the_queue_and_caches_it(tmp_path):
+def test_the_workspace_dashboard_serves_the_queue_and_caches_it(tmp_path):
     counts: Path = tmp_path / "counts"
     good_script: str = (
         "#!/bin/sh\n"
@@ -244,8 +244,8 @@ def test_the_fleet_dashboard_serves_the_queue_and_caches_it(tmp_path):
     )
     good: Path = checkout(tmp_path, "alpha", good_script)
     bad: Path = checkout(tmp_path, "beta", "#!/bin/sh\necho 'mfactory: queue broke' >&2\nexit 1\n")
-    file: Path = tmp_path / "fleet.toml"
-    group: Fleet = Fleet(file, [Project(good), Project(bad)])
+    file: Path = tmp_path / "workspace.toml"
+    group: Workspace = Workspace(file, [Project(good), Project(bad)])
     group.save()
     server: DashboardServer = DashboardServer(("127.0.0.1", 0), handler(file))
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -266,10 +266,10 @@ def test_the_fleet_dashboard_serves_the_queue_and_caches_it(tmp_path):
 
 
 def test_a_bad_schema_is_refused(tmp_path):
-    file: Path = tmp_path / "fleet.toml"
+    file: Path = tmp_path / "workspace.toml"
     file.write_text("schema = 2\n")
     with pytest.raises(Refused, match="schema 2"):
-        Fleet.load(file)
+        Workspace.load(file)
 
 
 def test_concurrency_keeps_the_first_actionable_rows(tmp_path, monkeypatch, capsys):
@@ -282,73 +282,73 @@ def test_concurrency_keeps_the_first_actionable_rows(tmp_path, monkeypatch, caps
         tmp_path, "beta",
         "#!/bin/sh\nprintf '%s\\n' 'hold  3  003-old  build  concurrency 1 reached' 'new  4  -  -  Four'\n",
     )
-    fleet_dir: Path = tmp_path / "fleet"
-    fleet_dir.mkdir()
-    monkeypatch.chdir(fleet_dir)
-    file: Path = Fleet.init(fleet_dir)
-    group: Fleet = Fleet.load(file)
+    workspace_dir: Path = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    monkeypatch.chdir(workspace_dir)
+    file: Path = Workspace.init(workspace_dir)
+    group: Workspace = Workspace.load(file)
     group.add(alpha)
     group.add(beta)
     group.concurrency = 1
     group.save()
-    assert Fleet.load(file).concurrency == 1
+    assert Workspace.load(file).concurrency == 1
 
-    assert main(["fleet", "queue"]) == 0
+    assert main(["workspace", "queue"]) == 0
     capped: str = capsys.readouterr().out
     assert "alpha  resume  1  001-one  build  round 1" in capped
     assert "alpha  wait  2  002-ask  ask-author  waiting for a maintainer" in capped
     assert "beta  hold  3  003-old  build  concurrency 1 reached" in capped
-    assert "beta  hold  4  -  -  fleet concurrency 1 reached" in capped
+    assert "beta  hold  4  -  -  workspace concurrency 1 reached" in capped
 
-    assert main(["fleet", "queue", "--concurrency", "2"]) == 0
+    assert main(["workspace", "queue", "--concurrency", "2"]) == 0
     opened: str = capsys.readouterr().out
     assert "alpha  resume  1  001-one  build  round 1" in opened
     assert "beta  new  4  -  -  Four" in opened
-    assert "fleet concurrency" not in opened
+    assert "workspace concurrency" not in opened
 
 
-def test_the_default_fleet_cap_comes_from_defaults_toml(tmp_path, monkeypatch, capsys):
+def test_the_default_workspace_cap_comes_from_defaults_toml(tmp_path, monkeypatch, capsys):
     script: str = (
         "#!/bin/sh\nprintf '%s\\n' "
         "'new  1  -  -  One' 'new  2  -  -  Two' 'new  3  -  -  Three' 'new  4  -  -  Four'\n"
     )
     repo: Path = checkout(tmp_path, "alpha", script)
-    fleet_dir: Path = tmp_path / "fleet"
-    fleet_dir.mkdir()
-    monkeypatch.chdir(fleet_dir)
-    Fleet.init(fleet_dir)
-    group: Fleet = Fleet.find()
+    workspace_dir: Path = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    monkeypatch.chdir(workspace_dir)
+    Workspace.init(workspace_dir)
+    group: Workspace = Workspace.find()
     group.add(repo)
     assert group.concurrency is None
 
-    assert main(["fleet", "queue"]) == 0
+    assert main(["workspace", "queue"]) == 0
     capped: str = capsys.readouterr().out
     assert "alpha  new  1  -  -  One" in capped
     assert "alpha  new  3  -  -  Three" in capped
-    assert "alpha  hold  4  -  -  fleet concurrency 3 reached" in capped
+    assert "alpha  hold  4  -  -  workspace concurrency 3 reached" in capped
 
     group.concurrency = 4
     group.save()
-    assert main(["fleet", "queue"]) == 0
+    assert main(["workspace", "queue"]) == 0
     opened: str = capsys.readouterr().out
     assert "alpha  new  4  -  -  Four" in opened
-    assert "fleet concurrency" not in opened
+    assert "workspace concurrency" not in opened
 
 
 def test_a_bad_concurrency_is_refused(tmp_path, monkeypatch, capsys):
-    file: Path = tmp_path / "fleet.toml"
+    file: Path = tmp_path / "workspace.toml"
     file.write_text("schema = 1\nconcurrency = 0\n")
     with pytest.raises(Refused, match="at least 1"):
-        Fleet.load(file)
+        Workspace.load(file)
     file.write_text("schema = 1\nconcurrency = true\n")
     with pytest.raises(Refused, match="at least 1"):
-        Fleet.load(file)
+        Workspace.load(file)
 
-    fleet_dir: Path = tmp_path / "fleet"
-    fleet_dir.mkdir()
-    monkeypatch.chdir(fleet_dir)
-    Fleet.init(fleet_dir)
-    assert main(["fleet", "queue", "--concurrency", "0"]) == 1
+    workspace_dir: Path = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    monkeypatch.chdir(workspace_dir)
+    Workspace.init(workspace_dir)
+    assert main(["workspace", "queue", "--concurrency", "0"]) == 1
     assert "at least 1" in capsys.readouterr().err
 
 
@@ -375,8 +375,8 @@ def test_snapshot_attaches_only_a_real_graph(tmp_path: Path) -> None:
     partial_jobs: Path = partial / ".factory" / "jobs"
     partial_jobs.mkdir(parents=True)
     (partial_jobs / "graph.json").write_text('{"steps": [{"name": "intake"}], "end_states": []}')
-    group: Fleet = Fleet(
-        tmp_path / "fleet.toml", [Project(good), Project(broken), Project(partial), Project(missing)],
+    group: Workspace = Workspace(
+        tmp_path / "workspace.toml", [Project(good), Project(broken), Project(partial), Project(missing)],
     )
     body: dict[str, object] = group.snapshot()
     raw: object = body["projects"]
@@ -421,10 +421,10 @@ if (JSON.stringify(cards) !== JSON.stringify(["9", "10"])) throw new Error(JSON.
     assert result.returncode == 0, result.stderr
 
 
-def test_dashboard_inside_a_subscribed_repo_opens_that_project(world, monkeypatch):
+def test_dashboard_inside_a_listed_repo_opens_that_project(world, monkeypatch):
     real_factory(world.repo)
     monkeypatch.chdir(world.repo)
-    assert main(["fleet", "subscribe"]) == 0
+    assert main(["workspace", "add"]) == 0
     seen: dict[str, object] = {}
 
     def serve(
@@ -438,48 +438,43 @@ def test_dashboard_inside_a_subscribed_repo_opens_that_project(world, monkeypatc
     def serve_one(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
         seen["one"] = repo_arg
 
-    monkeypatch.setattr("modfactory.cli.fleet_http.serve", serve)
-    monkeypatch.setattr("modfactory.cli.fleet_http.serve_one", serve_one)
+    monkeypatch.setattr("modfactory.cli.workspace_http.serve", serve)
+    monkeypatch.setattr("modfactory.cli.workspace_http.serve_one", serve_one)
     assert main(["dashboard", "--no-open"]) == 0
     assert seen["project"] == "repo"
     assert seen["open"] is False
     assert seen["file"] is not None
     assert "one" not in seen
 
-    seen.clear()
-    assert main(["dashboard", "--all", "--no-open"]) == 0
-    assert seen["project"] is None
-    assert "one" not in seen
 
-
-def test_dashboard_in_a_plain_git_checkout_opens_the_fleet(world, monkeypatch, tmp_path):
+def test_dashboard_in_a_plain_git_checkout_opens_the_workspace(world, monkeypatch, tmp_path):
     (world.repo / "factory.toml").unlink()
     monkeypatch.chdir(world.repo)
-    file: Path = tmp_path / "mfactory" / "fleet.toml"
+    file: Path = tmp_path / "mfactory" / "workspace.toml"
     file.parent.mkdir(parents=True)
-    group: Fleet = Fleet(file, [])
+    group: Workspace = Workspace(file, [])
     group.save()
     seen: dict[str, object] = {}
 
     def serve(
-        fleet_file: Path, port: int = 4747, open_browser: bool = True,
+        workspace_file: Path, port: int = 4747, open_browser: bool = True,
         say: object = print, project: str | None = None,
     ) -> None:
-        seen["file"] = fleet_file
+        seen["file"] = workspace_file
         seen["project"] = project
 
     def serve_one(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
         seen["one"] = repo_arg
 
-    monkeypatch.setattr("modfactory.cli.fleet_http.serve", serve)
-    monkeypatch.setattr("modfactory.cli.fleet_http.serve_one", serve_one)
+    monkeypatch.setattr("modfactory.cli.workspace_http.serve", serve)
+    monkeypatch.setattr("modfactory.cli.workspace_http.serve_one", serve_one)
     assert main(["dashboard", "--no-open"]) == 0
     assert seen["file"] == file
     assert seen["project"] is None
     assert "one" not in seen
 
 
-def test_dashboard_inside_an_unsubscribed_repo_stays_on_that_repo(world, monkeypatch):
+def test_dashboard_inside_an_unlisted_repo_stays_on_that_repo(world, monkeypatch):
     monkeypatch.chdir(world.repo)
     seen: dict[str, object] = {}
 
@@ -487,55 +482,142 @@ def test_dashboard_inside_an_unsubscribed_repo_stays_on_that_repo(world, monkeyp
         file: Path, port: int = 4747, open_browser: bool = True,
         say: object = print, project: str | None = None,
     ) -> None:
-        seen["fleet"] = True
+        seen["workspace"] = True
 
     def serve_one(repo_arg: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
         seen["repo"] = repo_arg
         seen["open"] = open_browser
 
-    monkeypatch.setattr("modfactory.cli.fleet_http.serve", serve)
-    monkeypatch.setattr("modfactory.cli.fleet_http.serve_one", serve_one)
+    monkeypatch.setattr("modfactory.cli.workspace_http.serve", serve)
+    monkeypatch.setattr("modfactory.cli.workspace_http.serve_one", serve_one)
     assert main(["dashboard", "--no-open"]) == 0
     assert seen["repo"] == world.repo.resolve()
     assert seen["open"] is False
-    assert "fleet" not in seen
+    assert "workspace" not in seen
 
 
-def test_fleet_alone_opens_the_dashboard(tmp_path, monkeypatch):
+def test_workspace_alone_lists_the_projects(tmp_path, monkeypatch, capsys):
     repo: Path = checkout(tmp_path, "alpha")
     monkeypatch.chdir(repo)
-    assert main(["fleet", "subscribe"]) == 0
-    seen: dict[str, object] = {}
-
-    def serve(file: Path, port: int = 4747, open_browser: bool = True, say: object = print) -> None:
-        seen["file"] = file
-        seen["port"] = port
-        seen["open"] = open_browser
-
-    monkeypatch.setattr("modfactory.fleet.command.serve", serve)
-    assert main(["fleet", "--port", "4751", "--no-open"]) == 0
-    assert seen["port"] == 4751
-    assert seen["open"] is False
-    assert seen["file"] is not None
+    assert main(["workspace", "add"]) == 0
+    capsys.readouterr()
+    assert main(["workspace"]) == 0
+    assert f"alpha  {repo.resolve()}  ok" in capsys.readouterr().out
 
 
-def test_subscribe_writes_the_user_fleet_and_a_local_file_wins(tmp_path, monkeypatch, capsys):
+def test_add_writes_the_user_workspace_and_a_local_file_wins(tmp_path, monkeypatch, capsys):
     repo: Path = checkout(tmp_path, "alpha")
     monkeypatch.chdir(repo)
-    assert main(["fleet", "subscribe"]) == 0
-    from modfactory.fleet import Fleet, user_file
+    assert main(["workspace", "add"]) == 0
+    from modfactory.workspace import Workspace, user_file
     assert user_file().is_file()
     assert repo.resolve().as_posix() in user_file().read_text()
     monkeypatch.chdir(tmp_path)
-    assert main(["fleet", "list"]) == 0
+    assert main(["workspace", "list"]) == 0
     assert "alpha" in capsys.readouterr().out
-    assert main(["fleet", "unsubscribe", str(repo)]) == 0
+    assert main(["workspace", "remove", str(repo)]) == 0
 
     local: Path = tmp_path / "group"
     local.mkdir()
     other: Path = checkout(local, "beta")
-    Fleet.init(local)
+    Workspace.init(local)
     monkeypatch.chdir(other)
-    assert main(["fleet", "subscribe"]) == 0
-    assert "beta" in (local / "fleet.toml").read_text()
+    assert main(["workspace", "add"]) == 0
+    assert "beta" in (local / "workspace.toml").read_text()
     assert "beta" not in user_file().read_text()
+
+
+def test_the_user_fleet_file_moves_to_workspace_toml(tmp_path, monkeypatch, capsys):
+    from modfactory.workspace import user_file
+    repo: Path = checkout(tmp_path, "alpha")
+    legacy: Path = user_file().with_name("fleet.toml")
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text(f'schema = 1\n\n[[projects]]\npath = "{repo.resolve()}"\n')
+    monkeypatch.chdir(tmp_path)
+    assert main(["workspace", "list"]) == 0
+    captured = capsys.readouterr()
+    assert "moved fleet.toml" in captured.err
+    assert "alpha" in captured.out
+    assert user_file().is_file() and not legacy.exists()
+
+
+def test_a_project_binary_hands_dashboard_commands_to_the_global_install(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("modfactory.cli.has_dashboard_page", lambda: False)
+    monkeypatch.setattr("modfactory.cli.global_binary", lambda: None)
+    for argv in (["dashboard"], ["start", "dashboard"], ["stop"]):
+        assert main(argv) == 1
+        assert "install.sh --global" in capsys.readouterr().err
+
+    binary: Path = tmp_path / "home" / "core" / "bin" / "mfactory"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("")
+    calls: list[list[str]] = []
+
+    def execv(path: str, args: list[str]) -> None:
+        calls.append(args)
+        raise SystemExit(0)
+
+    monkeypatch.setattr("modfactory.cli.global_binary", lambda: binary)
+    monkeypatch.setattr("modfactory.cli.os.execv", execv)
+    with pytest.raises(SystemExit):
+        main(["start", "dashboard", "--no-open"])
+    assert calls == [[sys.executable, str(binary), "start", "dashboard", "--no-open"]]
+
+
+def test_other_commands_do_not_hand_off(monkeypatch, capsys):
+    monkeypatch.setattr("modfactory.cli.has_dashboard_page", lambda: False)
+    monkeypatch.setattr("modfactory.cli.global_binary", lambda: None)
+    assert main(["version"]) == 0
+    assert capsys.readouterr().out.strip()
+
+
+def write_index(repo: Path, index: dict[str, object]) -> None:
+    jobs_dir: Path = repo / ".factory" / "jobs"
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    (jobs_dir / "index.json").write_text(json.dumps(index))
+
+
+def test_old_and_newer_job_files_get_a_notice_instead_of_breaking_the_page(tmp_path):
+    from modfactory.store import SCHEMA
+    from modfactory.workspace.jobs import build_snapshot
+    old: Path = checkout(tmp_path, "old")
+    write_index(old, {"jobs": [{"id": "001-a", "step": "spec"}]})
+    newer: Path = checkout(tmp_path, "newer")
+    write_index(newer, {"schema": SCHEMA + 1, "jobs": [{"id": "001-b"}]})
+    current: Path = checkout(tmp_path, "current")
+    write_index(current, {"schema": SCHEMA, "jobs": [{"id": "001-c"}]})
+    empty: Path = checkout(tmp_path, "empty")
+    group: Workspace = Workspace(tmp_path / "workspace.toml", [Project(old), Project(newer), Project(current),
+                                                               Project(empty)])
+    items: dict[str, dict[str, object]] = {item["id"]: item for item in group.snapshot()["projects"]}
+    assert "older factory" in str(items["old"]["notice"])
+    assert [job["id"] for job in items["old"]["jobs"]] == ["001-a"]
+    assert "newer factory" in str(items["newer"]["notice"])
+    assert items["newer"]["jobs"] == []
+    assert items["current"]["notice"] is None
+    assert items["empty"]["notice"] is None
+    assert build_snapshot([], lambda project: "") == {"projects": []}
+
+
+def test_normalize_job_fills_what_an_old_factory_did_not_write():
+    from modfactory.workspace.jobs import normalize_job
+    assert normalize_job({"title": "no id"}) is None
+    assert normalize_job("not a job") is None
+    job: dict[str, object] | None = normalize_job({"id": "004-x", "history": [1, {"step": "spec"}], "round": True})
+    assert job is not None
+    assert job["title"] == "004-x"
+    assert job["step"] == ""
+    assert job["issue"] is None
+    assert job["round"] == 0
+    assert job["history"] == [{"step": "spec"}]
+    assert job["files"] == []
+
+
+def test_saved_jobs_and_the_index_carry_the_schema(world):
+    from modfactory.store import SCHEMA
+    factory = world.factory()
+    job: dict[str, object] = {"id": "001-x", "issue": 1, "step": "spec", "history": []}
+    factory.store.path("001-x").mkdir(parents=True)
+    factory.store.save(job)
+    assert json.loads((factory.store.path("001-x") / "job.json").read_text())["schema"] == SCHEMA
+    assert json.loads((factory.store.dir / "index.json").read_text())["schema"] == SCHEMA
