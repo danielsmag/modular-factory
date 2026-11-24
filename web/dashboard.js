@@ -788,6 +788,10 @@ function isExplore(event) {
 function isShell(event) {
   return SHELL_NAMES.has(String(event.name || "").toLowerCase());
 }
+function isEdit(event) {
+  const name = String(event.name || "").toLowerCase();
+  return event.kind === "edit" || EDIT_NAMES.has(name);
+}
 function feedOf(run) {
   const feed = [];
   (run.events || []).forEach((event) => {
@@ -809,7 +813,11 @@ function feedOf(run) {
       feed.push({ type: "shell", event });
       return;
     }
-    feed.push({ type: "action", event });
+    if (isEdit(event)) {
+      feed.push({ type: "edit", event });
+      return;
+    }
+    feed.push({ type: "tool", event });
   });
   if (run.result) feed.push({ type: "text", text: run.result, result: true });
   return feed;
@@ -845,10 +853,24 @@ function programsOf(command) {
   });
   return names;
 }
+function tickName(name) {
+  return "`" + String(name || "") + "`";
+}
 function programsLabel(command) {
   const names = programsOf(command);
-  if (names.length <= 6) return names.join(", ");
-  return names.slice(0, 6).join(", ") + ", +" + (names.length - 6);
+  if (!names.length) return "";
+  const shown = names.length <= 6 ? names : names.slice(0, 6);
+  const label = shown.map(tickName).join(", ");
+  if (names.length <= 6) return label;
+  return label + ", +" + (names.length - 6);
+}
+function editTarget(event) {
+  return shortPath(event.path || event.summary || event.name || "") || "file";
+}
+function toolName(event) {
+  const raw = String(event.name || "tool");
+  const parts = raw.split(".");
+  return parts[parts.length - 1] || raw;
 }
 function workKey(run) {
   return "work|" + runIdentity(run);
@@ -940,14 +962,43 @@ function exploreNode(job, events, key) {
 function shellCard(event) {
   const command = shellCommand(event);
   const output = String(event.output || "");
+  const progs = programsLabel(command);
+  const head = el("div", { class: "sh-head" },
+    el("span", { class: "sh-icon", "aria-hidden": "true", text: ">_" }),
+    el("span", { class: "sh-title", text: "Ran command" }));
+  if (progs) head.append(el("span", { class: "sh-progs", text: progs }));
   const card = el("div", { class: "sh" },
-    el("div", { class: "sh-head" },
-      el("span", { class: "sh-icon", "aria-hidden": "true", text: ">_" }),
-      el("span", { class: "sh-title", text: "Ran command" }),
-      el("span", { class: "sh-progs", text: programsLabel(command) })),
+    head,
     el("div", { class: "sh-body" },
       el("pre", { class: "sh-cmd" }, el("span", { class: "sh-prompt", text: "$ " }), command)));
   if (output) card.querySelector(".sh-body").append(el("pre", { class: "sh-out", text: output }));
+  return card;
+}
+function editCard(event) {
+  const target = editTarget(event);
+  const full = String(event.path || event.summary || target);
+  return el("div", { class: "sh sh-edit" },
+    el("div", { class: "sh-head" },
+      el("span", { class: "sh-icon", "aria-hidden": "true", text: "±" }),
+      el("span", { class: "sh-title", text: "Edited" }),
+      el("span", { class: "sh-progs", text: tickName(target) })),
+    el("div", { class: "sh-body" },
+      el("pre", { class: "sh-path", text: full })));
+}
+function toolCard(event) {
+  const name = toolName(event);
+  const label = actionLabel(event);
+  const detail = String(event.detail || "");
+  const bodyText = detail && detail !== label ? detail : (label && label !== name ? label : "");
+  const head = el("div", { class: "sh-head" },
+    el("span", { class: "sh-icon", "aria-hidden": "true", text: "·" }),
+    el("span", { class: "sh-title", text: "Used" }),
+    el("span", { class: "sh-progs", text: tickName(name) }));
+  const card = el("div", { class: "sh sh-tool" }, head);
+  if (bodyText) {
+    card.append(el("div", { class: "sh-body" },
+      el("pre", { class: "sh-meta", text: bodyText })));
+  }
   return card;
 }
 function feedNode(job, item, key) {
@@ -955,6 +1006,8 @@ function feedNode(job, item, key) {
   if (item.type === "heading") return el("p", { class: "feed-step", text: item.text });
   if (item.type === "explore") return exploreNode(job, item.events, key);
   if (item.type === "shell") return shellCard(item.event);
+  if (item.type === "edit") return editCard(item.event);
+  if (item.type === "tool") return toolCard(item.event);
   return actionNode(job, item.event, key, 1);
 }
 function timeline(job, run, error) {
