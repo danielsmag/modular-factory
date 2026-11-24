@@ -6,6 +6,7 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- The dashboard tab shows the factory mark as its icon instead of the browser's default globe.
 - Job times on the dashboard move while the page is open. A running job's age, and the "just now" and "since" labels, no longer wait for a refresh.
 
 ## 0.13.0
