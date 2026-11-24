@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.16.0
+
 - The Board has a Now panel of the agents still on the current step. Agent activity sends the tool name and a short label only, not tool output, file contents, or assistant replies.
 
 ## 0.15.1
