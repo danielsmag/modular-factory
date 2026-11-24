@@ -119,7 +119,7 @@ class World:
             state["issues"][str(number)] = {
                 "number": number, "title": title, "body": body, "state": "OPEN", "author": {"login": author},
                 "labels": [{"name": n} for n in labels], "url": f"https://github.test/acme/app/issues/{number}",
-                "comments": []}
+                "comments": [], "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-02T00:00:00Z"}
         self.set_gh(add)
         return number
 

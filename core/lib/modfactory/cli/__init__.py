@@ -7,11 +7,13 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any, TextIO
 
 from .. import checks, config, graph, install
 from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
+from ..queue import queue_json
 from ..store import Store
 from ..util import ConfigError, FactoryError, Refused, find_repo, global_binary, has_dashboard_page, version
 from ..workspace import service as workspace_http
@@ -22,7 +24,7 @@ from .parser import parser
 DASHBOARD_COMMANDS: frozenset[str] = frozenset({"dashboard", "start", "stop"})
 
 
-def _stale_note(cfg) -> None:
+def _stale_note(cfg, out: TextIO = sys.stdout) -> None:
     """Agents run from the generated files, so say when they no longer match factory.toml."""
     try:
         actions, _notes = syncer.sync(cfg, check=True)
@@ -30,7 +32,7 @@ def _stale_note(cfg) -> None:
         return
     if actions:
         print(f"note: {len(actions)} generated file(s) are out of date with factory.toml. "
-              "Run `.factory/bin/mfactory sync` and commit the result.", flush=True)
+              "Run `.factory/bin/mfactory sync` and commit the result.", file=out, flush=True)
 
 
 def _stdin_text() -> str:
@@ -163,7 +165,11 @@ def run(args: argparse.Namespace) -> int:
             workspace_http.serve(group.file, args.port, not args.no_open, project=label)
     else:
         factory: Factory = Factory(cfg)
-        if command == "queue":
+        if command == "queue" and args.json:
+            _stale_note(cfg, sys.stderr)
+            queued: tuple[list[tuple[Any, ...]], list[dict[str, Any]]] = factory.queue_and_issues()
+            print(json.dumps(queue_json(*queued)))
+        elif command == "queue":
             _stale_note(cfg)
             rows = factory.queue()
             for row in rows:

@@ -130,7 +130,8 @@ def main(argv):
             state["issues"][str(n)] = {
                 "number": n, "title": named["title"], "body": body_of(named), "state": "OPEN",
                 "author": {"login": state["user"]}, "labels": [{"name": named["label"]}],
-                "url": f"https://github.test/acme/app/issues/{n}", "comments": []}
+                "url": f"https://github.test/acme/app/issues/{n}", "comments": [],
+                "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z"}
             out = state["issues"][str(n)]["url"]
         elif action == "comment":
             comment(state, state["issues"][pos[0]], body_of(named))
