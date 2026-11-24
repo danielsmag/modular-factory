@@ -891,41 +891,61 @@ function actionExtra(event) {
   }
   return chunks;
 }
-function actionNode(job, event, key) {
+function actionNode(job, event, key, times) {
   const verb = verbOf(event);
   const label = actionLabel(event) || verb;
   const full = event.path || event.detail || event.summary || "";
   const extra = actionExtra(event);
+  const count = times > 1 ? el("span", { class: "act-count", text: "×" + times }) : null;
+  const spacer = el("span", { class: "chev-space", "aria-hidden": "true" });
   if (event.job_file && !extra.length) {
     return el("div", { class: "act", title: full },
+      spacer,
       el("span", { class: "act-verb", text: verb }),
       el("button", {
         type: "button", class: "ev-link",
         onclick: () => openJobFile(job, event.job_file),
-      }, el("span", { text: event.job_file })));
+      }, el("span", { text: event.job_file })),
+      count);
   }
   if (!extra.length) {
     return el("div", { class: "act", title: full },
+      spacer,
       el("span", { class: "act-verb", text: verb }),
-      el("span", { class: "act-label", text: label }));
+      el("span", { class: "act-label", text: label }),
+      count);
   }
   const open = actionOpen(key);
   const row = el("button", {
     type: "button", class: "act", "aria-expanded": String(open), title: full,
     onclick: () => toggleAction(key, !open),
   },
-    el("span", { class: "chev small", "aria-hidden": "true" }),
+    el("span", { class: "chev-space", "aria-hidden": "true" }, el("span", { class: "chev small" })),
     el("span", { class: "act-verb", text: verb }),
-    el("span", { class: "act-label", text: label }));
+    el("span", { class: "act-label", text: label }),
+    count);
   const box = el("div", { class: "act-wrap" + (open ? " open" : "") }, row);
   if (open) extra.forEach((text) => box.append(el("pre", { class: "ev-out", text })));
   return box;
+}
+function foldedActions(actions) {
+  const rows = [];
+  actions.forEach((event, index) => {
+    const last = rows[rows.length - 1];
+    const plain = !actionExtra(event).length;
+    if (last && plain && last.plain && verbOf(last.event) === verbOf(event) && actionLabel(last.event) === actionLabel(event)) {
+      last.times += 1;
+      return;
+    }
+    rows.push({ event, index, times: 1, plain });
+  });
+  return rows;
 }
 function stepBody(job, step, key) {
   const body = el("div", { class: "step-body" });
   const text = visibleText(step);
   if (text) body.append(el("p", { class: "step-text", text }));
-  step.actions.forEach((event, index) => body.append(actionNode(job, event, key + "#" + index)));
+  foldedActions(step.actions).forEach((row) => body.append(actionNode(job, row.event, key + "#" + row.index, row.times)));
   if (!text && !step.actions.length) body.append(el("p", { class: "kempty", text: "Nothing recorded for this step." }));
   return body;
 }
