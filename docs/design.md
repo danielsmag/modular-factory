@@ -206,7 +206,8 @@ each tool allows.
   job.
 - **The dashboard reads each request.** The server rebuilds the project list
   from each checkout's job files. `index.json`, `graph.json`, and `config.json`
-  are used when that project has written them.
+  are used when that project has written them. With no `graph.json`, the
+  pipeline is read from `factory.toml`, so an empty project still draws.
 - **A workspace is a list of checkouts.** The default file is
   `~/.mfactory/workspace.toml`. `install.sh --global` creates `~/.mfactory`.
   `mfactory install` and `mfactory workspace add` write the workspace file.

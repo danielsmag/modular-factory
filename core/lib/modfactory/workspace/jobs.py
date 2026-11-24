@@ -6,8 +6,9 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+from .. import config, graph
 from ..store import SCHEMA as DATA_SCHEMA
-from ..util import first_line
+from ..util import FactoryError, first_line
 from .paths import SERVED
 from .project import Project
 
@@ -51,6 +52,25 @@ def read_graph(project: Project) -> dict[str, object] | None:
         if not isinstance(name, str) or not name or not isinstance(edges, list):
             return None
     return loaded
+
+
+def graph_from_config(project: Project) -> tuple[dict[str, object] | None, str | None]:
+    """Pipeline from factory.toml when the checkout has not written graph.json.
+
+    An empty job list still has a pipeline. A missing factory.toml is not an error.
+    """
+    path: Path = project.path / config.FILE
+    if not path.is_file():
+        return None, None
+    try:
+        cfg: config.Config = config.load(project.path, validate=False)
+        drawn: object = graph.as_json(cfg)
+    except FactoryError as error:
+        return None, str(error)
+    if not isinstance(drawn, dict):
+        return None, "factory.toml did not produce a pipeline"
+    pipeline: dict[str, object] = drawn
+    return pipeline, None
 
 
 def read_config(project: Project) -> tuple[list[dict[str, object]] | None, str | None]:
@@ -212,8 +232,16 @@ def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) 
             "concurrency": concurrency,
             "config": config_rows,
         }
-        graph: dict[str, object] | None = read_graph(project)
-        if graph is not None:
-            item["graph"] = graph
+        pipeline: dict[str, object] | None = read_graph(project)
+        if pipeline is None:
+            fallback: dict[str, object] | None
+            fallback_error: str | None
+            fallback, fallback_error = graph_from_config(project)
+            if fallback_error:
+                error = f"{error}; {fallback_error}" if isinstance(error, str) and error else fallback_error
+                item["error"] = error
+            pipeline = fallback
+        if pipeline is not None:
+            item["graph"] = pipeline
         items.append(item)
     return {"projects": items}

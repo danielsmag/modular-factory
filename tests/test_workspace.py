@@ -397,6 +397,25 @@ def test_snapshot_attaches_only_a_real_graph(tmp_path: Path) -> None:
     assert "graph" not in found["missing"]
 
 
+def test_snapshot_draws_an_empty_project_from_factory_toml(tmp_path: Path) -> None:
+    repo: Path = checkout(tmp_path, "empty")
+    (repo / "factory.toml").write_text("schema = 1\n")
+    group: Workspace = Workspace(tmp_path / "workspace.toml", [Project(repo)])
+    body: dict[str, object] = group.snapshot()
+    raw: object = body["projects"]
+    assert isinstance(raw, list)
+    item: object = raw[0]
+    assert isinstance(item, dict)
+    assert item["jobs"] == []
+    drawn: object = item["graph"]
+    assert isinstance(drawn, dict)
+    steps: object = drawn["steps"]
+    assert isinstance(steps, list)
+    names: list[object] = [step.get("name") for step in steps if isinstance(step, dict)]
+    assert "intake" in names
+    assert drawn["end_states"] == ["done", "failed", "rejected"]
+
+
 @pytest.mark.skipif(not shutil.which("node"), reason="needs node to run the page's script")
 def test_a_queue_row_for_an_existing_job_is_not_a_second_card(tmp_path: Path) -> None:
     page: str = dashboard_page().decode()
