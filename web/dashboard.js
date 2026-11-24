@@ -57,7 +57,7 @@ function writeSplit(px) {
 const state = {
   index: null, graph: null, config: null, error: null, query: "", range: "30", file: null, source: "all", drawer: null,
   workspace: false, projects: [], selected: readChoice(), queueRows: [], queueErrors: [], queueStale: false,
-  split: readSplit(), now: {}, nowSeq: 0,
+  split: readSplit(), now: {}, nowSeq: 0, nowSeen: {},
 };
 if (queryProject()) writeChoice(state.selected);
 
@@ -449,6 +449,7 @@ function jobCard(job) {
   const label = (job.title || job.id) + (state.workspace && state.selected === "all" && job.projectName ? ", " + job.projectName : "");
   return el("article", {
     class: cardClass(job), tabindex: 0, role: "button", "aria-label": label,
+    "data-focus": "card:" + (job.project || "") + ":" + job.id,
     onclick: (event) => { if (event.target.closest("a")) return; openDrawer(job); },
     onkeydown: (event) => {
       if (event.target.closest("a")) return;
@@ -616,7 +617,7 @@ function resetSplit(event) {
 }
 function grip() {
   return el("div", {
-    class: "grip", role: "separator", title: "Drag to resize", tabindex: "0",
+    class: "grip", role: "separator", title: "Drag to resize", tabindex: "0", "data-focus": "drawer-grip",
     "aria-orientation": "vertical", "aria-label": "Resize the file list",
     "aria-valuemin": String(SPLIT_MIN), "aria-valuenow": String(state.split),
     onpointerdown: startSplit, onkeydown: keySplit, ondblclick: resetSplit,
@@ -637,6 +638,7 @@ function fileList(job, files) {
     const mark = tone(file.first_line);
     box.append(el("button", {
       type: "button", class: "d-file" + (state.drawer.path === file.path ? " on" : ""),
+      "data-focus": "drawer-file:" + file.path,
       "aria-pressed": String(state.drawer.path === file.path),
       onclick: () => pickFile(job, file.path),
     }, el("i", { class: "dot" + (mark ? " " + mark : "") }), el("span", { text: fileLabel(file.path) })));
@@ -647,7 +649,7 @@ function fileList(job, files) {
 function drawerTab(name, label) {
   const on = state.drawer && state.drawer.tab === name;
   return el("button", {
-    type: "button", role: "tab", text: label,
+    type: "button", role: "tab", text: label, "data-focus": "drawer-tab:" + name,
     "aria-selected": String(on), "aria-pressed": on ? "true" : "false",
     onclick: () => pickDrawerTab(name),
   });
@@ -701,6 +703,7 @@ function runList(job, runs, index) {
   runs.forEach((run, at) => {
     box.append(el("button", {
       type: "button", class: "d-run" + (at === index ? " on" : ""),
+      "data-focus": "drawer-run:" + at,
       "aria-pressed": String(at === index),
       onclick: () => pickRun(at),
     },
@@ -716,7 +719,7 @@ function toolEvents(run) {
 }
 function eventMain(event) {
   if (!event || event.kind === "text" || event.text) return null;
-  const main = el("div", { class: "ev-main" });
+  const main = el("div", { class: "ev-main ev-tool" });
   main.append(document.createTextNode(event.name || ""));
   const summary = event.summary || "";
   if (summary) {
@@ -726,7 +729,7 @@ function eventMain(event) {
   return main;
 }
 function timeline(run, error) {
-  const box = el("div", { class: "d-doc d-timeline", tabindex: 0 });
+  const box = el("div", { class: "d-doc d-timeline", tabindex: 0, "data-focus": "drawer-timeline" });
   if (error) box.append(el("p", { class: "error", text: error }));
   toolEvents(run).forEach((event) => {
     const main = eventMain(event);
@@ -759,7 +762,7 @@ function activityBody(job) {
 function drawer() {
   if (!state.drawer) return null;
   const job = jobs().find((item) => sameDrawer(item));
-  const close = el("button", { type: "button", class: "close", "data-close": "true", text: "close", onclick: closeDrawer });
+  const close = el("button", { type: "button", class: "close", "data-close": "true", "data-focus": "drawer-close", text: "close", onclick: closeDrawer });
   if (!job) {
     return el("div", { class: "overlay" }, el("div", { class: "scrim", onclick: closeDrawer }),
       el("aside", { class: "drawer", role: "dialog", "aria-modal": "true", "aria-label": "Job" },
@@ -780,7 +783,7 @@ function drawer() {
         close),
       state.drawer.tab === "activity"
         ? activityBody(job)
-        : el("div", { class: "d-body", style: splitStyle() }, fileList(job, files), grip(), el("pre", { class: "file d-doc", tabindex: 0, text: state.drawer.text || "" }))));
+        : el("div", { class: "d-body", style: splitStyle() }, fileList(job, files), grip(), el("pre", { class: "file d-doc", tabindex: 0, "data-focus": "drawer-doc", text: state.drawer.text || "" }))));
 }
 function queueCard(row) {
   const who = state.workspace && state.selected === "all" && row.projectName ? row.projectName + " · " : "";
@@ -869,8 +872,41 @@ function nowPanel(shown) {
       if (run && run.status === "running") rows.push(nowRow(job, run));
     });
   });
+  if (nowPending(shown)) {
+    return el("section", { class: "now", "aria-label": "Now" },
+      head, el("p", { class: "kempty", text: "Loading..." }));
+  }
   return el("section", { class: "now", "aria-label": "Now" },
     head, rows.length ? el("div", { class: "now-rows" }, rows) : el("p", { class: "kempty", text: "Nothing running" }));
+}
+function nowPending(shown) {
+  return shown.some((job) => jobUsesClaude(job) && !(state.nowSeen && state.nowSeen[nowKey(job)]));
+}
+function nowPanelKey() {
+  if (!visibleUsesClaude()) return "notice";
+  const shown = jobs().filter(matches);
+  if (nowPending(shown)) return "loading";
+  const rows = [];
+  shown.forEach((job) => {
+    if (!jobUsesClaude(job)) return;
+    const body = state.now && state.now[nowKey(job)];
+    if (!body || !Array.isArray(body.runs)) return;
+    body.runs.forEach((run) => {
+      if (!run || run.status !== "running") return;
+      const events = (run.events || []).map((event) => {
+        if (!event || event.kind === "text" || event.text) return null;
+        return { name: event.name || "", summary: event.summary || "" };
+      });
+      rows.push({
+        job: nowKey(job),
+        agent: run.agent || "",
+        step: run.step || "",
+        started: typeof run.started_at === "string" ? run.started_at : "",
+        events,
+      });
+    });
+  });
+  return JSON.stringify(rows);
 }
 function boardSub() {
   if (!state.workspace) return (state.index.project && state.index.project.description) || "Jobs by step";
@@ -1468,9 +1504,14 @@ function render() {
   });
   paintLive();
   const target = document.getElementById("view");
-  const keep = document.activeElement && target.contains(document.activeElement) ? null : document.activeElement;
+  const active = document.activeElement;
+  const inside = !!(active && target.contains(active));
+  const token = inside ? focusToken(active) : "";
+  const keep = inside ? null : active;
   const scrollers = ".joblist, pre.file, .d-doc, .d-files, .d-runs, .d-timeline, .filelist";
   const scroll = [...target.querySelectorAll(scrollers)].map((n) => n.scrollTop);
+  const kanban = target.querySelector(".kanban");
+  const kanbanLeft = kanban ? kanban.scrollLeft : 0;
   let content;
   const ready = state.workspace ? !state.error || state.projects.length : !!(state.index && state.graph);
   if (!ready) {
@@ -1498,10 +1539,14 @@ function render() {
   }
   target.replaceChildren(...content);
   [...target.querySelectorAll(scrollers)].forEach((n, i) => { if (scroll[i]) n.scrollTop = scroll[i]; });
+  const nextKanban = target.querySelector(".kanban");
+  if (nextKanban && kanbanLeft) nextKanban.scrollLeft = kanbanLeft;
   if (state.drawer && state.drawer.focus) {
     const close = target.querySelector("[data-close]");
     if (close) close.focus();
     state.drawer.focus = false;
+  } else if (token) {
+    restoreFocus(target, token);
   } else if (keep && keep !== document.body) keep.focus({ preventScroll: true });
   paintNowElapsed();
 }
@@ -1538,9 +1583,29 @@ async function refreshNow() {
   }));
   if (seq !== state.nowSeq) return;
   const next = {};
-  entries.forEach((entry) => { next[entry[0]] = entry[1]; });
+  const seen = {};
+  entries.forEach((entry) => {
+    next[entry[0]] = entry[1];
+    seen[entry[0]] = true;
+  });
+  const before = nowPanelKey();
   state.now = next;
-  if (route().view === "board") render();
+  state.nowSeen = seen;
+  if (route().view !== "board" || before === nowPanelKey()) return;
+  render();
+}
+function focusToken(node) {
+  const marked = node && node.closest ? node.closest("[data-focus]") : null;
+  return marked ? marked.getAttribute("data-focus") || "" : "";
+}
+function restoreFocus(root, token) {
+  const nodes = root.querySelectorAll("[data-focus]");
+  for (const node of nodes) {
+    if (node.getAttribute("data-focus") === token) {
+      node.focus({ preventScroll: true });
+      return;
+    }
+  }
 }
 function refreshActivity() {
   if (!state.drawer || state.drawer.tab !== "activity" || route().view !== "board") return;

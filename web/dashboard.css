@@ -180,6 +180,7 @@ h2.job-title { font-size: var(--fs-title); overflow-wrap: anywhere; }
 .d-timeline { overflow: auto; padding: 22px 28px 48px; }
 .ev { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 2px 12px; margin: 0 0 14px; }
 .ev-time { font: var(--fs-floor) var(--mono); color: var(--text-2); }
+.ev-main { min-width: 0; }
 .ev-text, .ev-tool { margin: 0; font: var(--fs-meta) var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ev-out { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-floor) var(--mono); color: var(--text-2); }
 .ev-link { font: var(--fs-meta) var(--mono); color: var(--accent); text-align: left; }
