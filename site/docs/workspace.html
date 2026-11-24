@@ -43,7 +43,7 @@ mfactory workspace remove</code></pre>
 
   <h2 id="one-board">One board</h2>
   <p>Choose All for one board, one pipeline per project, one job list, and one config table per project. Choose one project for that project's views. Queue rows that are not jobs yet stay on the board.</p>
-  <p><code>workspace queue</code> runs each project's own <code>.factory/bin/mfactory queue</code>. A project that fails is reported, and the others still print.</p>
+  <p><code>workspace queue</code> runs each project's own <code>.factory/bin/mfactory queue</code>. A project that fails is reported, and the others still print. Queue cards link to the issue and open a drawer with the issue's body and comments, fetched when it opens.</p>
 
   <h2 id="concurrency">Concurrency</h2>
   <p>Each project caps its own jobs with <code>[run].concurrency</code> (default 3). A job waiting for a person, or being validated after merge, does not count.</p>
