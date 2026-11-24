@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- Agent activity reads like a Cursor chat. A "Worked for" line opens a flat feed: replies as text, reads and searches folded into "Explored N files", and each shell command as a card with the command and its output.
+
 ## 0.16.0
 
 - The Board has a Now panel of the agents still on the current step. Agent activity sends the tool name and a short label only, not tool output, file contents, or assistant replies.
