@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.18.0
+
 - Queue cards on the Board link to the issue and show its opened date, author and labels. A card opens a drawer with the issue's body and comments, read from GitHub when it opens. `mfactory queue --json` prints the queue with that metadata.
 
 ## 0.17.0
