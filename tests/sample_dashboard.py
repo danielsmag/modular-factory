@@ -124,6 +124,11 @@ def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=Fals
         "cost_usd": round(sum(cost.values()), 2), "cost_by_step": cost,
         "created_at": stamp(created), "finished_at": stamp(t) if finished else None, "updated_at": stamp(t),
     }
+    if stop == "done" and number == 1:  # a fix after the merge, from the same job
+        url = "https://github.com/acme/clinic-invoices/pull/"
+        job["prs"] = [{"number": pr, "url": url + str(pr), "branch": f"factory/{job_id}",
+                       "merge_sha": "4be81d0", "round": 1}]
+        job.update(pr=pr + 40, pr_url=url + str(pr + 40), branch=f"factory/{job_id}-fix-1", follow_ups=1, round=2)
     folder = jobs_dir / job_id
     (folder / "round-1").mkdir(parents=True)
     (folder / "job.json").write_text(json.dumps(job, indent=1))
