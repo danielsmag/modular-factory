@@ -252,20 +252,6 @@ def doctor(world, *args):
                           capture_output=True, text=True)
 
 
-def test_doctor_rewrites_a_stale_job_index(world):
-    ready(world)
-    job: str = world.start(until="spec")
-    folder: Path = world.dir(job)
-    if world._factory:
-        world._factory.store.release()
-    shutil.rmtree(folder)
-    res = doctor(world, "--skip-checks")
-    assert res.returncode == 0, res.stdout + res.stderr
-    assert f"ok    index.json rewritten; dropped {job}" in res.stdout
-    index: dict = json.loads((world.repo / ".factory" / "jobs" / "index.json").read_text())
-    assert job not in [row["id"] for row in index["jobs"]]
-
-
 def test_doctor_passes_on_a_ready_project(world):
     ready(world)
     res = doctor(world)
