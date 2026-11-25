@@ -149,6 +149,7 @@ them only when the user asks:
 .factory/bin/mfactory close issue 12                # close the issue as completed; the job is not touched
 .factory/bin/mfactory close issue 12 --not-planned  # close it as not planned
 .factory/bin/mfactory close job 12                  # end the job as done from any step; the issue stays open
+.factory/bin/mfactory close job 12 --merged 34      # the work merged in PR 34 instead: end the job and record it
 ```
 
 ## /mfactory setup
