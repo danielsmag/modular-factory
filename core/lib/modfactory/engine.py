@@ -527,8 +527,9 @@ class Factory(Humans, Scripted, Queue):
             text = _intake_reply(reply)
             if not text:
                 raise Refused("the reply on stdin is empty")
-            # An agent that wrote the file itself replies with one line; keep its file.
-            if not (self.fresh(job, rel) and len(text.splitlines()) == 1):
+            # An agent that wrote the file itself may reply with a summary; keep its file
+            # unless the reply carries a whole header (DECISION: then RISK:) of its own.
+            if not (self.fresh(job, rel) and not _is_intake_file(text)):
                 path.write_text(text + "\n")
         if not self.fresh(job, rel):
             what = "is older than this step, so the agent didn't rewrite it" if path.exists() else "doesn't exist"
@@ -779,3 +780,9 @@ def _intake_reply(reply):
     while lines and lines[-1].strip() in ("```", ""):
         lines.pop()
     return "\n".join(lines).strip()
+
+
+def _is_intake_file(text):
+    """True when the extracted reply is an intake.md, not a summary that only starts with DECISION:."""
+    lines = text.splitlines()
+    return len(lines) > 1 and lines[0].startswith("DECISION:") and lines[1].startswith("RISK:")
