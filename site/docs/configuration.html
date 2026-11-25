@@ -201,7 +201,7 @@ commands = ["test \"$(curl -fsS \"$FACTORY_DEPLOY_URL/health\")\" = ok"]</code><
   <p>When verify is on, <code>spec.md</code> must include <code>## Verify after deploy</code>. <code>VERIFY: PASS</code> ends at <code>done</code>. <code>VERIFY: FAIL</code> ends as <code>failed</code> after <code>retries</code>. <code>VERIFY: BLOCKED</code> means the environment could not be reached: the job returns to <code>ready-to-verify</code>. The fourth <code>BLOCKED</code> in a row goes to <code>escalated</code>. It does not comment as a failure, open an issue, or open a revert pull request. If <code>ready-to-verify</code> is off, <code>BLOCKED</code> fails the job through <code>on_failure</code>. A project that replaces <code>[steps.verify].on</code> must keep a <code>BLOCKED</code> edge. The default is <code>{ to = "ready-to-verify", max = 3 }</code>.</p>
 
   <h2 id="reviewers-and-surfaces">Reviewers and surfaces</h2>
-  <p>The <code>review</code> step runs every reviewer the job needs, in parallel. <code>code</code> runs on every job. <code>security</code> runs on the <code>security</code> surface. <code>ux</code> and <code>ui</code> run on the <code>ui</code> surface. A new reviewer is a table with a <code>focus</code>. No prompt file is needed.</p>
+  <p>The <code>review</code> step runs every reviewer the job needs, in parallel. <code>code</code> runs on every job. <code>security</code> runs on the <code>security</code> surface. <code>ux</code> and <code>ui</code> run on the <code>ui</code> surface, but they and the surface ship switched off. A project with a user interface switches them on, as below. A new reviewer is a table with a <code>focus</code>. No prompt file is needed.</p>
   <pre data-lang="toml"><code>[reviewers.migrations]
 focus = "Database migrations: reversibility, locks on large tables, data loss."
 
@@ -209,25 +209,25 @@ focus = "Database migrations: reversibility, locks on large tables, data loss."
 when = "it adds or changes a migration or a table"
 reviewers = ["migrations"]</code></pre>
   <p>Intake reads each <code>when</code> and names the surfaces a job touches. A reviewer that no surface lists runs on every job. To add a reviewer to a surface that exists, restate the list.</p>
-  <p>A project with no user interface can switch reviewers off. A switched-off reviewer gets no agent file, and a switched-off surface is not offered to intake. An enabled surface that lists a switched-off reviewer fails validation, so switch the surface off too, or restate its list.</p>
+  <p>Switch on <code>ux</code>, <code>ui</code> and the <code>ui</code> surface together. Any reviewer or surface can be switched off with <code>enabled = false</code>: a switched-off reviewer gets no agent file, and a switched-off surface is not offered to intake. A switched-on surface that lists a switched-off reviewer fails validation.</p>
   <pre data-lang="toml"><code>[reviewers.ux]
-enabled = false
+enabled = true
 
 [reviewers.ui]
-enabled = false
+enabled = true
 
 [surfaces.ui]
-enabled = false</code></pre>
+enabled = true</code></pre>
   <div class="scroll">
     <table>
       <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td class="mono">[reviewers.&lt;name&gt;] enabled</td><td><code>false</code> switches the reviewer off, built-in or added.</td></tr>
+        <tr><td class="mono">[reviewers.&lt;name&gt;] enabled</td><td><code>false</code> switches the reviewer off. <code>ux</code> and <code>ui</code> default to <code>false</code>.</td></tr>
         <tr><td class="mono">[reviewers.&lt;name&gt;] focus</td><td>What this reviewer looks for. Required for a reviewer you add.</td></tr>
         <tr><td class="mono">context</td><td>Project facts added to its prompt.</td></tr>
         <tr><td class="mono">skills</td><td>Project skills it reads.</td></tr>
         <tr><td class="mono">port</td><td><code>true</code> gives it a port, for reviewers that look at the running app.</td></tr>
-        <tr><td class="mono">[surfaces.&lt;name&gt;] enabled</td><td><code>false</code> hides the surface from intake.</td></tr>
+        <tr><td class="mono">[surfaces.&lt;name&gt;] enabled</td><td><code>false</code> hides the surface from intake. <code>ui</code> defaults to <code>false</code>.</td></tr>
         <tr><td class="mono">[surfaces.&lt;name&gt;] when</td><td>One line telling intake when a change touches this surface.</td></tr>
         <tr><td class="mono">[surfaces.&lt;name&gt;] reviewers</td><td>The reviewers that run on jobs with this surface.</td></tr>
       </tbody>

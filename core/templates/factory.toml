@@ -171,16 +171,17 @@ rules = ["AGENTS.md", "user:CLAUDE.md"]
 # when = "it changes a pipeline, a model, or a warehouse query"
 # reviewers = ["data"]
 #
-# A project with no user interface switches off ux, ui and their surface:
+# ux and ui ship switched off. A project with a user interface switches
+# them on, with their surface:
 #
 # [reviewers.ux]
-# enabled = false
+# enabled = true
 #
 # [reviewers.ui]
-# enabled = false
+# enabled = true
 #
 # [surfaces.ui]
-# enabled = false
+# enabled = true
 #
 # [steps.docs]
 # type = "agent"

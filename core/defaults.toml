@@ -156,13 +156,17 @@ on = { FEEDBACK = "build", REJECT = "rejected" }
 
 [reviewers.security]
 
+# ux and ui are for projects with a user interface. Switch them on, with their surface.
 [reviewers.ux]
+enabled = false
 port = true
 
 [reviewers.ui]
+enabled = false
 port = true
 
 [surfaces.ui]
+enabled = false
 when = "a user will see the change on a page or screen"
 reviewers = ["ux", "ui"]
 

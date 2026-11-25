@@ -276,8 +276,8 @@ def test_claude_agents_carry_model_effort_and_tools(world):
     assert sorted(files) == [
         ".claude/agents/mfactory-approve.md", ".claude/agents/mfactory-build.md", ".claude/agents/mfactory-intake.md",
         ".claude/agents/mfactory-reviewer-code-low.md", ".claude/agents/mfactory-reviewer-code.md",
-        ".claude/agents/mfactory-reviewer-security.md", ".claude/agents/mfactory-reviewer-ui.md",
-        ".claude/agents/mfactory-reviewer-ux.md", ".claude/agents/mfactory-spec.md", ".claude/skills/mfactory/SKILL.md"]
+        ".claude/agents/mfactory-reviewer-security.md", ".claude/agents/mfactory-spec.md",
+        ".claude/skills/mfactory/SKILL.md"]
     build = frontmatter(files[".claude/agents/mfactory-build.md"])
     assert (build["name"], build["model"], build["effort"]) == ("mfactory-build", "opus", "high")
     assert build["tools"] == "Read, Grep, Glob, Bash, Edit, Write, Skill"
@@ -418,105 +418,45 @@ reviewers = ["perf"]
 
     cfg = load(world, text)
     assert cfg.reviewers_for([]) == ["code"]
-    assert cfg.reviewers_for(["api", "ui"]) == ["code", "perf", "ux", "ui"]
+    assert cfg.reviewers_for(["api", "ui"]) == ["code", "perf"]
 
 
-BACKEND = """
+UI_ON = """
 [reviewers.ux]
-enabled = false
+enabled = true
 
 [reviewers.ui]
-enabled = false
+enabled = true
 
 [surfaces.ui]
-enabled = false
+enabled = true
 """
 
 
-def test_a_project_with_no_ui_switches_off_ux_and_ui(world):
-    files, _ = plan(world, BACKEND)
+def test_ux_and_ui_are_off_until_a_project_switches_them_on(world):
+    files, _ = plan(world)
     assert ".claude/agents/mfactory-reviewer-ux.md" not in files
-    assert ".claude/agents/mfactory-reviewer-ui.md" not in files
-    assert ".claude/agents/mfactory-reviewer-code.md" in files
-    intake = files[".claude/agents/mfactory-intake.md"]
-    assert "- `ui`:" not in intake and "- `security`:" in intake
+    assert "- `ui`:" not in files[".claude/agents/mfactory-intake.md"]
+    cfg = load(world)
+    assert cfg.reviewers_for(["ui", "security"]) == ["code", "security"]
+    assert "reviewer-ui" not in sync.describe_models(cfg)
 
-    cfg = load(world, BACKEND)
-    assert cfg.reviewers_for([]) == ["code"]
-    assert cfg.reviewers_for(["security"]) == ["code", "security"]
-    models = sync.describe_models(cfg)
-    assert "reviewer-ux" not in models and "reviewer-ui" not in models and "reviewer-code" in models
-
-
-def test_a_model_entry_for_a_switched_off_reviewer_still_validates(world):
-    cfg = load(world, BACKEND + '[models.claude]\nreviewer-ux = { model = "haiku" }\n')
-    assert "reviewer-ux" not in cfg.agent_keys()
-
-
-def test_a_surface_that_lists_a_switched_off_reviewer_is_reported(world):
-    assert problems(world, "[reviewers.ux]\nenabled = false\n") == [
+    assert problems(world, "[surfaces.ui]\nenabled = true\n[reviewers.ui]\nenabled = true\n") == [
         '[surfaces.ui].reviewers has "ux", but [reviewers.ux] is off. '
         'Set [surfaces.ui] enabled = false, or drop "ux" from its reviewers',
     ]
 
-
-def test_one_reviewer_off_and_the_surface_restated(world):
-    cfg = load(world, '[reviewers.ui]\nenabled = false\n[surfaces.ui]\nreviewers = ["ux"]\n')
-    assert cfg.reviewers_for(["ui"]) == ["code", "ux"]
-
-
-def test_a_reviewer_on_a_switched_off_surface_does_not_run_on_every_job(world):
-    cfg = load(world, '''
-[reviewers.perf]
-focus = "Slow queries."
-
-[surfaces.api]
-when = "it changes an HTTP endpoint"
-reviewers = ["perf"]
-enabled = false
-''')
-    assert cfg.reviewers_for([]) == ["code"]
-    assert cfg.reviewers_for(["api"]) == ["code"]
-    assert "api" not in cfg.live_surfaces
-
-
-def test_a_switched_off_custom_reviewer_needs_no_focus(world):
-    cfg = load(world, "[reviewers.perf]\nenabled = false\n")
-    assert "reviewer-perf" not in cfg.agent_keys()
-
-
-def test_every_reviewer_off_with_the_review_step_on_is_reported(world):
-    text = BACKEND + """
-[reviewers.code]
-enabled = false
-
-[reviewers.security]
-enabled = false
-
-[surfaces.security]
-enabled = false
-"""
-    assert problems(world, text) == [
-        "every reviewer is off, but [steps.review] is on. Switch it off with [steps.review] enabled = false",
-    ]
-
-
-def test_sync_removes_the_agents_of_reviewers_switched_off(world):
-    world.configure("")
-    sync.sync(config.load(world.repo))
-    assert (world.repo / ".claude/agents/mfactory-reviewer-ux.md").exists()
-    world.configure(BACKEND)
-    actions, _ = sync.sync(config.load(world.repo))
-    assert ("remove", ".claude/agents/mfactory-reviewer-ux.md") in actions
-    assert ("remove", ".claude/agents/mfactory-reviewer-ui.md") in actions
-    assert not (world.repo / ".claude/agents/mfactory-reviewer-ux.md").exists()
+    files, _ = plan(world, UI_ON)
+    assert ".claude/agents/mfactory-reviewer-ux.md" in files
+    assert "- `ui`:" in files[".claude/agents/mfactory-intake.md"]
+    assert load(world, UI_ON).reviewers_for(["ui"]) == ["code", "ux", "ui"]
 
 
 def test_sync_writes_reports_and_removes_what_is_stale(world):
     world.configure('[steps.debug]\nenabled = true\n')
     cfg = config.load(world.repo)
     actions, _ = sync.sync(cfg)
-    assert ("create", ".claude/agents/mfactory-debug.md") in actions and len(actions) == 11
+    assert ("create", ".claude/agents/mfactory-debug.md") in actions and len(actions) == 9
     assert sync.sync(cfg) == ([], ['rule "user:CLAUDE.md" is not installed on this machine'])
 
     (world.repo / ".claude/agents/mfactory-build.md").write_text("hand edit\n")
@@ -582,7 +522,14 @@ all = ["code-style"]
 skills = ["testing"]
 
 [reviewers.ui]
+enabled = true
 skills = ["design-system"]
+
+[reviewers.ux]
+enabled = true
+
+[surfaces.ui]
+enabled = true
 """
 
 
