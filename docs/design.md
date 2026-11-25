@@ -95,6 +95,12 @@ round-1/debug-1.md        the debugger's diagnosis
 and a git worktree at `.worktrees/<id>` on branch `{branch_prefix}<id>`
 (default `factory/<id>`). A revert branch is `{branch_prefix}revert-<id>`.
 
+An id is a number and the first words of the issue title (`004-dark-mode`).
+`.factory/jobs/last_number` keeps the highest number used, so a job that is
+removed never gives its id to a later one. The activity view and job cost also
+leave out transcripts that started before the job's `created_at`, for a folder
+an earlier job used.
+
 ## Edges and limits
 
 Following an edge is the core of the pipeline logic. In outline:

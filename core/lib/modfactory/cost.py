@@ -46,6 +46,7 @@ def job_cost(cfg, job, job_dir):
         return None
     prices = cfg.adapters["claude"].get("prices", {})
     needle = f"Job folder: {job_dir}/"
+    created = _created(job)
     by_step, unpriced = {}, set()
     try:
         for path in root.glob("*/subagents/agent-*.jsonl"):
@@ -56,12 +57,16 @@ def job_cost(cfg, job, job_dir):
                     continue
                 m = re.search(r"Step: ([a-z0-9-]+)\.", prompt)
                 step = m.group(1) if m else "other"
+                started = json.loads(first).get("timestamp")
                 usage_by_message = {}
                 for line in f:
                     entry = json.loads(line)
+                    started = started or entry.get("timestamp")
                     msg = entry.get("message")
                     if entry.get("type") == "assistant" and isinstance(msg, dict) and msg.get("usage"):
                         usage_by_message[msg["id"]] = (msg["model"], msg["usage"])
+            if _earlier(started, created):
+                continue
             for model, usage in usage_by_message.values():
                 if model not in prices:
                     unpriced.add(model)
@@ -70,6 +75,23 @@ def job_cost(cfg, job, job_dir):
     except (OSError, ValueError, KeyError, TypeError):
         return None
     return round(sum(by_step.values()), 2), {k: round(v, 2) for k, v in by_step.items()}, sorted(unpriced)
+
+
+def _created(job):
+    try:
+        return datetime.fromisoformat(job["created_at"].replace("Z", "+00:00"))
+    except (KeyError, AttributeError, ValueError):
+        return None
+
+
+def _earlier(started, created):
+    """A transcript from an earlier job that had the same folder. `created_at` has whole seconds."""
+    if created is None or not isinstance(started, str):
+        return False
+    try:
+        return datetime.fromisoformat(started.replace("Z", "+00:00")).replace(microsecond=0) < created
+    except ValueError:
+        return False
 
 
 SHARE_DAYS = 7
