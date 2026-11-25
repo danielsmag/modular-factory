@@ -190,7 +190,7 @@ def run(args: argparse.Namespace) -> int:
         elif command == "close" and args.close_what == "issue":
             factory.close_issue(args.job, not_planned=args.not_planned)
         elif command == "close":
-            factory.close_job(args.job, merged=args.merged)
+            factory.close_job(args.job)
         elif command == "route":
             job = factory.store.read(factory.store.find(args.job))
             print(json.dumps(job["agents"] or factory.route(dict(job)), indent=1))

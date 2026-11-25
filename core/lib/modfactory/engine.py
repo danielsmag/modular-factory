@@ -485,7 +485,7 @@ class Factory(Humans, Scripted, Queue):
         return False
 
     def _finished_note(self, job):
-        if job["step"] == "done" and job["pr"] and job.get("merge_sha"):
+        if job["step"] == "done" and job["pr"]:
             return f" (PR #{job['pr']} merged)"
         if job.get("reason"):
             return f" ({job['reason'].splitlines()[0]})"
@@ -712,41 +712,23 @@ class Factory(Humans, Scripted, Queue):
             self.say(f"note: job {job['id']} is still at {job['step']}; "
                      f"`{CLI} close job {job['id']}` ends it")
 
-    def close_job(self, ref: str, merged: int | None = None) -> None:
-        """`mfactory close job`: end the job as done from any step. The issue and any pull request stay as they are.
-
-        With `merged`, the work merged in that pull request (opened outside the factory, say): it must be merged on
-        GitHub, and the job records it as its pull request and merge.
-        """
+    def close_job(self, ref: str) -> None:
+        """`mfactory close job`: end the job as done from any step. The issue and any pull request stay as they are."""
         job: dict[str, Any] = self.store.open(ref)
         old: str = job["step"]
         if old in graph.END_STATES:
             raise Refused(f"{job['id']} is already finished ({old})")
-        reason: str = f"Closed by @{self.gh.operator()}"
-        replaced: object = None
-        if merged is not None:
-            pr: dict[str, Any] | None = self.gh.pr(merged, "number,url,state,mergeCommit")
-            if not pr:
-                raise Refused(f"no pull request #{merged}")
-            if pr["state"] != "MERGED":
-                raise Refused(f"pull request #{merged} is not merged ({pr['state']})")
-            replaced = job["pr"] if job["pr"] not in (None, pr["number"]) else None
-            job["pr"], job["pr_url"] = pr["number"], pr["url"]
-            job["merge_sha"] = (pr.get("mergeCommit") or {}).get("oid")
-            reason += f"; merged in PR #{pr['number']} ({(job['merge_sha'] or 'unknown')[:7]})"
         step: dict[str, Any] | None = self.cfg.steps.get(old)
         if step is not None:
             self._leave(job, old, step)
         entry: dict[str, Any] = {"step": old, "outcome": "CLOSED-BY-HAND", "entered_at": job["entered_at"],
-                                 "at": now(), "reason": reason}
+                                 "at": now(), "reason": f"Closed by @{self.gh.operator()}"}
         job["reason"] = entry["reason"]
         landed, skipped = self._enter(job, "done")
         job["history"].append(entry | {"to": landed, "skipped": skipped})
         self._update_cost(job)
         self.store.save(job)
         self.say(f"{self.tag(job)}: {old} CLOSED-BY-HAND -> {landed}")
-        if replaced:
-            self.say(f"note: PR #{job['pr']} replaces PR #{replaced} on the job")
         if job["pr"] and not job["merge_sha"]:
             self.say(f"note: pull request #{job['pr']} is still open")
         self.say(f"note: issue #{job['issue']} is not closed; `{CLI} close issue {job['id']}` closes it")

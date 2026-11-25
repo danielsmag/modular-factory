@@ -13,7 +13,7 @@ see the configuration
   config show | graph | models | skills
 run jobs (the orchestrator skill uses these)
   queue | create <issue> | next <job> | done <job> | answer <job> <outcome>
-  close issue <job> | close job <job> [--merged <pr>]
+  close issue <job> | close job <job>
 other
   checks | dashboard | start dashboard | stop | version
 several projects
@@ -93,8 +93,6 @@ def parser() -> argparse.ArgumentParser:
     close_job: argparse.ArgumentParser = close_sub.add_parser(
         "job", help="end the job as done from any step; the issue stays open")
     close_job.add_argument("job")
-    close_job.add_argument("--merged", metavar="PR", type=int,
-                           help="the pull request that merged this work, if not the job's own; recorded on the job")
     route: argparse.ArgumentParser = sub.add_parser("route", help="show which agents a job uses")
     route.add_argument("job")
 

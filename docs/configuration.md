@@ -118,10 +118,7 @@ will not ship). `done` refuses a `READY` build whose body does not start with
 issue number. With `"closes"`, GitHub closes the issue on merge, and `doctor`
 warns when a step runs after the merge, because that step would see a closed
 issue. `mfactory close job <job>` is separate: it ends the job as `done` from any
-step and leaves the issue alone. When the work merged in a pull request the factory did not
-open (say, from a renamed branch), `mfactory close job <job> --merged <pr>`
-records that pull request and its merge on the job; it refuses a pull request
-that is not merged. After changing `issue_link`, run `mfactory sync`.
+step and leaves the issue alone. After changing `issue_link`, run `mfactory sync`.
 
 `branch_prefix` is concatenated with the job id, so the slash belongs in the
 prefix. `branch_pattern` is checked when the factory chooses the name, before

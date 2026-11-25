@@ -229,29 +229,3 @@ on = { APPROVE = "merge", REJECT = "rejected" }
     world.answer(job, "approve")
     world.play(job)
     assert world.job(job)["step"] == "done"
-
-
-def test_close_job_records_a_pull_request_merged_outside_the_factory(world):
-    job = world.start()
-    own = world.job(job)["pr"]
-    assert own and world.job(job)["step"] == "ready-to-merge"
-
-    def renamed(state):
-        state["prs"][str(own)]["state"] = "CLOSED"
-        state["prs"]["90"] = {**state["prs"][str(own)], "number": 90, "state": "OPEN",
-                              "headRefName": f"feature/{job}", "url": "https://github.test/acme/app/pull/90"}
-    world.set_gh(renamed)
-    with pytest.raises(Refused, match=r"pull request #90 is not merged \(OPEN\)"):
-        world.factory().close_job(job, merged=90)
-    assert world.job(job)["step"] == "ready-to-merge" and world.job(job)["pr"] == own
-
-    world.set_gh(lambda state: state["prs"]["90"].update(state="MERGED", mergeCommit={"oid": "abc1234def"}))
-    world.factory().store.release()  # the command line takes the job's lock itself
-    closed = world.cli("close", "job", job, "--merged", 90)
-    assert closed.returncode == 0, closed.stderr
-    assert f"note: PR #90 replaces PR #{own} on the job" in closed.stdout
-    j = world.job(job)
-    assert (j["step"], j["pr"], j["merge_sha"]) == ("done", 90, "abc1234def")
-    assert j["pr_url"] == "https://github.test/acme/app/pull/90"
-    assert j["history"][-1]["outcome"] == "CLOSED-BY-HAND"
-    assert j["history"][-1]["reason"] == "Closed by @operator; merged in PR #90 (abc1234)"
