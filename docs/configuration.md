@@ -47,6 +47,7 @@ mfactory: factory.toml has 2 problem(s):
 - [Adding a step](#adding-a-step)
 - [Human steps](#human-steps)
 - [Validation after merge or deploy](#validation-after-merge-or-deploy)
+- [Fixing after the merge](#fixing-after-the-merge)
 - [Reviewers and surfaces](#reviewers-and-surfaces)
 - [Models and effort](#models-and-effort)
 - [Project skills](#project-skills)
@@ -535,6 +536,76 @@ When validation fails the job ends as `failed`, and:
 
 The factory never deploys. A job being validated holds no slot, so a slow
 deploy does not block the queue.
+
+## Fixing after the merge
+
+The built-in `debug` step is for failing checks before the merge: it sends
+the job back to `build` on the job branch. After the merge that branch is
+gone. The `post-debug` role handles problems found after the merge instead,
+and the fix stays inside the same job.
+
+A typical setup puts a human step on the merge step's `MERGED` edge, so a
+maintainer decides what happens after each merge:
+
+```toml
+[project]
+issue_link = "refs"   # the default: the issue stays open, so the follow-up PR links it
+
+[steps.merge]
+on = { MERGED = "after-merge", FAILED = "escalated" }
+
+[steps.after-merge]
+type = "human"
+who = "maintainer"
+ask = "merged: close the job, run the post-merge tests, or debug"
+on = { CLOSE = "done", TEST = "verify", DEBUG = "post-debug" }
+
+[steps.verify]
+enabled = true
+after = "merge"
+commands = ["pytest -q"]
+on = { PASS = "after-merge", FAIL = "post-debug", BLOCKED = { to = "after-merge", max = 3 } }
+
+[steps.post-debug]
+type = "agent"
+on = { FOUND = { to = "build", max = 2 }, UNKNOWN = "after-merge" }
+```
+
+**post-debug.** An agent step whose role is `post-debug`. A step with that
+name gets the role on its own; a step with another name sets
+`role = "post-debug"`. Its outcomes are `FOUND` and `UNKNOWN`. The agent gets
+the merged pull request, its merge commit and a detached checkout of the
+current base branch at `.worktrees/<job>-investigate`. It reads
+`feedback-*.md`, `verify.md`, CI runs for the merge commit and the merged
+diff, and writes `round-N/post-debug.md`. `done` refuses the file if the
+agent left changes in the checkout or moved its `HEAD`.
+
+**The follow-up build.** Any entry to a `build` step after the job's pull
+request merged starts a follow-up. That includes `post-debug`'s `FOUND`, and
+`FEEDBACK` from `escalated` after the merge. The factory:
+
+- moves the merged pull request into `prs` in `job.json`
+- starts branch `<branch_prefix><job>-fix-N` from the current base branch
+- starts a new round, and tells the builder to open a new pull request that
+  starts with `Refs #<issue>`
+
+The new pull request then goes through the gate, review, approval and merge
+like the first one, and the merge step's `MERGED` edge applies again.
+
+**Limits.** The `max` on `FOUND` counts follow-ups, like any other loop
+limit. When it is used up, the job goes to `escalated`. A reply there clears
+the count, as it does for every loop.
+
+**The issue must stay open.** With `issue_link = "closes"`, GitHub closes the
+issue on the first merge. `post-debug` then refuses `FOUND` until someone
+reopens the issue, and `doctor` warns about the setup. With a `branch_pattern`
+set, `mfactory config` checks that it also accepts `-fix-N` branches when a
+`post-debug` step is on.
+
+**Follow-up or new issue.** `[steps.verify].on_failure = "issue"` opens a new
+issue, which the factory picks up as a new job with its own history. A
+follow-up keeps the fix in the same job, with the same issue and one history,
+and its pull requests are listed one after another.
 
 ## Reviewers and surfaces
 

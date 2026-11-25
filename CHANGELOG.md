@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- feat: a built-in `post-debug` agent role for problems found after the merge, and follow-up pull requests from the same job. The agent works in a checkout of the current base branch and writes `round-N/post-debug.md` (`DIAGNOSIS: FOUND | UNKNOWN`) without changing code. Entering `build` after the job's pull request merged, through `post-debug`'s `FOUND` or `escalated`'s `FEEDBACK`, starts a follow-up. The follow-up uses a new branch `<prefix><job>-fix-N` from the base and a new pull request that refs the same issue. The merged pull request moves to the new `prs` list in `job.json`, and the dashboard shows every pull request of a job. The `max` on `FOUND` limits follow-ups. With `issue_link = "closes"`, `FOUND` is refused while the issue is closed. The README has a recipe for a post-merge "close / test / debug" human step.
+
 ## 0.22.0
 
 - feat: `[project] issue_link = "refs" | "closes"` sets how the pull request body links the issue. **The default is now `"refs"`**: new pull requests start with `Refs #<issue>`, so merging no longer closes the issue, and steps after the merge (verify, or a human step on the merge step's `MERGED` edge) still see it open. The factory never closes an issue on its own. Close it with `mfactory close issue <job>` (`--not-planned` for a job that won't ship). `done` refuses a `READY` build whose body doesn't start with `Refs #<issue>` or that has a closing keyword next to the issue number. To keep the old behaviour, set `issue_link = "closes"` and run `mfactory sync`. With `"closes"`, `doctor` warns when a step runs after the merge.
