@@ -17,10 +17,10 @@ From the repo root:
 
 ```bash
 git fetch origin
-git checkout -b pr/<topic> origin/master
+git checkout -b <type>/<topic> origin/master
 ```
 
-Every branch is named `pr/<topic>`, where `<topic>` is short kebab-case (`pr/add-pr-skill`). CI rejects a pull request whose branch does not start with `pr/` (or `factory/`). One branch per change.
+Every branch is named `<type>/<topic>`. `<type>` is the change type the pull request title will use (see the table below): `feat`, `fix`, `hotfix`, `perf`, `revert`, `docs`, `chore`, `ci`, `test`, `style`, `refactor` or `build`. `<topic>` is short kebab-case (`feat/add-pr-skill`, `fix/drawer-scroll`). CI rejects a pull request whose branch does not start with one of those types (or `factory/`). One branch per change.
 
 ## Commits
 
@@ -55,7 +55,7 @@ git push -u origin HEAD
 ```
 
 ```bash
-gh pr create --base master --head <topic> --title "feat: add a health check." --body "$(cat <<'EOF'
+gh pr create --base master --head <type>/<topic> --title "feat: add a health check." --body "$(cat <<'EOF'
 ## Summary
 - ...
 
