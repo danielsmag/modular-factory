@@ -132,7 +132,10 @@ function mdInline(s, make) {
 }
 
 const MD_HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/;
-const MD_FENCE = /^( {0,3})(`{3,}|~{3,})/;
+// A backtick fence's info string has no backticks, so ```code``` on one line stays a code span.
+const MD_FENCE = /^( {0,3})(`{3,}(?!.*`)|~{3,})/;
+// Lists and quotes nest by recursion; deeper than this, the lines are plain text.
+const MD_MAX_DEPTH = 32;
 const MD_RULE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
 const MD_QUOTE = /^ {0,3}> ?/;
 const MD_ITEM = /^( {0,3})(?:[-*+]|(\d{1,9})[.)])(?:[ \t]+|$)/;
@@ -165,6 +168,11 @@ function mdStarts(line, next) {
   return MD_HEADING.test(line) || MD_FENCE.test(line) || MD_RULE.test(line) || MD_QUOTE.test(line)
     || MD_ITEM.test(line) || mdIsTable(line, next);
 }
+// Only a list starting at 1 ends a paragraph, so a wrapped line such as `2024. It shipped` stays prose.
+function mdListStarts(line, inParagraph) {
+  const m = MD_ITEM.exec(line);
+  return !!m && (!inParagraph || m[2] === undefined || Number(m[2]) === 1);
+}
 function mdCells(line) {
   const row = line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "");
   return row.split(/(?<!\\)\|/).map((cell) => cell.trim());
@@ -180,7 +188,7 @@ function mdFence(lines, i, make) {
   }
   return { node: make("pre", {}, make("code", { text: body.join("\n") })), next: i + 1 };
 }
-function mdQuote(lines, i, make) {
+function mdQuote(lines, i, make, depth) {
   const body = [];
   while (i < lines.length) {
     const line = lines[i];
@@ -189,7 +197,7 @@ function mdQuote(lines, i, make) {
     else break;
     i += 1;
   }
-  return { node: make("blockquote", {}, mdBlocks(body, make, false)), next: i };
+  return { node: make("blockquote", {}, mdBlocks(body, make, false, depth + 1)), next: i };
 }
 function mdTable(lines, i, make) {
   const head = mdCells(lines[i]);
@@ -206,7 +214,7 @@ function mdTable(lines, i, make) {
   const table = make("table", {}, make("thead", {}, row(head, "th")), make("tbody", {}, rows.map((cells) => row(cells, "td"))));
   return { node: make("div", { class: "md-table" }, table), next: i };
 }
-function mdList(lines, i, make) {
+function mdList(lines, i, make, depth) {
   const first = MD_ITEM.exec(lines[i]);
   const ordered = first[2] !== undefined;
   const sameKind = (line) => {
@@ -248,12 +256,12 @@ function mdList(lines, i, make) {
   }
   const start = ordered ? Number(first[2]) : 1;
   const props = start !== 1 ? { start: String(start) } : {};
-  const node = make(ordered ? "ol" : "ul", props, items.map((body) => make("li", {}, mdBlocks(body, make, !loose))));
+  const node = make(ordered ? "ol" : "ul", props, items.map((body) => make("li", {}, mdBlocks(body, make, !loose, depth + 1))));
   return { node, next: i };
 }
 
 // Block nodes for the lines. In a tight list item, paragraphs are left unwrapped.
-function mdBlocks(lines, make, tight) {
+function mdBlocks(lines, make, tight, depth) {
   const out = [];
   let para = [];
   const flush = () => {
@@ -263,6 +271,7 @@ function mdBlocks(lines, make, tight) {
     else out.push(make("p", {}, kids));
     para = [];
   };
+  const nest = depth < MD_MAX_DEPTH;
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
@@ -276,8 +285,8 @@ function mdBlocks(lines, make, tight) {
     if (heading) block = { node: make("h" + heading[1].length, {}, mdInline(heading[2] || "", make)), next: i + 1 };
     else if (MD_FENCE.test(line)) block = mdFence(lines, i, make);
     else if (MD_RULE.test(line)) block = { node: make("hr", {}), next: i + 1 };
-    else if (MD_QUOTE.test(line)) block = mdQuote(lines, i, make);
-    else if (MD_ITEM.test(line)) block = mdList(lines, i, make);
+    else if (nest && MD_QUOTE.test(line)) block = mdQuote(lines, i, make, depth);
+    else if (nest && mdListStarts(line, para.length > 0)) block = mdList(lines, i, make, depth);
     else if (mdIsTable(line, lines[i + 1])) block = mdTable(lines, i, make);
     if (block) {
       flush();
@@ -293,7 +302,7 @@ function mdBlocks(lines, make, tight) {
 }
 
 function renderMarkdown(text, make) {
-  return mdBlocks(String(text || "").replace(/\r\n?/g, "\n").split("\n"), make, false);
+  return mdBlocks(String(text || "").replace(/\r\n?/g, "\n").split("\n"), make, false, 0);
 }
 
 // Job files open with verdict lines such as `STATUS: READY` or `RISK: low`.

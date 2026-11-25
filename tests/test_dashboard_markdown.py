@@ -159,3 +159,20 @@ def test_split_header_without_header():
 
 def test_split_header_bare_verdict():
     assert split("APPROVE\n\nok") == {"header": ["APPROVE"], "body": "ok"}
+
+
+# ---- review fixes -------------------------------------------------------------
+
+@pytest.mark.parametrize("md", ["- " * 5000 + "x", "1. " * 5000 + "x", ">" * 5000 + " x"])
+def test_deep_nesting_renders_without_overflowing_the_stack(md):
+    # A throw here would stop every dashboard render while the file is open.
+    assert render(md)[:4] in ("<ul>", "<ol>", "<blo")
+
+
+def test_a_one_line_triple_backtick_span_is_not_a_fence():
+    assert render("```make test```\n\n# Heading") == "<p><code>make test</code></p><h1>Heading</h1>"
+
+
+def test_only_a_list_starting_at_one_interrupts_a_paragraph():
+    assert render("released in\n2024. It shipped") == "<p>released in 2024. It shipped</p>"
+    assert render("Steps:\n1. a") == "<p>Steps:</p><ol><li>a</li></ol>"
