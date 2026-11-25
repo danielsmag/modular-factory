@@ -312,10 +312,14 @@ project's `factory/bin/job`, `factory/bin/gate`, `factory/bin/route` and
   failure.
 - **Every round starts a fresh builder** that reads `build.md`, `progress.md`
   when a previous attempt of that step stopped early, and the git log.
-  Resuming the previous builder by message was dropped, because not every
-  tool can do it. `done` deletes `progress.md` once the build outcome is
+  Resuming the previous builder by message is not the default, because not
+  every tool can do it. `done` deletes `progress.md` once the build outcome is
   accepted.
-- **The stop hook and the cost** are optional and Claude Code only.
+- **The stop hook, the cost and resuming the builder** are optional and Claude
+  Code only. With `resume_builder`, `next` prints a `name:` that carries the
+  job, model and effort. The orchestrator wakes the builder it started under
+  that name with SendMessage. `next` leaves the name out when `progress.md`
+  shows the last builder stopped early.
 - **The dashboard was rewritten** with board, pipeline, jobs, overview and config, a new look, and a local
   server that confines what it serves.
 - **Tests.** A suite that runs whole jobs against a stand-in for GitHub.

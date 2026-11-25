@@ -294,6 +294,22 @@ class Factory(Humans, Scripted, Queue):
             return None
         return "A previous attempt of this step stopped early: read progress.md before git log."
 
+    def _builder_name(self, job: dict[str, Any], name: str) -> str | None:
+        """A name the orchestrator can resume this job's builder under, or None for a fresh builder.
+
+        The name carries the model and effort, so a builder is resumed only while they are unchanged.
+        """
+        if "claude" not in self.cfg.tools or self.cfg.role(name) != "build":
+            return None
+        if not self.cfg["tools"].get("claude", {}).get("resume_builder"):
+            return None
+        if self._progress_note(job, "build"):
+            return None  # the last builder stopped early, likely out of context: start a new one
+        chosen: dict[str, Any] = self.cfg.model_for("claude", name, self.risk(job))
+        parts: list[str] = ["mfactory", name, job["id"], str(chosen.get("model") or ""),
+                            str(chosen.get("effort") or "")]
+        return "-".join(part for part in parts if part)
+
     def _clear_progress(self, job: dict[str, Any]) -> None:
         """Drop notes from a build attempt once its outcome file has been accepted."""
         path: Path = self.dir(job) / "progress.md"
@@ -308,9 +324,11 @@ class Factory(Humans, Scripted, Queue):
         parts.append(f"Write: {out}.")
         return " ".join(parts)
 
-    def _say_agents(self, job, agents, reply=False):
+    def _say_agents(self, job, agents, reply=False, resume_as=None):
         for agent, prompt in agents:
             self.say(f"start-agent {shown_agent(agent)}")
+            if resume_as:
+                self.say(f"name: {resume_as}")
             self.say(f"prompt: {prompt}")
         if len(agents) > 1:
             self.say(f"parallel: start these {len(agents)} agents together and wait for all of them")
@@ -351,7 +369,8 @@ class Factory(Humans, Scripted, Queue):
                              f"working on it, run `{CLI} done {job['id']}` instead of starting one.")
                 key = self.cfg.agent_name(name, self.risk(job))
                 self._say_agents(job, [(key, self._prompt(job, name, step))],
-                                 reply=self.cfg.role(name) == "intake")
+                                 reply=self.cfg.role(name) == "intake",
+                                 resume_as=self._builder_name(job, name))
                 return
             if kind == "review":
                 missing = self._missing_reviews(job)

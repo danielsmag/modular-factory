@@ -19,6 +19,7 @@ enabled = ["claude"]      # claude, cursor, codex
 [tools.claude]
 stop_hook = false         # run the checks when the build agent stops, as a nudge
 cost = true               # per-job cost, read from Claude Code's transcripts
+resume_builder = false    # wake the job's builder with SendMessage in later rounds instead of starting a new one
 
 [tools.codex]
 intake_shell = false      # true lets intake run commands, if your Codex can't read files without a shell

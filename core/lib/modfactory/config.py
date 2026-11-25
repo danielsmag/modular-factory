@@ -345,7 +345,8 @@ TABLES = {
     "skills": {"all": a_string_list},
     "rules": {"all": a_string_list},
 }
-TOOL_KEYS = {"claude": {"stop_hook": a_bool, "cost": a_bool}, "codex": {"intake_shell": a_bool}}
+TOOL_KEYS = {"claude": {"stop_hook": a_bool, "cost": a_bool, "resume_builder": a_bool},
+             "codex": {"intake_shell": a_bool}}
 STEP_COMMON = {"type": one_of(*graph.TYPES), "enabled": a_bool, "skip": a_filled_string}
 STEP_KEYS = {
     "agent": {"role": one_of(*graph.ROLE_OUTCOMES, "custom"), "instructions": a_filled_string,

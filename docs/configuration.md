@@ -81,6 +81,7 @@ concurrency = 3
 | `[project] branch_pattern` | `""` | Regular expression the whole branch name must match (`fullmatch`). Empty means no check. The factory checks the name when it chooses the branch, before creating it. A job already on disk keeps the branch stored in its `job.json`. |
 | `[tools] enabled` | `["claude"]` | The tools to write agent files for: `claude`, `cursor`, `codex`. |
 | `[tools.claude] stop_hook` | `false` | Run the checks when the build agent stops, and send it back to work if they fail. Claude Code only. |
+| `[tools.claude] resume_builder` | `false` | In later rounds, wake the job's builder with SendMessage instead of starting a new one, so it keeps what it read. It is resumed only by the session that started it and only while its model and effort are unchanged. Claude Code only. |
 | `[tools.claude] cost` | `true` | Work out each job's cost from Claude Code's transcripts. Other tools record no cost. |
 | `[tools.codex] intake_shell` | `false` | Let the Codex intake agent run commands. See [Design notes](design.md#intake-has-no-shell). |
 | `[run] concurrency` | `3` | Jobs this project works on at once. A job waiting for a person, or being validated after merge, does not count. |
