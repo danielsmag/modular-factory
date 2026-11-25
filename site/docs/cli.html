@@ -75,6 +75,14 @@
     <p>Open an issue in the queue and print its address. The issue's text is read from standard input.</p>
   </div>
   <div class="def">
+    <div class="def-h"><code>tracker show</code> <span class="chip">--json</span></div>
+    <p>With a Jira board: each step, its status and its board column, and what is wrong with them. Exits 1 when the board has a problem.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>tracker sync</code></div>
+    <p>With a Jira board: move every unfinished job's card to its step's status. Run it after the board or <code>[tracker.jira.columns]</code> changed.</p>
+  </div>
+  <div class="def">
     <div class="def-h"><code>next &lt;job&gt;</code></div>
     <p>Say what the orchestrator must do for a job. Runs checks, merge, and verify itself.</p>
   </div>

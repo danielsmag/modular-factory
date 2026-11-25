@@ -307,6 +307,88 @@ skills = ["testing", "migrations"]
 skills = ["auth-rules"]</code></pre>
   <p>Each agent's prompt names the <code>SKILL.md</code> files to read. This works the same in every tool. In Claude Code, a skill in <code>.claude/skills</code> is also loaded up front. <code>mfactory sync</code> refuses a name that matches no skill and says where it looked.</p>
 
+  <h2 id="tracker-a-jira-board">Tracker: a Jira board</h2>
+  <p>By default the tracker is GitHub issues: jobs come from open issues with the queue label, and people reply in issue and pull request comments. With <code>kind = "jira"</code>, a Jira kanban board is the tracker. New jobs are the cards in its queue column, each step's card sits in a column of the board, and people reply in Jira comments or by moving the card. Code, branches and pull requests stay on GitHub. A project uses one tracker; a workspace can hold projects of both kinds.</p>
+  <pre data-lang="toml"><code>[tracker]
+kind = "jira"
+
+[tracker.jira]
+site = "https://acme.atlassian.net"
+board = 1234
+jql = "assignee = currentUser()"
+
+[tracker.jira.columns]
+queue = "Ready for factory"
+intake = "Intake"
+ask-author = "Needs info"
+spec = "Spec"
+build = "Build"
+gate = "Build"
+review = "Review"
+approve = "Review"
+ready-to-merge = "Ready to merge"
+escalated = "Escalated"
+done = "Done"
+rejected = "Rejected"
+failed = "Failed"</code></pre>
+  <p>The account and its API token come from the environment, never from <code>factory.toml</code>:</p>
+  <pre data-lang="bash"><code>export JIRA_EMAIL="you@example.com"
+export JIRA_API_TOKEN="..."</code></pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[tracker] kind</td><td><code>github</code></td><td><code>github</code> or <code>jira</code>.</td></tr>
+        <tr><td class="mono">[tracker.jira] site</td><td></td><td>The Jira Cloud site. <code>https://</code> only.</td></tr>
+        <tr><td class="mono">[tracker.jira] board</td><td></td><td>The kanban board's id: the number in its address. Its saved filter scopes the queue.</td></tr>
+        <tr><td class="mono">[tracker.jira] jql</td><td><code>""</code></td><td>Narrows the queue further, ANDed with the board's filter.</td></tr>
+        <tr><td class="mono">[tracker.jira] email_env, token_env</td><td><code>JIRA_EMAIL</code>, <code>JIRA_API_TOKEN</code></td><td>Names of the environment variables that hold the account and its API token. They are sent only to <code>site</code>.</td></tr>
+        <tr><td class="mono">[tracker.jira] issue_type</td><td><code>Task</code></td><td>The type of an issue the factory files itself.</td></tr>
+        <tr><td class="mono">[tracker.jira] maintainers</td><td><code>[]</code></td><td>Jira account ids that may answer a <code>maintainer</code> step. Empty: anyone who can be assigned the issue.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3 id="tracker-columns">Columns</h3>
+  <p><code>[tracker.jira.columns]</code> maps a step, an end state (<code>done</code>, <code>rejected</code>, <code>failed</code>) or <code>queue</code> to a Jira status. The factory moves the card when the job enters the step.</p>
+  <ul>
+    <li><code>queue</code> is required. It is the status new jobs are picked from, and it may be a list.</li>
+    <li>A key is a step's name in <code>factory.toml</code>, so a step you add, rename or switch off needs no other change. A key that is not a step fails <code>mfactory sync</code>, with the steps listed.</li>
+    <li>Steps may share a status, for a smaller board.</li>
+    <li>A step with no status leaves the card where it is.</li>
+    <li>The status is looked up each time it is used and is not stored on the job. Change one line and the next command uses it.</li>
+  </ul>
+  <p>A card Jira will not move, because the workflow has no such transition, is reported as a <code>note:</code> line and does not stop the job.</p>
+  <h3 id="tracker-moving-the-card">Answering by moving the card</h3>
+  <p>A person answers a human step with a Jira comment, as on GitHub. They can also move the card: moving it to the status of one of the step's edge targets is that outcome.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Step</th><th>Move the card to</th><th>Outcome</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">spec-approval</td><td>the status of <code>build</code></td><td><code>APPROVE</code></td></tr>
+        <tr><td class="mono">spec-approval</td><td>the status of <code>spec</code>, after a comment saying what to change</td><td><code>CHANGES</code></td></tr>
+        <tr><td>any human step</td><td>the status of <code>rejected</code></td><td><code>REJECT</code></td></tr>
+        <tr><td class="mono">escalated</td><td>the status of <code>build</code></td><td><code>FEEDBACK</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>These come from the graph, not from a list: an edge through a step that is switched off counts as the step the job lands in. Words for the move are the mover's newest comment. <code>REJECT</code> needs none, and neither does <code>FEEDBACK</code> at <code>[run].escalate_to</code>.</p>
+  <p>Any other move by a person is moved back, with one comment that says why and names the statuses that are answers: a status two outcomes share, a status that is no edge target, a move by someone the step's <code>who</code> does not allow, or a move while an agent works on the job. To put a job at another step, use <code>mfactory move &lt;job&gt; &lt;step&gt;</code>.</p>
+  <p><code>who</code> works as on GitHub, with Jira accounts: <code>author</code> is the reporter, <code>operator</code> is the account the token belongs to, <code>maintainer</code> is anyone who can be assigned the issue (or <code>maintainers</code>), and a list holds account ids.</p>
+  <h3 id="tracker-when-the-board-changes">When the board changes</h3>
+  <pre data-lang="bash"><code>.factory/bin/mfactory tracker show   # each step, its status and its column, and what is wrong
+.factory/bin/mfactory tracker sync   # put every unfinished job's card in its step's status</code></pre>
+  <p><code>tracker show</code> names a status Jira does not have, a status on no column of the board, statuses no step uses, and a move the pipeline needs that the workflow does not allow. Jira lists transitions for an issue, not for a workflow, so a status is checked through a card that is in it now; the rest are listed as not checked. <code>mfactory doctor</code> runs the same checks.</p>
+  <p>After renaming a column or editing <code>[tracker.jira.columns]</code>, run <code>tracker sync</code>. <code>mfactory queue</code> also moves a card that is where the factory left it and no longer where the mapping says.</p>
+  <h3 id="tracker-what-else-differs">What else differs from GitHub issues</h3>
+  <ul>
+    <li>A job's issue is its Jira key, such as <code>PROJ-123</code>: <code>/mfactory run PROJ-123</code>, <code>mfactory answer PROJ-123 approve</code>.</li>
+    <li>The branch is <code>&lt;branch_prefix&gt;PROJ-123-&lt;job id&gt;</code>, the pull request title must contain the key, and its body starts with <code>Refs PROJ-123</code>, so Jira's development panel links them. <code>branch_pattern</code> must accept that branch.</li>
+    <li><code>[project] issue_link = "closes"</code> is refused: a pull request cannot close a Jira issue.</li>
+    <li><code>[labels]</code> is not used. The queue column and the step columns say what the labels said.</li>
+    <li>Asks are posted on the Jira issue only, and comments on the pull request are not read as replies. A pull request merged by hand still continues the job.</li>
+    <li><code>mfactory close issue</code> moves the card to the status of <code>done</code>, or of <code>rejected</code> with <code>--not-planned</code>.</li>
+  </ul>
+
   <h2 id="labels-paths-and-ports">Labels, paths and ports</h2>
   <pre data-lang="toml"><code>[tracker]
 kind = "github"
@@ -327,7 +409,7 @@ step = 10</code></pre>
     <table>
       <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td class="mono">[tracker] kind</td><td>Where jobs come from and where people reply to the factory. <code>github</code> (GitHub issues) is the only tracker. Pull requests are always on GitHub.</td></tr>
+        <tr><td class="mono">[tracker] kind</td><td>Where jobs come from and where people reply to the factory: <code>github</code> (GitHub issues) or <code>jira</code>. See <a href="#tracker-a-jira-board">Tracker: a Jira board</a>. Pull requests are always on GitHub.</td></tr>
         <tr><td class="mono">[labels] queue</td><td>Issues with this label are built.</td></tr>
         <tr><td class="mono">[labels] needs_info</td><td>Put on an issue while its author is being asked.</td></tr>
         <tr><td class="mono">[labels] needs_human</td><td>Put on an issue while a maintainer, the operator, or a named login is being asked.</td></tr>

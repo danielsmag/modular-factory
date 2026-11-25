@@ -51,6 +51,7 @@ mfactory: factory.toml has 2 problem(s):
 - [Reviewers and surfaces](#reviewers-and-surfaces)
 - [Models and effort](#models-and-effort)
 - [Project skills](#project-skills)
+- [Tracker: a Jira board](#tracker-a-jira-board)
 - [Labels, paths and ports](#labels-paths-and-ports)
 
 ## Project, tools and run
@@ -873,6 +874,123 @@ when `AGENTS.md` is missing.
 A missing project file you list yourself fails `mfactory sync`. A missing user file syncs, and
 `mfactory doctor` warns. `SKILL.md` files and plugin caches are not rule files.
 
+## Tracker: a Jira board
+
+By default the tracker is GitHub issues: jobs come from open issues with the queue label, and people reply in
+issue and pull request comments. With `kind = "jira"`, a Jira kanban board is the tracker. New jobs are the cards
+in its queue column, each step's card sits in a column of the board, and people reply in Jira comments or by
+moving the card. Code, branches and pull requests stay on GitHub. A project uses one tracker; a workspace can
+hold projects of both kinds.
+
+```toml
+[tracker]
+kind = "jira"
+
+[tracker.jira]
+site = "https://acme.atlassian.net"
+board = 1234
+jql = "assignee = currentUser()"
+
+[tracker.jira.columns]
+queue = "Ready for factory"
+intake = "Intake"
+ask-author = "Needs info"
+spec = "Spec"
+build = "Build"
+gate = "Build"
+review = "Review"
+approve = "Review"
+ready-to-merge = "Ready to merge"
+escalated = "Escalated"
+done = "Done"
+rejected = "Rejected"
+failed = "Failed"
+```
+
+The account and its API token come from the environment, never from `factory.toml`:
+
+```bash
+export JIRA_EMAIL="you@example.com"
+export JIRA_API_TOKEN="..."
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `[tracker] kind` | `github` | `github` or `jira`. |
+| `[tracker.jira] site` | | The Jira Cloud site. `https://` only. |
+| `[tracker.jira] board` | | The kanban board's id: the number in its address. Its saved filter scopes the queue. |
+| `[tracker.jira] jql` | `""` | Narrows the queue further, ANDed with the board's filter. |
+| `[tracker.jira] email_env`, `token_env` | `JIRA_EMAIL`, `JIRA_API_TOKEN` | Names of the environment variables that hold the account and its API token. They are sent only to `site`. |
+| `[tracker.jira] issue_type` | `Task` | The type of an issue the factory files itself (`mfactory file`, `report_problems`, a failed verify). |
+| `[tracker.jira] maintainers` | `[]` | Jira account ids that may answer a `maintainer` step. Empty: anyone who can be assigned the issue. |
+
+### Columns
+
+`[tracker.jira.columns]` maps a step, an end state (`done`, `rejected`, `failed`) or `queue` to a Jira
+**status**. The factory moves the card when the job enters the step.
+
+- `queue` is required. It is the status new jobs are picked from, and it may be a list.
+- A key is a step's name in `factory.toml`, so a step you add, rename or switch off needs no other change.
+  A key that is not a step fails `mfactory sync`, with the steps listed.
+- Steps may share a status, for a smaller board.
+- A step with no status leaves the card where it is.
+- The status is looked up each time it is used and is not stored on the job. Change one line and the next
+  command uses it.
+
+A card Jira will not move (the workflow has no such transition) is reported as a `note:` line and does not
+stop the job.
+
+### Answering by moving the card
+
+A person answers a human step with a Jira comment, as on GitHub: `/mfactory approve`, or plain words on a
+step with an `ANSWER` outcome. They can also move the card. Moving it to the status of one of the step's
+edge targets is that outcome:
+
+| Step | Move the card to | Outcome |
+| --- | --- | --- |
+| `spec-approval` | the status of `build` | `APPROVE` |
+| `spec-approval` | the status of `spec`, after a comment saying what to change | `CHANGES` |
+| any human step | the status of `rejected` | `REJECT` |
+| `escalated` | the status of `build` | `FEEDBACK` |
+
+These come from the graph, not from a list: an edge through a step that is switched off counts as the step
+the job lands in. Words for the move are the mover's newest comment. `REJECT` needs none, and neither does
+`FEEDBACK` at `[run].escalate_to`.
+
+Any other move by a person is moved back, with one comment that says why and names the statuses that are
+answers: a status two outcomes share, a status that is no edge target, a move by someone the step's `who`
+does not allow, or a move while an agent works on the job. To put a job at another step, use
+`mfactory move <job> <step>`.
+
+`who` works as on GitHub, with Jira accounts: `author` is the reporter, `operator` is the account the token
+belongs to, `maintainer` is anyone who can be assigned the issue (or `maintainers`), and a list holds account ids.
+
+### When the board changes
+
+```bash
+.factory/bin/mfactory tracker show   # each step, its status and its column, and what is wrong
+.factory/bin/mfactory tracker sync   # put every unfinished job's card in its step's status
+```
+
+`tracker show` names a status Jira does not have, a status on no column of the board, statuses no step
+uses, and a move the pipeline needs that the workflow does not allow. Jira lists transitions for an issue,
+not for a workflow, so a status is checked through a card that is in it now; the rest are listed as not
+checked. `mfactory doctor` runs the same checks.
+
+After renaming a column or editing `[tracker.jira.columns]`, run `tracker sync`. `mfactory queue` also moves
+a card that is where the factory left it and no longer where the mapping says.
+
+### What else differs from GitHub issues
+
+- A job's issue is its Jira key, such as `PROJ-123`: `/mfactory run PROJ-123`, `mfactory answer PROJ-123 approve`.
+- The branch is `<branch_prefix>PROJ-123-<job id>`, the pull request title must contain the key, and its body
+  starts with `Refs PROJ-123`, so Jira's development panel links them. `branch_pattern` must accept that branch.
+- `[project] issue_link = "closes"` is refused: a pull request cannot close a Jira issue.
+- `[labels]` is not used. The queue column and the step columns say what the labels said.
+- Asks are posted on the Jira issue only, and comments on the pull request are not read as replies. A pull
+  request merged by hand still continues the job.
+- `mfactory close issue` moves the card to the status of `done`, or of `rejected` with `--not-planned`.
+
 ## Labels, paths and ports
 
 ```toml
@@ -895,8 +1013,8 @@ step = 10
 
 | Key | Meaning |
 | --- | --- |
-| `[tracker] kind` | Where jobs come from and where people reply to the factory. `github` (GitHub issues) is the only tracker. Pull requests are always on GitHub. |
-| `[labels] queue` | Issues with this label are built. |
+| `[tracker] kind` | Where jobs come from and where people reply to the factory: `github` (GitHub issues) or `jira`. See [Tracker: a Jira board](#tracker-a-jira-board). Pull requests are always on GitHub. |
+| `[labels] queue` | Issues with this label are built. `[labels]` is for GitHub issues; a Jira board uses its columns. |
 | `[labels] needs_info` | Put on an issue while its author is being asked. |
 | `[labels] needs_human` | Put on an issue while a maintainer, the operator, or a named login is being asked. |
 | `[paths] worktrees` | Where each job's worktree goes, relative to the repository. Keep it ignored by git. |

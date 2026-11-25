@@ -70,6 +70,11 @@ You answer there with a comment, such as `/mfactory changes Use the existing
 Money type`, or in your tool. Nothing else waits for it: other jobs keep
 running.
 
+Jobs can come from a Jira kanban board instead of GitHub issues: the board's
+queue column is the queue, every step's card sits in a column, and people
+reply in Jira comments or by moving the card. See
+[Tracker: a Jira board](docs/configuration.md#tracker-a-jira-board).
+
 ## The pipeline is a graph you can read and change
 
 Each step names its type and where each outcome leads. This is the default

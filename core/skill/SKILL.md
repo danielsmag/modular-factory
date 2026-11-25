@@ -1,12 +1,15 @@
 ---
 name: factory
-description: Run this project's software factory on GitHub issues. Use when the user types /mfactory run, /mfactory run <n>, /mfactory setup, /mfactory approve, changes, feedback, answer or reject with an issue number, asks to move a job to another step, or /mfactory followed by a question, feedback on a job or a new feature.
+description: Run this project's software factory on its queue of issues (GitHub issues, or the cards of a Jira board). Use when the user types /mfactory run, /mfactory run <n>, /mfactory setup, /mfactory approve, changes, feedback, answer or reject with an issue number or key, asks to move a job to another step, or /mfactory followed by a question, feedback on a job or a new feature.
 ---
 
 # Factory
 
-You are the factory's orchestrator. You work through the GitHub issues that
-carry the factory's label, and you start every agent for every job. The
+You are the factory's orchestrator. You work through the issues in the
+factory's queue, and you start every agent for every job. The queue is the
+GitHub issues that carry the factory's label, or, in a project whose
+`factory.toml` has `[tracker] kind = "jira"`, the cards in the queue column of
+its Jira board. The
 pipeline itself lives in `factory.toml` and is run by one script,
 `.factory/bin/mfactory`. You never decide where a job goes next: you ask the
 script, do what it prints, and report back.
@@ -17,12 +20,16 @@ with an error that says why. Fix the cause or stop and tell the user; never
 work around it.
 
 ```text
-/mfactory run                  work through the queue of labeled issues; also resumes unfinished jobs
+/mfactory run                  work through the queue; also resumes unfinished jobs
 /mfactory run <n>              run one issue now
 /mfactory approve <n>          answer a job that is waiting for a person (also: changes, feedback, answer, reject)
 /mfactory setup                fill in factory.toml for this project, once after installing
 /mfactory <anything else>      ask about jobs, or describe a feature to file as an issue
 ```
+
+`<n>` is the issue as its tracker names it: a number on GitHub (`12`), a key
+on a Jira board (`PROJ-123`). The script takes either wherever it takes an
+issue.
 
 Run every command below from the root of the main checkout.
 
@@ -49,7 +56,7 @@ $ .factory/bin/mfactory done 004-dark-mode
 | `parallel: ...` | Several `start-agent` pairs were printed. Start them all in one message so they run together, and wait for every one. |
 | `then: <command>` | When the agent (or all of them) has finished, run this command. |
 | `stdin: the agent's whole reply` | Pipe the agent's full reply to the `then:` command on standard input (see below). |
-| `<job> #<n>: <step> <OUTCOME> -> <step>` | The script ran this step itself or a person replied. Nothing to do; it is a line for your report. |
+| `<job> #<n>: <step> <OUTCOME> -> <step>` | The script ran this step itself or a person replied. Nothing to do; it is a line for your report. With a Jira board the issue is its key: `<job> PROJ-123: ...`. |
 | `wait <job> ...` | The job is waiting for a person. Leave it. |
 | `hold <job> ...` | No free slot. Run `next` for it again after another job finishes. |
 | `finished <job>: <state>` | The job is over: `done`, `rejected` or `failed`. |
@@ -130,12 +137,16 @@ FACTORY_REPLY
 
 Then start the loop for that job. People can also reply on GitHub by
 commenting `/mfactory approve` (or the other words) on the issue or the pull
-request the factory commented on; `next` and `queue` pick those up. A step
+request the factory commented on; `next` and `queue` pick those up. With a
+Jira board they reply in a comment on the Jira issue, or by moving its card to
+the column of the outcome they mean; a card moved anywhere else is moved back
+with a comment that says why. A step
 with `replies = "tool"` ignores those comments; only the `answer` command
 counts. Merging a job's pull request by hand also counts as approving it.
 
 A rejected job is over. To run its issue again, run `mfactory delete <job>`
-and put the factory's label back on the issue. `delete` removes the job
+and put the factory's label back on the issue (with a Jira board, move its
+card back to the queue column). `delete` removes the job
 folder and rewrites the dashboard index. It refuses while a worktree, a
 local branch, a remote branch, or an open pull request still exists. Pass
 `--worktree`, `--branch`, `--remote`, or `--pr` for each one, or `--force`
@@ -263,7 +274,8 @@ feedback or asking for something new, ask.
 ## Guardrails
 
 - Only issues with the factory's label run. Adding a label needs triage or
-  write access to the repository, so the label is the trust boundary.
+  write access to the repository, so the label is the trust boundary. With a
+  Jira board, only cards the board shows in its queue column run.
 - Agents push only the job's branch. By default a maintainer
   merges. The script merges only when the merge step is on. The factory never
   deploys.
