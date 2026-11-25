@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.21.2
+
 - The dashboard lists job files in the order the job wrote them. An archived intake such as `intake-1.md` (from a NEEDS-INFO answer) now comes right before `intake.md`, labeled "intake (try 1)", instead of last. `progress.md`, `verify-checks.*`, archived round checks (`checks-1.*`) and `merge-checks.*` have set places, and `debug-N` sorts by number. Only unknown files go last.
 
 ## 0.21.1
