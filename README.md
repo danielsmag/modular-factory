@@ -226,8 +226,9 @@ skills = ["all"]              # every project, user and plugin skill on this mac
 [rules]
 all = ["all"]                 # default: every AGENTS.md, CLAUDE.md, and rule file found
 
-[steps.build]
-rules = ["AGENTS.md", "user:CLAUDE.md"]
+# builder default: AGENTS.md (or CLAUDE.md if missing) and ~/.claude/CLAUDE.md
+# [steps.build]
+# rules = ["AGENTS.md", "user:CLAUDE.md"]
 ```
 
 ## Dashboard
