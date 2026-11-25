@@ -88,6 +88,9 @@ concurrency = 3
 | `[workspace] concurrency` | `3` | `new` and `resume` rows kept across every project when this factory runs `workspace queue`. `workspace.toml` or `--concurrency` overrides it. A project's `factory.toml` cannot. |
 | `[run] start` | `"intake"` | The step a new job starts in. |
 | `[run] escalate_to` | `"escalated"` | The human step a job goes to when a loop limit is reached. |
+| `[run] pick` | `"all"` | Which labeled issues `queue` offers as new jobs. `"mine"` means the issues the operator (the `gh` user) opened or is assigned to. Issues it filters out are not listed. Jobs that already exist keep running, and `/mfactory run <n>` still runs any labeled issue. |
+| `[run] authors` | `[]` | Also offer issues these logins opened. `"@me"` is the operator. Once `authors`, `assignees` or `pick = "mine"` names anyone, an issue is offered only if its author or one of its assignees is named. |
+| `[run] assignees` | `[]` | Also offer issues assigned to these logins. `"@me"` is the operator. |
 
 `pr_title` is what the agents are shown. `pr_title_pattern` is what the script
 checks. Either may be set alone. The check runs for every merge method. When

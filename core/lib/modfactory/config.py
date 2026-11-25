@@ -349,12 +349,21 @@ def a_who(value: object) -> str | None:
     return 'must be "author", "maintainer", "operator", or a list of GitHub logins'
 
 
+def a_login_list(value: object) -> str | None:
+    """Logins for the queue filter. `@me` is the operator. Empty means no filter."""
+    if isinstance(value, list) and all(isinstance(item, str) and (item == "@me" or LOGIN.fullmatch(item))
+                                       for item in value):
+        return None
+    return 'must be a list of GitHub logins or "@me"'
+
+
 TABLES = {
     "project": {"description": a_string, "base_branch": a_filled_string,
                 "merge_method": one_of("merge", "squash", "rebase"),
                 "pr_title": a_string, "pr_title_pattern": a_regex,
                 "branch_prefix": a_branch_prefix, "branch_pattern": a_regex},
-    "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string},
+    "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string,
+            "pick": one_of("all", "mine"), "authors": a_login_list, "assignees": a_login_list},
     "workspace": {"concurrency": an_int(1)},
     "checks": {"commands": a_string_list, "timeout_minutes": an_int(1)},
     "labels": {"queue": a_filled_string, "needs_info": a_filled_string, "needs_human": a_filled_string},

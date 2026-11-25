@@ -176,3 +176,20 @@ def test_factory_checks_runs_them_where_you_are(world):
     (world.repo / "FAIL").write_text("x")
     res = world.cli("checks")
     assert res.returncode == 1 and "checks: FAIL" in res.stdout
+
+
+
+def test_the_queue_offers_only_the_issues_pick_authors_and_assignees_name(world):
+    world.configure("[run]\nconcurrency = 9\n")
+    job = world.create(world.issue(title="Started", author="alice"))
+    world.issue(title="Alice's", author="alice")
+    world.issue(title="Mine", author="operator")
+    world.issue(title="Assigned to me", author="alice", assignees=("operator",))
+    world.issue(title="Carol's", author="carol")
+    assert [row[4] for row in world.queue()][1:] == ["Alice's", "Mine", "Assigned to me", "Carol's"]
+
+    world.configure('[run]\nconcurrency = 9\npick = "mine"\nauthors = ["carol"]\n')
+    assert world.queue() == [("resume", 1, job, "intake", "round 0"),      # a started job keeps its place
+                             ("new", 3, "-", "-", "Mine"), ("new", 4, "-", "-", "Assigned to me"),
+                             ("new", 5, "-", "-", "Carol's")]
+    assert world.job(world.create(2))["issue"] == 2                         # by number, any labeled issue runs

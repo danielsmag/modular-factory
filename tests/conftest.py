@@ -111,13 +111,15 @@ class World:
         change(state)
         self.state_file.write_text(json.dumps(state))
 
-    def issue(self, title="Add a thing", body="Please add it.", labels=("factory",), author="alice"):
+    def issue(self, title="Add a thing", body="Please add it.", labels=("factory",), author="alice",
+              assignees=()):
         number = self.gh["next_number"] + 1
 
         def add(state):
             state["next_number"] = number
             state["issues"][str(number)] = {
                 "number": number, "title": title, "body": body, "state": "OPEN", "author": {"login": author},
+                "assignees": [{"login": login} for login in assignees],
                 "labels": [{"name": n} for n in labels], "url": f"https://github.test/acme/app/issues/{number}",
                 "comments": [], "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-02T00:00:00Z"}
         self.set_gh(add)

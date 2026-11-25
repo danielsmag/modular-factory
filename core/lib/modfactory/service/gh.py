@@ -57,7 +57,7 @@ class GitHub:
 
     def queue(self, label):
         return self.json("issue", "list", "--label", label, "--state", "open", "--limit", "200",
-                         "--json", "number,title,url,createdAt,updatedAt,author,labels")
+                         "--json", "number,title,url,createdAt,updatedAt,author,assignees,labels")
 
     def create_issue(self, title, body, label):
         return self.call("issue", "create", "--title", title, "--label", label, "--body-file", "-",

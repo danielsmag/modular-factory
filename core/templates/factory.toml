@@ -43,6 +43,12 @@ enabled = [__TOOLS__]
 # Jobs this project works on at once. A job waiting for a person, or being
 # validated after merge, does not count.
 concurrency = 3
+# Which labeled issues `queue` offers as new jobs. "mine": the ones you opened
+# or are assigned to. `authors` and `assignees` add logins; "@me" is you.
+# `/mfactory run <n>` still runs any labeled issue.
+# pick = "mine"
+# authors = ["alice"]
+# assignees = ["@me"]
 
 [checks]
 # Commands run in order in the job's worktree with `bash -c`. The first non-zero exit fails the step.
