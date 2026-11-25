@@ -18,7 +18,7 @@ from typing import Literal
 from .. import config, plan_usage
 from .. import sync as syncer
 from .. import workspace as workspace_mod
-from ..install import fetch_release, is_personal, layout, project_cli, upgrade
+from ..install import fetch_release, is_personal, layout, project_cli, release_items, upgrade
 from ..util import (
     CORE,
     SOURCE_REPO,
@@ -289,12 +289,13 @@ class Target:
     path: Path
     before: str
     after: str
-    action: Literal["upgrade", "current", "schema", "fail"]
+    action: Literal["upgrade", "current", "repair", "schema", "fail"]
     personal: bool = False
     base: str = ""
     have: object = None
     need: object = None
     reason: str = ""
+    missing: tuple[str, ...] = ()
 
 
 @contextmanager
@@ -319,6 +320,12 @@ def _release_facts(root: Path) -> tuple[str, object]:
     return after, need
 
 
+def _release_required(root: Path) -> list[str]:
+    """The items a project's `.factory/` needs for this release: its ITEMS plus adapters, as doctor checks."""
+    located: tuple[Path, Path, Path, Path] = layout(root)
+    return release_items(located[0]) + ["adapters"]
+
+
 def _global_target(home: Path, after: str) -> Target:
     version_file: Path = home / "core" / "VERSION"
     before: str = version_file.read_text().strip() if version_file.is_file() else ""
@@ -334,7 +341,7 @@ def _project_base(repo: Path) -> str:
     return str(loaded.base)
 
 
-def _project_target(repo: Path, label: str, after: str, need: object) -> Target:
+def _project_target(repo: Path, label: str, after: str, need: object, required: list[str]) -> Target:
     if not project_cli(repo).is_file():
         return Target(
             "project", label, repo, "", after, "fail",
@@ -352,6 +359,12 @@ def _project_target(repo: Path, label: str, after: str, need: object) -> Target:
     if have != need:
         return Target("project", label, repo, before, after, "schema", have=have, need=need)
     if before == after:
+        missing: tuple[str, ...] = tuple(item for item in required if not (repo / ".factory" / item).exists())
+        if missing:
+            return Target(
+                "project", label, repo, before, after, "repair",
+                personal=is_personal(repo), base=_project_base(repo), missing=missing,
+            )
         return Target("project", label, repo, before, after, "current")
     return Target(
         "project", label, repo, before, after, "upgrade",
@@ -368,6 +381,8 @@ def _plan_detail(target: Target) -> str:
         return detail
     if target.action == "current":
         return f"{target.after}            current"
+    if target.action == "repair":
+        return f"{target.after}            repair, missing: {', '.join(target.missing)}"
     if target.action == "schema":
         return f"{shown}            schema {target.have}, release needs {target.need}"
     return f"FAIL  {target.reason}"
@@ -405,8 +420,11 @@ def _changelog_note(root: Path, version: str) -> str:
     return "\n".join(body[:12])
 
 
-def _count_line(upgraded: int, current: int, skipped: int, failed: int) -> str:
-    parts: list[str] = [f"{upgraded} upgraded", f"{current} current"]
+def _count_line(upgraded: int, repaired: int, current: int, skipped: int, failed: int) -> str:
+    parts: list[str] = [f"{upgraded} upgraded"]
+    if repaired:
+        parts.append(f"{repaired} repaired")
+    parts.append(f"{current} current")
     if skipped:
         parts.append(f"{skipped} skipped")
     if failed:
@@ -475,7 +493,7 @@ def _replace_global(home: Path, root: Path, before: str, after: str, say: Callab
 
 def _apply(
     target: Target, root: Path, say: Callable[[str], None],
-) -> Literal["upgraded", "current", "schema", "failed"]:
+) -> Literal["upgraded", "repaired", "current", "schema", "failed"]:
     if target.action == "current":
         say(f"skip  {target.label}  already {target.after}")
         return "current"
@@ -497,7 +515,7 @@ def _apply(
     except FactoryError as error:
         say(f"{target.label}  FAIL  {error}")
         return "failed"
-    return "upgraded"
+    return "repaired" if target.action == "repair" else "upgraded"
 
 
 def _run_upgrade(targets: list[Target], root: Path, dry_run: bool, say: Callable[[str], None]) -> int:
@@ -511,17 +529,21 @@ def _run_upgrade(targets: list[Target], root: Path, dry_run: bool, say: Callable
         return 0
     say("")
     upgraded: int = 0
+    repaired: int = 0
     current: int = 0
     skipped: int = 0
     failed: int = 0
     upgraded_projects: list[Target] = []
     schema_targets: list[Target] = []
     for target in targets:
-        outcome: Literal["upgraded", "current", "schema", "failed"] = _apply(target, root, say)
+        outcome: Literal["upgraded", "repaired", "current", "schema", "failed"] = _apply(target, root, say)
         if outcome == "upgraded":
             upgraded += 1
             if target.kind == "project":
                 upgraded_projects.append(target)
+        elif outcome == "repaired":
+            repaired += 1
+            upgraded_projects.append(target)
         elif outcome == "current":
             current += 1
         elif outcome == "schema":
@@ -530,7 +552,7 @@ def _run_upgrade(targets: list[Target], root: Path, dry_run: bool, say: Callable
         else:
             failed += 1
     say("")
-    say(_count_line(upgraded, current, skipped, failed))
+    say(_count_line(upgraded, repaired, current, skipped, failed))
     for target in upgraded_projects:
         say(_project_followup(target))
     noted: bool = False
@@ -598,8 +620,10 @@ def upgrade_all(
         facts: tuple[str, object] = _release_facts(root)
         after: str = facts[0]
         need: object = facts[1]
+        required: list[str] = _release_required(root)
         targets: list[Target] = [
-            _project_target(project.path, group.label(project), after, need) for project in group.projects
+            _project_target(project.path, group.label(project), after, need, required)
+            for project in group.projects
         ]
         return _run_upgrade(targets, root, dry_run, say)
 
@@ -632,12 +656,13 @@ def upgrade_everything(
         facts: tuple[str, object] = _release_facts(root)
         after: str = facts[0]
         need: object = facts[1]
+        required: list[str] = _release_required(root)
         targets: list[Target] = []
         if home is not None:
             targets.append(_global_target(home, after))
         if group is not None:
             for project in projects:
-                targets.append(_project_target(project.path, group.label(project), after, need))
+                targets.append(_project_target(project.path, group.label(project), after, need, required))
         if extra is not None:
-            targets.append(_project_target(extra, extra.name, after, need))
+            targets.append(_project_target(extra, extra.name, after, need, required))
         return _run_upgrade(targets, root, dry_run, say)

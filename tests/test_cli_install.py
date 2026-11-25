@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from conftest import ROOT, git
+from modfactory import install
 from modfactory.cli.maintain import _changelog_note, status_all, upgrade_everything
 from modfactory.util import dashboard_page
 from modfactory.workspace.service import DashboardServer, one_handler
@@ -262,7 +263,10 @@ def test_doctor_passes_on_a_ready_project(world):
                  "Everything a run needs is in place."):
         assert line in res.stdout, line
     assert "ok    the checks pass on origin/main" in res.stdout
-    assert "warn  Claude Code: `claude` isn't on PATH" in res.stdout
+    if shutil.which("claude"):
+        assert "ok    Claude Code: " in res.stdout
+    else:
+        assert "warn  Claude Code: `claude` isn't on PATH" in res.stdout
     assert "still points at it" not in res.stdout
     assert "nothing asks a person to merge" not in res.stdout
 
@@ -576,6 +580,24 @@ def test_upgrade_leaves_a_current_project_in_place(world):
     assert binary.stat().st_mtime_ns == before
     assert "already" in result.stdout
     assert "0 upgraded, 2 current" in result.stdout
+
+
+def test_upgrade_repairs_a_project_missing_templates(world):
+    # A project on the release's version whose .factory/ has no templates folder, as a 0.3.x CLI left it.
+    installed = world.cli("install", "--tool", "cursor")
+    assert installed.returncode == 0, installed.stderr
+    expected: str = (ROOT / "core" / "VERSION").read_text()
+    (world.repo / ".factory" / "VERSION").write_text(expected)
+    shutil.rmtree(world.repo / ".factory" / "templates")
+    _global_home(expected)
+    result = world.cli("upgrade", "--source", str(ROOT), cwd=world.tmp)
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "repair, missing: templates" in result.stdout
+    assert "0 upgraded, 1 repaired, 1 current" in result.stdout
+    assert "commit .factory/ and the generated files" in result.stdout
+    assert (world.repo / ".factory" / "templates" / "factory.toml").is_file()
+    for item in install.ITEMS + ["adapters"]:
+        assert (world.repo / ".factory" / item).exists(), item
 
 
 def test_status_all_points_at_upgrade_when_a_project_is_behind(world, monkeypatch):
