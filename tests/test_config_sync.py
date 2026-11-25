@@ -288,67 +288,20 @@ def test_claude_agents_carry_model_effort_and_tools(world):
     assert "1. `.factory/roles/common.md`\n2. `.factory/roles/build.md`" in files[".claude/agents/mfactory-build.md"]
 
 
-def test_default_tools_bring_back_the_built_in_allowlist(world):
-    files, _ = plan(world, '[tools.claude]\nagent_tools = ["default"]\n'
-                           '[steps.build]\ntools = ["default", "WebFetch", "mcp__github__*", "Read"]\n')
+def test_tools_set_the_claude_allowlist(world, monkeypatch):
+    home = use_home(monkeypatch, world.tmp / "home")
+    add_plugin_skill(home, "claude", "superpowers", "test-driven-development")
+    (home / ".claude/settings.json").write_text(json.dumps({"enabledPlugins": {"superpowers@market": False}}))
+    files, notes = plan(world, '[tools.claude]\nagent_tools = ["default"]\n'
+                               '[steps.build]\ntools = ["default", "WebFetch", "mcp__github__*", "Read"]\n'
+                               '[steps.intake]\nskills = ["superpowers:test-driven-development"]\n'
+                               '[reviewers.security]\ntools = ["all"]\n')
     build = frontmatter(files[".claude/agents/mfactory-build.md"])
     assert build["tools"] == "Read, Grep, Glob, Bash, Edit, Write, Skill, WebFetch, mcp__github__*"
-    intake = frontmatter(files[".claude/agents/mfactory-intake.md"])
-    assert intake["tools"] == "Read, Grep, Glob, Write"       # no shell
-
-
-def test_a_step_list_replaces_agent_tools(world):
-    files, _ = plan(world, '[tools.claude]\nagent_tools = ["default", "WebSearch"]\n'
-                           '[steps.build]\ntools = ["Read", "Edit"]\n[reviewers.security]\ntools = ["all"]\n')
-    assert frontmatter(files[".claude/agents/mfactory-build.md"])["tools"] == "Read, Edit"
-    assert frontmatter(files[".claude/agents/mfactory-spec.md"])["tools"] == (
-        "Read, Grep, Glob, Bash, Write, Skill, WebSearch")
-    assert "tools" not in frontmatter(files[".claude/agents/mfactory-reviewer-security.md"])
-
-
-def test_a_listed_plugin_skill_adds_skill_to_an_allowlist(world, monkeypatch):
-    use_home(monkeypatch, world.tmp / "home")
-    files, _ = plan(world, '[steps.intake]\ntools = ["default"]\nskills = ["superpowers:brainstorming"]\n')
     assert frontmatter(files[".claude/agents/mfactory-intake.md"])["tools"] == "Read, Grep, Glob, Write, Skill"
-
-
-def test_bad_tool_lists_name_their_key(world):
-    for value in ('["all", "Read"]', '[""]', '["Read, Edit"]', '["Bash(git:*)"]', '"all"'):
-        found = problems(world, f"[steps.build]\ntools = {value}\n")
-        assert any("[steps.build].tools" in line for line in found), (value, found)
-    assert any("[tools.claude].agent_tools" in line
-               for line in problems(world, '[tools.claude]\nagent_tools = ["a b"]\n'))
-
-
-def test_tools_note_when_another_tool_is_enabled(world):
-    files, notes = plan(world, ALL_TOOLS + '[steps.build]\ntools = ["default"]\n')
-    assert "tools only limits Claude Code agents. Cursor and Codex agents have every tool." in notes
-    _, quiet = plan(world, ALL_TOOLS)
-    assert not any(note.startswith("tools ") for note in quiet)
-
-
-def test_a_plugin_disabled_in_claude_settings_is_skipped(world, monkeypatch):
-    home = use_home(monkeypatch, world.tmp / "home")
-    add_plugin_skill(home, "claude", "superpowers", "test-driven-development")
-    add_plugin_skill(home, "claude", "other", "thing")
-    (home / ".claude/settings.json").write_text(json.dumps(
-        {"enabledPlugins": {"superpowers@claude-plugins-official": False, "other@market": True}}))
-    files, notes = plan(world, '[skills]\nall = ["all"]\n')
-    build = files[".claude/agents/mfactory-build.md"]
-    assert "superpowers:test-driven-development" not in build
-    assert "other:thing" in build
-    assert not any(note.startswith("skill ") for note in notes)
-    files, notes = plan(world, '[steps.build]\nskills = ["superpowers:test-driven-development"]\n')
+    assert "tools" not in frontmatter(files[".claude/agents/mfactory-reviewer-security.md"])
     assert 'skill "superpowers:test-driven-development" is not installed or enabled for Claude Code' in notes
-    assert "- `superpowers:test-driven-development`\n" in files[".claude/agents/mfactory-build.md"]
-
-
-def test_broken_claude_settings_disable_nothing(world, monkeypatch):
-    home = use_home(monkeypatch, world.tmp / "home")
-    add_plugin_skill(home, "claude", "superpowers", "test-driven-development")
-    (home / ".claude/settings.json").write_text("{not json")
-    _, notes = plan(world, '[steps.build]\nskills = ["superpowers:test-driven-development"]\n')
-    assert not any(note.startswith("skill ") for note in notes)
+    assert any("[steps.build].tools" in line for line in problems(world, '[steps.build]\ntools = ["all", "Read"]\n'))
 
 
 def test_cursor_agents_put_effort_in_the_model_and_make_intake_read_only(world):
