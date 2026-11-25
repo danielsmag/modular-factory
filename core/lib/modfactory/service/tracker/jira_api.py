@@ -43,8 +43,9 @@ class Client:
         for name, what in ((self.email_env, "email_env"), (self.token_env, "token_env")):
             value: str = os.environ.get(name, "")
             if not value:
-                raise Refused(f"Jira needs {name} in the environment ([tracker.jira].{what}). "
-                              "Export it in the shell that runs the factory.")
+                raise Refused(f"Jira needs {name} in the environment ([tracker.jira].{what}). Export it in "
+                              "the shell that runs the factory, or install the Atlassian CLI and run "
+                              "`acli jira auth login`: the factory falls back to acli.")
             values.append(value)
         return "Basic " + base64.b64encode(":".join(values).encode()).decode()
 

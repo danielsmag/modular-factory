@@ -341,10 +341,12 @@ export JIRA_API_TOKEN="..."</code></pre>
         <tr><td class="mono">[tracker] kind</td><td><code>github</code></td><td><code>github</code> or <code>jira</code>.</td></tr>
         <tr><td class="mono">[tracker.jira] site</td><td></td><td>The Jira Cloud site. <code>https://</code> only.</td></tr>
         <tr><td class="mono">[tracker.jira] board</td><td></td><td>The kanban board's id: the number in its address. Its saved filter scopes the queue.</td></tr>
-        <tr><td class="mono">[tracker.jira] jql</td><td><code>""</code></td><td>Narrows the queue further, ANDed with the board's filter.</td></tr>
+        <tr><td class="mono">[tracker.jira] jql</td><td><code>""</code></td><td>Narrows the queue further, ANDed with the board's filter. A filter only: no <code>ORDER BY</code>. <code>assignee = currentUser()</code> keeps the queue to cards assigned to the operator.</td></tr>
         <tr><td class="mono">[tracker.jira] email_env, token_env</td><td><code>JIRA_EMAIL</code>, <code>JIRA_API_TOKEN</code></td><td>Names of the environment variables that hold the account and its API token. They are sent only to <code>site</code>.</td></tr>
         <tr><td class="mono">[tracker.jira] issue_type</td><td><code>Task</code></td><td>The type of an issue the factory files itself.</td></tr>
         <tr><td class="mono">[tracker.jira] maintainers</td><td><code>[]</code></td><td>Jira account ids that may answer a <code>maintainer</code> step. Empty: anyone who can be assigned the issue.</td></tr>
+        <tr><td class="mono">[tracker.jira] via</td><td><code>auto</code></td><td><code>rest</code>, <code>acli</code>, or <code>auto</code>. See <a href="#reaching-jira-rest-or-acli">Reaching Jira</a>.</td></tr>
+        <tr><td class="mono">[tracker.jira] project</td><td><code>""</code></td><td>The project's key. Required with acli; with REST the board says it.</td></tr>
       </tbody>
     </table>
   </div>
@@ -379,6 +381,29 @@ export JIRA_API_TOKEN="..."</code></pre>
 .factory/bin/mfactory tracker sync   # put every unfinished job's card in its step's status</code></pre>
   <p><code>tracker show</code> names a status Jira does not have, a status on no column of the board, statuses no step uses, and a move the pipeline needs that the workflow does not allow. Jira lists transitions for an issue, not for a workflow, so a status is checked through a card that is in it now; the rest are listed as not checked. <code>mfactory doctor</code> runs the same checks.</p>
   <p>After renaming a column or editing <code>[tracker.jira.columns]</code>, run <code>tracker sync</code>. <code>mfactory queue</code> also moves a card that is where the factory left it and no longer where the mapping says.</p>
+  <h3 id="reaching-jira-rest-or-acli">Reaching Jira: REST or acli</h3>
+  <p>The factory reaches Jira through its REST API, with the account and token from the environment. When they are not there, it falls back to the Atlassian CLI, <a href="https://developer.atlassian.com/cloud/acli/"><code>acli</code></a>, which signs in on its own:</p>
+  <pre data-lang="bash"><code>acli jira auth login --web</code></pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th><code>via</code></th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">auto</td><td>The default. REST while both <code>JIRA_EMAIL</code> and <code>JIRA_API_TOKEN</code> are set. Otherwise acli, when it is installed.</td></tr>
+        <tr><td class="mono">rest</td><td>REST only. Missing credentials are an error.</td></tr>
+        <tr><td class="mono">acli</td><td>acli only, also when the credentials are set.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>acli reaches less of Jira than REST does, so with it:</p>
+  <ul>
+    <li><code>[tracker.jira] project</code> is required. acli cannot read a board, so the project's key scopes the queue, which is then every card of the project in the queue status (and <code>jql</code>), oldest first.</li>
+    <li>A moved card is not an answer: acli shows no issue history, so nobody can be named for the move. The card is moved back with a comment, and people reply in comments.</li>
+    <li>A <code>maintainer</code> step is answered by the operator or an account in <code>maintainers</code>. acli cannot say who can be assigned an issue.</li>
+    <li><code>tracker show</code> and <code>doctor</code> list the mapping without comparing it to the board or the workflow.</li>
+    <li>The operator's account is read from an issue assigned to it or reported by it, so the account needs one.</li>
+  </ul>
+  <p><code>mfactory doctor</code> says which of the two is in use.</p>
+  <p>Every comment the factory writes ends with the line <code>— mfactory</code>. The factory posts from the operator's own account, and that line is how it tells its comments from ones the operator typed, whichever way Jira is reached.</p>
   <h3 id="tracker-what-else-differs">What else differs from GitHub issues</h3>
   <ul>
     <li>A job's issue is its Jira key, such as <code>PROJ-123</code>: <code>/mfactory run PROJ-123</code>, <code>mfactory answer PROJ-123 approve</code>.</li>

@@ -31,6 +31,8 @@ class GitHubTracker:
     comment_limit = 60000
     # The pull request links the issue from its body, so its title is free.
     links_by_title = False
+    # GitHub issues have no board.
+    drag_answers = False
 
     def __init__(self, gh: GitHub, labels: dict[str, str], issue_link: str = "refs"):
         self.gh = gh

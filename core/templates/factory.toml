@@ -225,7 +225,8 @@ all = ["all"]
 #
 # Jobs come from GitHub issues with the `factory` label. To take them from a
 # Jira kanban board instead, map each step to a status of the board. The
-# account and its API token come from JIRA_EMAIL and JIRA_API_TOKEN.
+# account and its API token come from JIRA_EMAIL and JIRA_API_TOKEN. Without
+# them the factory uses the Atlassian CLI, acli, and then needs `project`.
 # https://danielsmag.github.io/modular-factory/docs/configuration.html#tracker-a-jira-board
 #
 # [tracker]

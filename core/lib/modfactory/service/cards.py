@@ -39,6 +39,11 @@ class Cards:
         move: dict[str, Any] | None = self.tracker.last_move(job["issue"], status)
         if move is None:
             return "drift", None
+        if move.get("by") is None:  # the card moved, and the tracker cannot say who moved it
+            how: str = f"Reply in a comment: {', '.join(self._commands(job, step, slash=False))}" \
+                if step["type"] == "human" and step.get("replies") != "tool" \
+                else f"To put the job at another step, run `mfactory move {job['id']} <step>`."
+            return "stray", (move, f"{move.get('why') or 'Nobody can be named for this move.'} {how}")
         if step["type"] != "human":
             return "stray", (move, f"A person does not answer `{name}`: the factory moves this card while job "
                                    f"`{job['id']}` is at that step. To put the job at another step, run "
@@ -86,6 +91,8 @@ class Cards:
 
     def _drag_choices(self, name: str, step: dict[str, Any]) -> str:
         """The statuses a person may move the card to, each with the outcome it means. Empty for none."""
+        if not self.tracker.drag_answers:
+            return ""
         escalate: str = self.cfg["run"]["escalate_to"]
         shown: list[str] = []
         for status, outcomes in board.drags(self.cfg.steps, self.tracker.status_for, name).items():
@@ -103,9 +110,10 @@ class Cards:
         self._place(job, name)
         if (job.get("board") or {}).get("warning"):
             return
-        who: str = self.tracker.mention(move["by"]["login"], move["by"].get("name"))
+        moved: str = "This card was moved" if move.get("by") is None else (
+            f"{self.tracker.mention(move['by']['login'], move['by'].get('name'))} moved this card")
         self.tracker.comment(job["issue"], (
-            f"{NOTE_HEADING}\n\n{who} moved this card to `{move['to']}`. Job `{job['id']}` is at step "
+            f"{NOTE_HEADING}\n\n{moved} to `{move['to']}`. Job `{job['id']}` is at step "
             f"`{name}`, so the card is back in `{self.tracker.status_for(name)}`.\n\n{why}"))
 
     def _settle_card(self, job: dict[str, Any], name: str, kind: str, data: Any) -> None:

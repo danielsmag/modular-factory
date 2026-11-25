@@ -15,12 +15,12 @@ from .base import Key, Who
 from .jira_api import Client
 
 KEY = re.compile(r"[A-Za-z][A-Za-z0-9_]*-[1-9][0-9]*")
-# The comment property that marks a comment the factory wrote. Jira does not show it to readers.
-PROPERTY = "mfactory"
+# The last line of every comment the factory writes. The factory posts from the operator's own account,
+# so this is what tells its comments from ones the operator typed. It is plain text, so it survives
+# whichever way Jira is reached.
+SIGNATURE = "— mfactory"
 FIELDS = "summary,description,status,reporter,assignee,labels,created,updated"
 LIST_FIELDS = "summary,status,reporter,assignee,labels,created,updated"
-# Comment ids one `comment/list` call may ask for.
-IDS_PER_CALL = 1000
 # Issue keys in one JQL `key in (...)`.
 KEYS_PER_CALL = 50
 # Cards read from the board to find one in each status, for checking the workflow's transitions.
@@ -31,9 +31,25 @@ def _same(a: str, b: str) -> bool:
     return a.casefold() == b.casefold()
 
 
+def _text(value: object) -> str:
+    """A description or comment body as text: a document, or text a tool already flattened."""
+    return value if isinstance(value, str) else adf.to_text(value)
+
+
+def _status_name(value: object) -> str:
+    """A status as Jira gives it, an object with a name, or as a tool may flatten it, the name alone."""
+    if isinstance(value, dict):
+        return str(value.get("name") or "")
+    return value if isinstance(value, str) else ""
+
+
 class JiraTracker:
     kind = "jira"
     label = "Jira"
+    # How Jira is reached: its REST API here, the Atlassian CLI in `jira_acli.py`.
+    via = "rest"
+    # True when the tracker can tell who moved a card, so a move can answer a human step.
+    drag_answers = True
     # Asks and replies are in Jira. A comment on the pull request does not count.
     pr_threads = False
     comment_limit = 30000
@@ -51,6 +67,7 @@ class JiraTracker:
         self.columns: dict[str, Any] = settings.get("columns") or {}
         self.issue_type: str = settings.get("issue_type") or "Task"
         self.maintainers: list[str] = list(settings.get("maintainers") or [])
+        self.project: str = str(settings.get("project") or "")
         self.site: str = str(settings["site"]).rstrip("/")
         self.api = client or Client(self.site, settings["email_env"], settings["token_env"])
         self._operator: str | None = None
@@ -82,7 +99,7 @@ class JiraTracker:
     def _person(self, user: object) -> dict[str, str]:
         """An account as `{"login": account id, "name": shown name}`. The id is what jobs store and compare."""
         if not isinstance(user, dict):
-            return {"login": "", "name": ""}
+            return {"login": "", "name": user if isinstance(user, str) else ""}
         login: str = str(user.get("accountId") or "")
         name: str = str(user.get("displayName") or login)
         if login:
@@ -91,13 +108,13 @@ class JiraTracker:
 
     def _issue(self, raw: dict[str, Any]) -> dict[str, Any]:
         fields: dict[str, Any] = raw.get("fields") or {}
-        status: dict[str, Any] = fields.get("status") or {}
-        category: object = (status.get("statusCategory") or {}).get("key")
+        status: object = fields.get("status")
+        category: object = (status.get("statusCategory") or {}).get("key") if isinstance(status, dict) else None
         assignee: object = fields.get("assignee")
         return {
             "number": raw["key"], "title": fields.get("summary") or "", "url": self._url(raw["key"]),
-            "body": adf.to_text(fields.get("description")), "state": "CLOSED" if category == "done" else "OPEN",
-            "status": status.get("name") or "", "author": self._person(fields.get("reporter")),
+            "body": _text(fields.get("description")), "state": "CLOSED" if category == "done" else "OPEN",
+            "status": _status_name(status), "author": self._person(fields.get("reporter")),
             "assignees": [self._person(assignee)] if assignee else [],
             "labels": [{"name": str(name)} for name in fields.get("labels") or []],
             "createdAt": fields.get("created"), "updatedAt": fields.get("updated"),
@@ -163,6 +180,8 @@ class JiraTracker:
         """Nothing to do: a rejected job's card has left the queue column."""
 
     def _project_key(self) -> str:
+        if self.project:
+            return self.project
         if self._project is None:
             found: object = self.api.get(f"/rest/agile/1.0/board/{self.board}")
             location: object = found.get("location") if isinstance(found, dict) else None
@@ -196,36 +215,39 @@ class JiraTracker:
     # -- comments
 
     def comments(self, key: Key) -> list[dict[str, Any]]:
-        rows: list[Any] = self.api.pages("GET", f"/rest/api/3/issue/{key}/comment", "comments", orderBy="created")
-        out: list[dict[str, Any]] = [{
-            "id": str(row.get("id")), "author": self._person(row.get("author")),
-            "body": adf.to_text(row.get("body")), "createdAt": row.get("created"), "factory": False,
-        } for row in rows if isinstance(row, dict)]
-        # Only the operator's account posts factory comments, and it may also comment by hand.
-        mine: list[dict[str, Any]] = [c for c in out if c["author"]["login"] == self.operator()] if out else []
-        marked: set[str] = self._marked([c["id"] for c in mine])
-        for comment in mine:
-            comment["factory"] = comment["id"] in marked
+        return self._comments_from(
+            self.api.pages("GET", f"/rest/api/3/issue/{key}/comment", "comments", orderBy="created"))
+
+    def _comments_from(self, rows: list[Any]) -> list[dict[str, Any]]:
+        """Comments as Jira lists them, each saying whether the factory wrote it.
+
+        A factory comment is one the operator's account posted that ends with SIGNATURE. The account
+        is looked up only when a comment is signed.
+        """
+        out: list[dict[str, Any]] = []
+        signed: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            comment: dict[str, Any] = {
+                "id": str(row.get("id")), "author": self._person(row.get("author")),
+                "body": _text(row.get("body")), "createdAt": row.get("created"), "factory": False}
+            out.append(comment)
+            if comment["body"].rstrip().endswith(SIGNATURE):
+                signed.append(comment)
+        operator: str = self.operator() if signed else ""
+        for comment in signed:
+            if comment["author"]["login"] == operator:
+                comment["factory"] = True
+                comment["body"] = comment["body"].rstrip()[:-len(SIGNATURE)].rstrip()
         return out
 
-    def _marked(self, ids: list[str]) -> set[str]:
-        """Which of these comments carry the factory's property."""
-        numbers: list[int] = [int(i) for i in ids if i.isdigit()]
-        found: set[str] = set()
-        for start in range(0, len(numbers), IDS_PER_CALL):
-            rows: list[Any] = self.api.pages("POST", "/rest/api/3/comment/list", "values",
-                                             {"ids": numbers[start:start + IDS_PER_CALL]}, expand="properties")
-            for row in rows:
-                properties: object = row.get("properties") if isinstance(row, dict) else None
-                if any(isinstance(p, dict) and p.get("key") == PROPERTY for p in properties or []):
-                    found.add(str(row.get("id")))
-        return found
+    def _document(self, body: str, factory: bool) -> dict[str, Any]:
+        """A comment's body as Jira stores it. A factory comment ends with SIGNATURE."""
+        return adf.from_markdown(f"{body.rstrip()}\n\n{SIGNATURE}" if factory else body)
 
     def comment(self, key: Key, body: str, factory: bool = True) -> None:
-        payload: dict[str, Any] = {"body": adf.from_markdown(body)}
-        if factory:
-            payload["properties"] = [{"key": PROPERTY, "value": {"factory": True}}]
-        self.api.post(f"/rest/api/3/issue/{key}/comment", payload)
+        self.api.post(f"/rest/api/3/issue/{key}/comment", {"body": self._document(body, factory)})
 
     # -- people
 
@@ -383,9 +405,9 @@ class JiraTracker:
         rows += [row(state, "end", True, self.status_for(state)) for state in ("done", "rejected", "failed")]
         sound: set[str] = {r["status"].casefold() for r in rows if r["status"] and not r["problem"]}
         problems, unchecked = self._workflow_gaps(queue, sound)
-        return {"tracker": self.kind, "site": self.site, "board": self.board, "rows": rows,
+        return {"tracker": self.kind, "via": self.via, "site": self.site, "board": self.board, "rows": rows,
                 "unused": [name for name in on_board if name.casefold() not in used],
-                "problems": problems, "unchecked": unchecked}
+                "problems": problems, "unchecked": unchecked, "note": None}
 
     def _workflow_gaps(self, queue: list[str], sound: set[str]) -> tuple[list[str], list[str]]:
         """Moves the pipeline needs and the workflow lacks, and the statuses no card could show them for.

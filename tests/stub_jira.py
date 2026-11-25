@@ -211,6 +211,10 @@ class FakeJira:
             return issue["key"] == found.group(1).upper()
         if re.fullmatch(r"(?i)assignee = currentUser\(\)", clause):
             return issue["assignee"] == self.me
+        if re.fullmatch(r"(?i)reporter = currentUser\(\)", clause):
+            return issue["reporter"] == self.me
+        if found := re.fullmatch(r'(?i)project = "?([A-Za-z0-9_]+)"?', clause):
+            return issue["key"].rsplit("-", 1)[0] == found.group(1).upper()
         if found := re.fullmatch(r"(?i)labels = (\w+)", clause):
             return found.group(1) in issue["labels"]
         raise Problem(400, f"stub jira: JQL it cannot read: {clause}")
@@ -265,11 +269,12 @@ class FakeJira:
             self._find(query["issueKey"][0])
             account = query.get("accountId", [""])[0]
             return 200, [self._user(account)] if account in self.assignable else []
-        if method == "POST" and path == "/rest/api/3/comment/list":
-            wanted = {str(ident) for ident in body.get("ids", [])}
-            rows = [self._comment(c, properties="properties" in query.get("expand", [""])[0])
-                    for issue in self.issues.values() for c in issue["comments"] if c["id"] in wanted]
-            return 200, self._page(rows, query, "values")
+        if method == "GET" and path == "/rest/api/3/search/jql":
+            # Every issue the account can see, on the board or not. The factory's REST client never asks
+            # this; the stub `acli` does, as the real one searches Jira and not a board.
+            jql = query.get("jql", [""])[0]
+            ordered = sorted(self.issues.values(), key=lambda issue: int(issue["id"]))
+            return 200, self._page([self._issue(i) for i in ordered if self._matches(i, jql)], query, "issues")
         if method == "POST" and path == "/rest/api/3/issue":
             fields = body["fields"]
             if fields["project"]["key"] != self.project:

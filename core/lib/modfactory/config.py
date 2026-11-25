@@ -405,8 +405,26 @@ def an_env_name(value: object) -> str | None:
     return "must be the name of an environment variable"
 
 
-JIRA_KEYS = {"site": a_site, "board": an_int(0), "jql": a_string, "email_env": an_env_name,
+PROJECT_KEY = re.compile(r"[A-Z][A-Z0-9_]+")
+
+
+def a_project_key(value: object) -> str | None:
+    """Empty, or a Jira project key."""
+    if isinstance(value, str) and (not value or PROJECT_KEY.fullmatch(value)):
+        return None
+    return "must be a Jira project key, such as PROJ"
+
+
+def a_jql(value: object) -> str | None:
+    """A JQL filter. It is ANDed with the queue's own clause, so it cannot carry an order."""
+    if isinstance(value, str) and not re.search(r"(?i)\border\s+by\b", value):
+        return None
+    return "must be a filter without ORDER BY"
+
+
+JIRA_KEYS = {"site": a_site, "board": an_int(0), "jql": a_jql, "email_env": an_env_name,
              "token_env": an_env_name, "issue_type": a_filled_string, "maintainers": a_string_list,
+             "via": one_of("auto", "rest", "acli"), "project": a_project_key,
              "columns": lambda value: None}
 # A Jira account id: letters, digits, hyphens and a colon, such as 712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70.
 ACCOUNT = re.compile(r"[A-Za-z0-9][A-Za-z0-9:_-]{0,127}")

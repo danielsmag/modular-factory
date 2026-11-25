@@ -12,15 +12,18 @@ from ..gh import GitHub
 from .base import Key, Tracker, Who
 from .github import GitHubTracker
 from .jira import JiraTracker
+from .jira_acli import AcliJiraTracker, from_config
 
-TRACKERS = {"github": GitHubTracker, "jira": JiraTracker}
+# Each builds its tracker from factory.toml. Jira picks how it reaches Jira: REST, or the Atlassian CLI.
+TRACKERS = {"github": GitHubTracker.from_config, "jira": from_config}
 
-__all__ = ["TRACKERS", "GitHubTracker", "JiraTracker", "Key", "Tracker", "Who", "for_repo", "make"]
+__all__ = ["TRACKERS", "AcliJiraTracker", "GitHubTracker", "JiraTracker", "Key", "Tracker", "Who", "for_repo",
+           "make"]
 
 
 def make(cfg, gh: GitHub | None = None) -> Tracker:
     """The tracker factory.toml asks for."""
-    return TRACKERS[cfg["tracker"]["kind"]].from_config(cfg, gh or GitHub(cfg.repo))
+    return TRACKERS[cfg["tracker"]["kind"]](cfg, gh or GitHub(cfg.repo))
 
 
 def for_repo(repo: Path) -> Tracker:

@@ -1,5 +1,6 @@
 """A project with a bare `origin`, a stub `gh`, and stand-ins for the agents."""
 
+import base64
 import json
 import os
 import shutil
@@ -125,6 +126,9 @@ class World:
         self.state_file = tmp / "gh.json"
         self._factory = None
         self.jira = None
+        self.acli_log = tmp / "acli.log"
+        self.bin = tmp / "bin"
+        self.monkeypatch = None
 
     # ---- Jira --------------------------------------------------------------
 
@@ -135,6 +139,26 @@ class World:
         self.configure(f'[tracker]\nkind = "jira"\n\n[tracker.jira]\nsite = "{self.jira.url}"\nboard = 7\n'
                        f"{settings}\n{columns}\n{extra}")
         return self.jira
+
+    def use_acli(self, extra="", columns=JIRA_COLUMNS, settings='project = "PROJ"'):
+        """As `use_jira`, but with no REST credentials and a stub `acli` on PATH, so the factory falls back to it."""
+        jira = self.use_jira(extra=extra, columns=columns, settings=settings)
+        shutil.copy(ROOT / "tests" / "stub_acli.py", self.bin / "acli")
+        (self.bin / "acli").chmod(0o755)
+        self.monkeypatch.delenv("JIRA_EMAIL", raising=False)
+        self.monkeypatch.delenv("JIRA_API_TOKEN", raising=False)
+        basic = base64.b64encode(f"{stub_jira.EMAIL}:{stub_jira.TOKEN}".encode()).decode()
+        for name, value in {"ACLI_STUB_SITE": jira.url, "ACLI_STUB_AUTH": f"Basic {basic}",
+                            "ACLI_STUB_LOG": str(self.acli_log)}.items():
+            self.monkeypatch.setenv(name, value)
+        return jira
+
+    def acli_calls(self, *start):
+        """The `acli` commands run so far whose words start with `start`."""
+        if not self.acli_log.exists():
+            return []
+        calls = [json.loads(line) for line in self.acli_log.read_text().splitlines()]
+        return [call for call in calls if call[:len(start)] == list(start)]
 
     # ---- GitHub ------------------------------------------------------------
 
@@ -313,7 +337,8 @@ class World:
 @pytest.fixture
 def world(tmp_path, monkeypatch, repo_template):
     w = World(tmp_path)
-    stubs = tmp_path / "bin"
+    w.monkeypatch = monkeypatch
+    stubs = w.bin
     stubs.mkdir()
     shutil.copy(ROOT / "tests" / "stub_gh.py", stubs / "gh")
     (stubs / "gh").chmod(0o755)

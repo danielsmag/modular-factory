@@ -159,7 +159,7 @@ def test_the_factorys_comment_is_a_formatted_document(world):
     key = world.jira.ticket()
     found.comment(key, "### Factory: rejected\n\nNot in scope.")
     stored = world.jira.issues[key]["comments"][0]["body"]
-    assert [block["type"] for block in stored["content"]] == ["heading", "paragraph"]
+    assert [block["type"] for block in stored["content"]] == ["heading", "paragraph", "paragraph"]
 
 
 def test_comments_are_read_across_pages(world):

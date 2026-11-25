@@ -25,6 +25,8 @@ class Tracker(Protocol):
     comment_limit: int
     # True when the pull request's title must carry the issue's key.
     links_by_title: bool
+    # True when a person can answer a human step by moving the issue's card on a board.
+    drag_answers: bool
 
     # -- keys
 
@@ -129,7 +131,11 @@ class Tracker(Protocol):
         ...
 
     def last_move(self, key: Key, status: str) -> dict[str, Any] | None:
-        """The newest move of the card into `status`: `by` (a person), `from` and `to`. None when unknown."""
+        """The newest move of the card into `status`: `by` (a person), `from` and `to`. None when unknown.
+
+        `by` is None when the tracker sees that the card moved and cannot tell who moved it; `why` then
+        says so, for the comment that goes with moving the card back.
+        """
         ...
 
     def board_report(self) -> dict[str, Any] | None:

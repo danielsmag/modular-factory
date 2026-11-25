@@ -69,6 +69,8 @@ def _tracker_show(factory: Factory, as_json: bool) -> int:
         print(f"problem: {problem}")
     if report["unchecked"]:
         print(f"transitions not checked from: {', '.join(report['unchecked'])} (no card is in those statuses now)")
+    if report.get("note"):
+        print(report["note"])
     return 1 if wrong else 0
 
 

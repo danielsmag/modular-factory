@@ -919,10 +919,12 @@ export JIRA_API_TOKEN="..."
 | `[tracker] kind` | `github` | `github` or `jira`. |
 | `[tracker.jira] site` | | The Jira Cloud site. `https://` only. |
 | `[tracker.jira] board` | | The kanban board's id: the number in its address. Its saved filter scopes the queue. |
-| `[tracker.jira] jql` | `""` | Narrows the queue further, ANDed with the board's filter. |
+| `[tracker.jira] jql` | `""` | Narrows the queue further, ANDed with the board's filter. A filter only: no `ORDER BY`. `assignee = currentUser()` keeps the queue to cards assigned to the operator. |
 | `[tracker.jira] email_env`, `token_env` | `JIRA_EMAIL`, `JIRA_API_TOKEN` | Names of the environment variables that hold the account and its API token. They are sent only to `site`. |
 | `[tracker.jira] issue_type` | `Task` | The type of an issue the factory files itself (`mfactory file`, `report_problems`, a failed verify). |
 | `[tracker.jira] maintainers` | `[]` | Jira account ids that may answer a `maintainer` step. Empty: anyone who can be assigned the issue. |
+| `[tracker.jira] via` | `auto` | `rest`, `acli`, or `auto`. See [Reaching Jira](#reaching-jira-rest-or-acli). |
+| `[tracker.jira] project` | `""` | The project's key. Required with acli; with REST the board says it. |
 
 ### Columns
 
@@ -979,6 +981,38 @@ checked. `mfactory doctor` runs the same checks.
 
 After renaming a column or editing `[tracker.jira.columns]`, run `tracker sync`. `mfactory queue` also moves
 a card that is where the factory left it and no longer where the mapping says.
+
+### Reaching Jira: REST or acli
+
+The factory reaches Jira through its REST API, with the account and token from the environment. When they
+are not there, it falls back to the Atlassian CLI, [`acli`](https://developer.atlassian.com/cloud/acli/),
+which signs in on its own:
+
+```bash
+acli jira auth login --web
+```
+
+| `via` | Meaning |
+| --- | --- |
+| `auto` (default) | REST while both `JIRA_EMAIL` and `JIRA_API_TOKEN` are set. Otherwise acli, when it is installed. |
+| `rest` | REST only. Missing credentials are an error. |
+| `acli` | acli only, also when the credentials are set. |
+
+acli reaches less of Jira than REST does, so with it:
+
+- `[tracker.jira] project` is required. acli cannot read a board, so the project's key scopes the queue, which
+  is then every card of the project in the queue status (and `jql`), oldest first.
+- A moved card is not an answer: acli shows no issue history, so nobody can be named for the move. The card
+  is moved back with a comment, and people reply in comments.
+- A `maintainer` step is answered by the operator or an account in `maintainers`. acli cannot say who can be
+  assigned an issue.
+- `tracker show` and `doctor` list the mapping without comparing it to the board or the workflow.
+- The operator's account is read from an issue assigned to it or reported by it, so the account needs one.
+
+`mfactory doctor` says which of the two is in use.
+
+Every comment the factory writes ends with the line `— mfactory`. The factory posts from the operator's own
+account, and that line is how it tells its comments from ones the operator typed, whichever way Jira is reached.
 
 ### What else differs from GitHub issues
 

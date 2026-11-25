@@ -69,6 +69,7 @@ core/lib/modfactory/      the factory's code
       github.py           GitHub issues: the queue is a label
       jira.py             a Jira kanban board: the queue is a column
       jira_api.py         Jira's REST API, with the standard library
+      jira_acli.py        Jira through the Atlassian CLI, when REST has no credentials
       adf.py              Jira's document format, to and from text
   store.py, cost.py, util.py
 core/roles/*.md           one prompt per agent step and reviewer
@@ -147,7 +148,8 @@ def follow(job, step, outcome):
 - **Tracker credentials stay in the environment.** The Jira account and token
   are read when a request is made, sent only to `[tracker.jira].site`, and
   never written to a job file, the dashboard's index or an error message. A
-  redirect is refused rather than followed.
+  redirect is refused rather than followed. Without them the factory runs
+  `acli`, which holds its own sign-in.
 - **Issue text is data.** It reaches agents only inside `issue.md`, which every
   prompt calls quoted data. The orchestrator never pastes it into a prompt.
   This lowers the risk of an issue steering an agent; it does not remove it.
