@@ -49,7 +49,10 @@ def _text(value: object) -> str | None:
 
 
 def _login(value: object) -> str | None:
-    return _text(value.get("login")) if isinstance(value, dict) else None
+    """A person as the page shows them: by name on a tracker whose logins are ids, else by login."""
+    if not isinstance(value, dict):
+        return None
+    return _text(value.get("name")) or _text(value.get("login"))
 
 
 def queue_payload(
@@ -89,7 +92,7 @@ def issue_payload(raw: object) -> dict[str, object]:
         })
     number: object = issue.get("number")
     return {
-        "number": number if isinstance(number, int) and not isinstance(number, bool) else None,
+        "number": number if isinstance(number, int | str) and not isinstance(number, bool) else None,
         "title": _text(issue.get("title")),
         "url": _web_url(issue.get("url")),
         "state": _text(issue.get("state")),
@@ -110,14 +113,16 @@ def issue_response(project: Project, ref: str) -> tuple[HTTPStatus, dict[str, ob
         number: trackers.Key = tracker.key(ref)
     except FactoryError:
         return HTTPStatus.NOT_FOUND, {"error": f"{ref} is not an issue of this project"}
+    shown: str = tracker.ref(number)
     try:
         raw: object = tracker.issue_details(number)
     except FactoryError as error:
         lines: list[str] = str(error).strip().splitlines()
         reason: str = lines[-1] if lines else "gh failed"
-        return HTTPStatus.BAD_GATEWAY, {"error": f"Could not load issue #{number} from GitHub: {reason}"}
+        return HTTPStatus.BAD_GATEWAY, {"error": f"Could not load issue {shown} from {tracker.label}: {reason}"}
     except json.JSONDecodeError:
-        return HTTPStatus.BAD_GATEWAY, {"error": f"Could not load issue #{number} from GitHub: gh printed no JSON"}
+        return HTTPStatus.BAD_GATEWAY, {"error": f"Could not load issue {shown} from {tracker.label}: "
+                                                 "gh printed no JSON"}
     return HTTPStatus.OK, issue_payload(raw)
 
 

@@ -90,6 +90,9 @@ class GitHubTracker:
     def empty_note(self) -> str:
         return f"no open issue is labeled `{self.labels['queue']}`"
 
+    def enqueue_hint(self) -> str:
+        return f"Label an issue `{self.labels['queue']}`"
+
     def requeue_hint(self) -> str:
         return "put the factory label back to run it again"
 

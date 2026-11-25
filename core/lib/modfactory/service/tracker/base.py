@@ -60,6 +60,10 @@ class Tracker(Protocol):
         """What an empty queue means, as the start of a sentence."""
         ...
 
+    def enqueue_hint(self) -> str:
+        """How a person puts an issue in the queue for the first time, as a short imperative."""
+        ...
+
     def requeue_hint(self) -> str:
         """How a person puts an issue back in the queue."""
         ...

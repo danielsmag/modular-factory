@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from . import config, graph, plan_usage
+from .service import tracker as trackers
 from .util import Refused, first_line, now, version, write_atomic
 
 RUNNING_TYPES = {"agent", "checks", "review", "merge"}
@@ -118,6 +119,7 @@ class Store:
 
     def index(self):
         cfg = self.cfg
+        tracker = trackers.make(cfg)
         return {
             "schema": SCHEMA,
             "generated_at": now(),
@@ -127,6 +129,8 @@ class Store:
             "tools": cfg.tools,
             "concurrency": cfg["run"]["concurrency"],
             "labels": cfg["labels"],
+            # Where jobs come from, for the page's wording. Read from factory.toml; the tracker is not asked.
+            "tracker": {"kind": tracker.kind, "label": tracker.label, "enqueue": tracker.enqueue_hint()},
             "plan_usage": plan_usage.read(),
             "jobs": [dict(job, files=self.files(job["id"])) for job in self.all()],
         }

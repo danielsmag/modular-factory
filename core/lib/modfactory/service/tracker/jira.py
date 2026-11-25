@@ -153,6 +153,9 @@ class JiraTracker:
         shown: str = ", ".join(f"`{name}`" for name in board.queue_statuses(self.columns))
         return f"no card is in {shown} on board {self.board}"
 
+    def enqueue_hint(self) -> str:
+        return f"Move a card to `{board.queue_statuses(self.columns)[0]}` on board {self.board}"
+
     def requeue_hint(self) -> str:
         return f"move its card to `{board.queue_statuses(self.columns)[0]}` to run it again"
 

@@ -226,6 +226,12 @@ def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) 
             for key, value in labels_raw.items():
                 if isinstance(key, str) and isinstance(value, str):
                     labels[key] = value
+        tracker: dict[str, str] = {}
+        tracker_raw: object = body.get("tracker")
+        if isinstance(tracker_raw, dict):
+            for key, value in tracker_raw.items():
+                if isinstance(key, str) and isinstance(value, str):
+                    tracker[key] = value
         concurrency_raw: object = body.get("concurrency")
         concurrency: int | None = None
         if isinstance(concurrency_raw, int) and not isinstance(concurrency_raw, bool) and concurrency_raw >= 1:
@@ -247,6 +253,7 @@ def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) 
             "generated_at": generated_at,
             "tools": tools,
             "labels": labels,
+            "tracker": tracker,
             "concurrency": concurrency,
             "config": config_rows,
         }
