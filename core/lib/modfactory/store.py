@@ -3,6 +3,7 @@
 import fcntl
 import json
 import re
+from pathlib import Path
 
 from . import config, graph, plan_usage
 from .util import Refused, first_line, now, version, write_atomic
@@ -135,3 +136,46 @@ class Store:
         write_atomic(self.dir / "index.json", json.dumps(self.index(), indent=1) + "\n")
         write_atomic(self.dir / "graph.json", json.dumps(graph.as_json(cfg), indent=1) + "\n")
         write_atomic(self.dir / "config.json", json.dumps(config.as_json(cfg), indent=1) + "\n")
+
+    def reconcile_index(self) -> list[str]:
+        """Rewrite index.json when its job ids differ from the folders on disk.
+
+        Returns the ids that were listed and are gone. A missing index is left alone. A file that is not a
+        job index is rewritten and reported as ``["<unreadable>"]``.
+        """
+        path: Path = self.dir / "index.json"
+        live: set[str] = set(self.ids())
+        if not path.is_file():
+            return []
+        listed: list[str] | None = self._index_ids(path)
+        if listed is None:
+            self.write_index()
+            return ["<unreadable>"]
+        if set(listed) == live:
+            return []
+        self.write_index()
+        return [ident for ident in listed if ident not in live]
+
+    def _index_ids(self, path: Path) -> list[str] | None:
+        """Job ids in index.json, or None when the file is not a job index."""
+        try:
+            text: str = path.read_text()
+        except OSError:
+            return None
+        try:
+            loaded: object = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(loaded, dict):
+            return None
+        raw_jobs: object = loaded.get("jobs")
+        if not isinstance(raw_jobs, list):
+            return None
+        listed: list[str] = []
+        for item in raw_jobs:
+            if not isinstance(item, dict):
+                continue
+            ident: object = item.get("id")
+            if isinstance(ident, str):
+                listed.append(ident)
+        return listed

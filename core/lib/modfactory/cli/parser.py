@@ -14,6 +14,7 @@ see the configuration
 run jobs (the orchestrator skill uses these)
   queue | create <issue> | next <job> | done <job> | answer <job> <outcome>
   close issue <job> | close job <job> [--merged <pr>] | move <job> <step> [note]
+  delete <job> [--worktree] [--branch] [--remote] [--pr] [--force]
 other
   checks | dashboard | start dashboard | stop | version
 several projects
@@ -102,6 +103,16 @@ def parser() -> argparse.ArgumentParser:
     move.add_argument("text", nargs="*", help="a note for the next agent; or pass it on standard input")
     route: argparse.ArgumentParser = sub.add_parser("route", help="show which agents a job uses")
     route.add_argument("job")
+    delete: argparse.ArgumentParser = sub.add_parser(
+        "delete", help="remove a job folder and rewrite the dashboard index")
+    delete.add_argument("job")
+    delete.add_argument("--worktree", action="store_true", help="remove the job's worktrees")
+    delete.add_argument("--branch", action="store_true",
+                        help="delete the local branch; also removes the worktree")
+    delete.add_argument("--remote", action="store_true", help="delete the branch on origin")
+    delete.add_argument("--pr", action="store_true", help="close the job's open pull request")
+    delete.add_argument("--force", action="store_true",
+                        help="worktree, local branch, remote branch, and the open pull request")
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
     sub.add_parser("hook")  # no help text: argparse then leaves it out of the list

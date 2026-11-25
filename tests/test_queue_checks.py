@@ -1,10 +1,15 @@
 """What to run, how many at once, and what the checks protect."""
 
 import json
+import shutil
+import subprocess
+from pathlib import Path
 
 import pytest
-from conftest import AUTO_MERGE
+from conftest import AUTO_MERGE, World
 from modfactory.util import Refused
+from modfactory.workspace.jobs import read_jobs
+from modfactory.workspace.project import Project
 
 ONE = "[run]\nconcurrency = 1\n"
 
@@ -69,7 +74,7 @@ def test_queue_explains_jobs_that_need_nothing(world):
     world.intake(rejected, decision="REJECT")
     world.done(rejected)
     # The rejected issue lost its label. The merged one is still open here; on GitHub the merge closes it.
-    assert world.queue() == [("skip", 1, done, "done", f"finished; delete .factory/jobs/{done} to run it again")]
+    assert world.queue() == [("skip", 1, done, "done", f"finished; mfactory delete {done} to run it again")]
     world.set_gh(lambda s: s["issues"]["1"].update(state="CLOSED"))
     assert world.queue() == []
 
@@ -92,6 +97,126 @@ def test_the_index_for_the_dashboard_follows_every_change(world):
         "edges": [{"outcome": "APPROVE", "to": "build", "max": None},
                   {"outcome": "CHANGES", "to": "spec", "max": 3},
                   {"outcome": "REJECT", "to": "rejected", "max": None}]}
+
+
+def _release(world: World) -> None:
+    if world._factory is not None:
+        world._factory.store.release()
+
+
+def _ref_exists(repo: Path, ref: str) -> bool:
+    found: subprocess.CompletedProcess[str] = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", ref], cwd=repo, capture_output=True, text=True)
+    return found.returncode == 0
+
+
+def test_delete_removes_a_finished_job_and_rewrites_the_index(world):
+    job: str = world.start(config_text=AUTO_MERGE)
+    info: dict = world.job(job)
+    issue: int = info["issue"]
+    assert not Path(info["worktree"]).exists()
+    _release(world)
+    res = world.cli("delete", job)
+    assert res.returncode == 0, res.stderr
+    assert f"deleted {job} for #{issue}" in res.stdout
+    assert f"note: issue #{issue} stays open; put the factory label back to run it again." in res.stdout
+    assert not (world.repo / ".factory" / "jobs" / job).exists()
+    index: dict = json.loads((world.repo / ".factory" / "jobs" / "index.json").read_text())
+    assert job not in [row["id"] for row in index["jobs"]]
+    assert world.gh["issues"][str(issue)]["state"] == "OPEN"
+
+
+def test_delete_removes_a_rejected_job_after_its_pull_request_was_closed(world):
+    job: str = world.start(until="ready-to-merge")
+    assert world.job(job)["pr"] and not world.job(job)["merge_sha"]
+    world.answer(job, "reject", "Not now.")
+    rejected: dict = world.job(job)
+    assert rejected["step"] == "rejected"
+    assert rejected["pr"] and not rejected["merge_sha"]
+    _release(world)
+    res = world.cli("delete", job)
+    assert res.returncode == 0, res.stderr
+    assert not (world.repo / ".factory" / "jobs" / job).exists()
+
+
+def test_delete_refuses_until_every_artifact_is_allowed(world):
+    job: str = world.start(until="build")
+    world.build(job)
+    world.done(job)
+    info: dict = world.job(job)
+    branch: str = info["branch"]
+    worktree: Path = Path(info["worktree"])
+    folder: Path = world.repo / ".factory" / "jobs" / job
+    number: int = info["pr"]
+    assert worktree.exists()
+    assert _ref_exists(world.repo, f"refs/heads/{branch}")
+    assert _ref_exists(world.repo, f"refs/remotes/origin/{branch}")
+    assert number and not info["merge_sha"]
+    _release(world)
+
+    refused = world.cli("delete", job)
+    assert refused.returncode == 1
+    for flag in ("--worktree", "--branch", "--remote", "--pr"):
+        assert flag in refused.stderr
+    assert "Nothing was removed" in refused.stderr
+    assert worktree.exists() and folder.exists()
+    assert world.gh["prs"][str(number)]["state"] == "OPEN"
+
+    partial = world.cli("delete", job, "--worktree")
+    assert partial.returncode == 1
+    assert worktree.exists() and folder.exists()
+    assert world.gh["prs"][str(number)]["state"] == "OPEN"
+    assert not world.calls("pr close")
+
+    forced = world.cli("delete", job, "--force")
+    assert forced.returncode == 0, forced.stderr
+    assert not worktree.exists() and not folder.exists()
+    assert not _ref_exists(world.repo, f"refs/heads/{branch}")
+    assert not _ref_exists(world.repo, f"refs/remotes/origin/{branch}")
+    assert world.calls("pr close")
+    assert world.gh["prs"][str(number)]["state"] == "CLOSED"
+    index: dict = json.loads((world.repo / ".factory" / "jobs" / "index.json").read_text())
+    assert job not in [row["id"] for row in index["jobs"]]
+    assert world.gh["issues"][str(info["issue"])]["state"] == "OPEN"
+
+
+def test_queue_rewrites_a_stale_index(world):
+    job: str = world.start(until="spec")
+    folder: Path = world.dir(job)
+    index_path: Path = world.repo / ".factory" / "jobs" / "index.json"
+    stale: str = index_path.read_text()
+    _release(world)
+    shutil.rmtree(folder)
+
+    res = world.cli("queue")
+    assert res.returncode == 0, res.stderr
+    assert f"note: index.json dropped {job} (job folder gone)" in res.stdout
+    index: dict = json.loads(index_path.read_text())
+    assert job not in [row["id"] for row in index["jobs"]]
+
+    index_path.write_text(stale)
+    listed = world.cli("queue", "--json")
+    assert listed.returncode == 0, listed.stderr
+    assert f"note: index.json dropped {job} (job folder gone)" in listed.stderr
+    assert isinstance(json.loads(listed.stdout), list)
+    healed: dict = json.loads(index_path.read_text())
+    assert job not in [row["id"] for row in healed["jobs"]]
+
+
+def test_the_board_hides_a_job_whose_folder_is_gone(tmp_path: Path):
+    repo: Path = tmp_path / "repo"
+    jobs: Path = repo / ".factory" / "jobs"
+    kept: Path = jobs / "002-keep"
+    kept.mkdir(parents=True)
+    (kept / "job.json").write_text(json.dumps({"id": "002-keep", "title": "Keep", "step": "spec"}))
+    index: dict = {"schema": 1, "jobs": [
+        {"id": "001-gone", "title": "Gone", "step": "intake"},
+        {"id": "002-keep", "title": "Keep", "step": "spec"},
+    ]}
+    (jobs / "index.json").write_text(json.dumps(index))
+    body: dict = read_jobs(Project(repo))
+    assert body["error"] is None
+    assert [row["id"] for row in body["jobs"]] == ["002-keep"]
 
 
 # ---- checks and protected paths -------------------------------------------

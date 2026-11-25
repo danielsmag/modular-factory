@@ -138,6 +138,16 @@ def schema_notice(schema: object, has_jobs: bool) -> tuple[str | None, bool]:
     return "written by an older factory. Run `mfactory upgrade` in this project.", True
 
 
+def _jobs_on_disk(project: Project, jobs: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Indexed jobs whose folder still has job.json. A deleted folder stays off the board."""
+    present: list[dict[str, object]] = []
+    for job in jobs:
+        ident: object = job.get("id")
+        if isinstance(ident, str) and (project.jobs_dir / ident / "job.json").is_file():
+            present.append(job)
+    return present
+
+
 def read_jobs(project: Project) -> dict[str, object]:
     index_path: Path = project.jobs_dir / "index.json"
     if index_path.is_file():
@@ -149,7 +159,8 @@ def read_jobs(project: Project) -> dict[str, object]:
             result: dict[str, object] = dict(loaded)
             raw_jobs: object = loaded.get("jobs")
             listed: list[object] = raw_jobs if isinstance(raw_jobs, list) else []
-            result["jobs"] = [job for job in map(normalize_job, listed) if job is not None]
+            normalized: list[dict[str, object]] = [job for job in map(normalize_job, listed) if job is not None]
+            result["jobs"] = _jobs_on_disk(project, normalized)
             result["error"] = None
             return result
         return {"jobs": [], "error": "index.json is not an object"}

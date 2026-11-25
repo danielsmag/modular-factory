@@ -7,6 +7,7 @@ edge. Everything else here is what those two need.
 
 import re
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -750,6 +751,96 @@ class Factory(Humans, Scripted, Queue):
         if job["pr"] and not job["merge_sha"]:
             self.say(f"note: pull request #{job['pr']} is still open")
         self.say(f"note: issue #{job['issue']} is not closed; `{CLI} close issue {job['id']}` closes it")
+
+    def delete(self, ref: str, *, worktree: bool, branch: bool, remote: bool, pr: bool, force: bool) -> None:
+        """`mfactory delete`: remove a job folder and rewrite the dashboard index.
+
+        Refuses while a worktree, local branch, remote branch, or open pull request still exists, unless the
+        matching flag (or `--force`) allows removing it. `--branch` also removes the worktree. The issue stays open.
+        """
+        if force:
+            worktree = True
+            branch = True
+            remote = True
+            pr = True
+        elif branch:
+            worktree = True
+        job: dict[str, Any] = self.store.open(ref)
+        self._refuse_delete(job, worktree=worktree, branch=branch, remote=remote, pr=pr)
+        self._remove_delete_artifacts(job, worktree=worktree, branch=branch, remote=remote, pr=pr)
+        job_id: str = str(job["id"])
+        issue: object = job["issue"]
+        self.store.release()
+        shutil.rmtree(self.store.path(job_id))
+        self.store.write_index()
+        self.say(f"deleted {job_id} for #{issue}")
+        self.say(f"note: issue #{issue} stays open; put the factory label back to run it again.")
+
+    def _refuse_delete(self, job: dict[str, Any], *, worktree: bool, branch: bool, remote: bool, pr: bool) -> None:
+        """Raise when an artifact still exists and its flag was not passed. Removes nothing."""
+        reasons: list[str] = []
+        present: list[Path] = self._present_worktrees(job)
+        if present and not worktree:
+            shown: str = ", ".join(str(path) for path in present)
+            reasons.append(f"worktree {shown} (--worktree; --branch also removes the worktree)")
+        branch_name: str = str(job["branch"])
+        if not branch and self._ref_exists(f"refs/heads/{branch_name}"):
+            reasons.append(f"local branch {branch_name} (--branch)")
+        if not remote and self._ref_exists(f"refs/remotes/origin/{branch_name}"):
+            reasons.append(f"remote branch origin/{branch_name} (--remote)")
+        number: int | None = self._open_pr_number(job)
+        if number is not None and not pr:
+            reasons.append(f"open pull request #{number} (--pr)")
+        if not reasons:
+            return
+        detail: str = "; ".join(reasons)
+        raise Refused(f"cannot delete {job['id']}: {detail}. "
+                      "Pass the flag for each one, or --force for all four. Nothing was removed.")
+
+    def _remove_delete_artifacts(self, job: dict[str, Any], *, worktree: bool, branch: bool, remote: bool,
+                                 pr: bool) -> None:
+        """Remove the artifacts whose flags were passed. The job folder is removed by `delete`."""
+        number: int | None = self._open_pr_number(job)
+        if pr and number is not None:
+            self.gh.call("pr", "close", number, check=False)
+        branch_name: str = str(job["branch"])
+        if remote:
+            deleted: subprocess.CompletedProcess[str] = run(
+                ["git", "push", "origin", "--delete", branch_name], cwd=self.cfg.repo, check=False)
+            if deleted.returncode == 0:
+                run(["git", "update-ref", "-d", f"refs/remotes/origin/{branch_name}"], cwd=self.cfg.repo, check=False)
+        if worktree:
+            verify: Path = Path(self._verify_path(job))
+            paths: list[Path] = [Path(str(job["worktree"])), Path(self._investigate_path(job)), verify,
+                                 verify.with_name(f"{job['id']}-revert")]
+            for index, path in enumerate(paths):
+                self._remove_worktree(path, branch_name if branch and index == 0 else None)
+
+    def _present_worktrees(self, job: dict[str, Any]) -> list[Path]:
+        """Worktrees this job may have left behind: its own, plus investigate, verify, and revert."""
+        verify: Path = Path(self._verify_path(job))
+        paths: list[Path] = [Path(str(job["worktree"])), Path(self._investigate_path(job)), verify,
+                             verify.with_name(f"{job['id']}-revert")]
+        return [path for path in paths if path.exists()]
+
+    def _ref_exists(self, ref: str) -> bool:
+        return run(["git", "rev-parse", "--verify", "--quiet", ref], cwd=self.cfg.repo, check=False).returncode == 0
+
+    def _open_pr_number(self, job: dict[str, Any]) -> int | None:
+        """The recorded pull request when it is still open. A closed or merged one is not a blocker.
+
+        GitHub is asked only about the number in job.json. No answer counts as open, so an offline
+        command does not ignore a pull request that may still be open.
+        """
+        number: object = job.get("pr")
+        if not isinstance(number, int) or isinstance(number, bool) or job.get("merge_sha"):
+            return None
+        viewed: object = self.gh.pr(number, "state")
+        if isinstance(viewed, dict):
+            state: object = viewed.get("state")
+            if isinstance(state, str) and state != "OPEN":
+                return None
+        return number
 
     def move(self, ref: str, target: str, note: str = "") -> None:
         """`mfactory move`: put an unfinished job at any enabled step, whatever the graph's edges say."""
