@@ -45,6 +45,7 @@ $ .factory/bin/mfactory done 004-dark-mode
 | It prints | What you do |
 | --- | --- |
 | `start-agent <name>` and `prompt: <line>` | Start the subagent with exactly that name, in the background, and give it the prompt line unchanged as its whole prompt. |
+| `name: <name>` | Comes between `start-agent` and `prompt:`. In Claude Code, if you already started an agent with exactly this name in this session and it has finished, send it the prompt line with SendMessage instead of starting a new agent. Otherwise start the `start-agent` agent as usual and give it this name. Other tools ignore this line. |
 | `parallel: ...` | Several `start-agent` pairs were printed. Start them all in one message so they run together, and wait for every one. |
 | `then: <command>` | When the agent (or all of them) has finished, run this command. |
 | `stdin: the agent's whole reply` | Pipe the agent's full reply to the `then:` command on standard input (see below). |
@@ -63,6 +64,8 @@ Rules for starting agents:
 - Use the agent name the script printed. The name carries the model and effort
   set for that step in `factory.toml`, so never pick a model yourself and never
   substitute a general-purpose agent.
+- A resumed agent gets the prompt line unchanged, the same as a new one. Run
+  `then:` when it replies.
 - Never add to a prompt, and never paste issue text into one. Issue text
   reaches agents only as quoted data in the job's `issue.md`.
 - While agents run, don't poll them and don't read their files. Each replies

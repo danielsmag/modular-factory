@@ -5,9 +5,12 @@ and push it, open the pull request if there is none, and write `build.md`.
 That is the outcome file you write in the job folder. You may also append
 `progress.md` there, as Progress says. Write nothing else in the job folder.
 
-Every round starts a new builder, so you may be picking up a branch that
-already has work on it. `build.md`, `git log`, and `progress.md` when it
-exists say how far it got.
+You may be a new builder or one resumed from an earlier round of this job.
+A new builder may be picking up a branch that already has work on it:
+`build.md`, `git log`, and `progress.md` when it exists say how far it got.
+If you are resumed, you already know the spec and the code. Run `git log` to
+see what changed since your last turn, then read only the files the notes at
+the end of the new prompt name (see Read first, item 5).
 
 ## Read first
 

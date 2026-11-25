@@ -72,7 +72,7 @@ class CachedTranscript:
     growing: bool
     error: bool
     folder: str | None
-    run: dict[str, Any] | None
+    runs: list[dict[str, Any]]
 
 
 class TranscriptCache:
@@ -97,17 +97,17 @@ class TranscriptCache:
                 if previous.error or not previous.growing:
                     return previous
                 settled: CachedTranscript = CachedTranscript(
-                    size, mtime_ns, False, False, previous.folder, previous.run,
+                    size, mtime_ns, False, False, previous.folder, previous.runs,
                 )
                 self._files[key] = settled
                 return settled
             try:
                 folder: str | None
-                run: dict[str, Any] | None
-                folder, run = _parse(path, prices)
-                loaded: CachedTranscript = CachedTranscript(size, mtime_ns, True, False, folder, run)
+                runs: list[dict[str, Any]]
+                folder, runs = _parse(path, prices)
+                loaded: CachedTranscript = CachedTranscript(size, mtime_ns, True, False, folder, runs)
             except (OSError, ValueError, TypeError, KeyError):
-                loaded = CachedTranscript(size, mtime_ns, False, True, None, None)
+                loaded = CachedTranscript(size, mtime_ns, False, True, None, [])
             self._files[key] = loaded
             return loaded
 
@@ -208,9 +208,10 @@ class ActivityLog:
                 if cached.error:
                     errors += 1
                     continue
-                if cached.run is None or cached.folder is None or not _same_dir(cached.folder, job_dir):
+                if not cached.runs or cached.folder is None or not _same_dir(cached.folder, job_dir):
                     continue
-                found.append((cached.run, cached.growing))
+                for run in cached.runs:
+                    found.append((run, cached.growing and run is cached.runs[-1]))
         return found, errors
 
     def _placeholders(self, job: dict[str, Any], runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -417,15 +418,52 @@ def _read_snapshot(job_dir: Path) -> tuple[list[dict[str, Any]], str | None]:
     return clean, None
 
 
-def _parse(path: Path, prices: dict[str, dict[str, float]]) -> tuple[str | None, dict[str, Any] | None]:
+def _parse(path: Path, prices: dict[str, dict[str, float]]) -> tuple[str | None, list[dict[str, Any]]]:
+    """The job folder and one run per factory prompt: a resumed builder gets a run for each round."""
     records: list[dict[str, Any]] = _records(path)
+    modified: str = datetime.fromtimestamp(path.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    folder: str | None = None
+    runs: list[dict[str, Any]] = []
+    segments: list[list[dict[str, Any]]] = _segments(records)
+    for index, segment in enumerate(segments):
+        found: tuple[str, dict[str, Any]] | None = _parse_segment(
+            segment, prices, modified, last=index == len(segments) - 1)
+        if found is None:
+            continue
+        if folder is None:
+            folder = found[0]
+        if found[0] == folder:
+            runs.append(found[1])
+    return folder, runs
+
+
+def _segments(records: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Split a transcript before each later factory prompt, which is how a resumed agent gets a new round."""
+    out: list[list[dict[str, Any]]] = [[]]
+    for record in records:
+        if out[-1] and _prompt_text(out[-1]) and _factory_prompt(record):
+            out.append([])
+        out[-1].append(record)
+    return out
+
+
+def _factory_prompt(record: dict[str, Any]) -> bool:
+    if record.get("type") != "user":
+        return False
+    text: str = _message_text(record).lstrip()
+    return text.startswith("Job: ") and "Job folder:" in text
+
+
+def _parse_segment(
+    records: list[dict[str, Any]], prices: dict[str, dict[str, float]], modified: str, last: bool,
+) -> tuple[str, dict[str, Any]] | None:
     prompt: str = _prompt_text(records)
     if "Job folder:" not in prompt:
-        return None, None
+        return None
     identity: dict[str, Any] = _identity(prompt)
     folder: object = identity.pop("folder")
     if not isinstance(folder, str):
-        return None, None
+        return None
     job_dir: Path = Path(folder)
     events: list[dict[str, Any]] = []
     usage_by_message: dict[str, tuple[str, dict[str, Any]]] = {}
@@ -448,10 +486,9 @@ def _parse(path: Path, prices: dict[str, dict[str, float]]) -> tuple[str | None,
     run["events"] = events
     if result:
         run["result"] = result
-    modified: str = datetime.fromtimestamp(path.stat().st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     if stamps:
         run["started_at"] = stamps[0]
-        later: bool = len(stamps) == 1 and modified > stamps[0]
+        later: bool = last and len(stamps) == 1 and modified > stamps[0]
         run["ended_at"] = modified if later else stamps[-1]
     else:
         run["started_at"] = modified

@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- `[tools.claude] resume_builder = true` resumes a job's builder across rounds in Claude Code. `next` prints a `name:` line for the build step, and the orchestrator wakes the builder it started under that name with SendMessage. The builder keeps its context, so a CHANGES round costs less. The dashboard splits a resumed builder's transcript into one run per round.
+
 ## 0.19.0
 
 - Agent activity cards cover edits and other tools too. Shell cards show the program name in backticks, and the `$` line matches the command color.
