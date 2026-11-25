@@ -6,9 +6,7 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
-## 0.26.2
-
-- fix: a global upgrade (and `install.sh --global`) keeps `dashboard.json`, `dashboard.log` and `plan-usage.json`, so `mfactory stop` still finds a running dashboard, and the upgrade tells you when a running dashboard is still on the old version.
+- fix: `CLAUDE.md`-only repositories no longer fail sync after upgrading: the builder's default instruction file falls back to `CLAUDE.md`. A `rules = []` or `rules = ["CLAUDE.md", ...]` workaround in `[steps.build]` can stay or be removed.
 
 ## 0.26.0
 
