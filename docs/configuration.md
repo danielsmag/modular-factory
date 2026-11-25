@@ -123,6 +123,14 @@ open (say, from a renamed branch), `mfactory close job <job> --merged <pr>`
 records that pull request and its merge on the job; it refuses a pull request
 that is not merged. After changing `issue_link`, run `mfactory sync`.
 
+`mfactory move <job> <step> [note]` puts an unfinished job at any enabled step,
+whatever the edges say, and records `MOVED-BY-HAND` in its history. It clears
+the counted repeats (so an edge `max` that escalated the job starts again) and
+a failed gate, so a move to `build` starts a new round. A note goes to the next
+agent. It refuses a finished job, an end state (`close job` ends a job as
+`done`), a step that is switched off, and `merge` or `verify` without a pull
+request (and, for `verify`, without its merge).
+
 `branch_prefix` is concatenated with the job id, so the slash belongs in the
 prefix. `branch_pattern` is checked when the factory chooses the name, before
 it creates the branch. A job already on disk keeps the branch stored in its

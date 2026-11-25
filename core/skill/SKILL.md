@@ -1,6 +1,6 @@
 ---
 name: factory
-description: Run this project's software factory on GitHub issues. Use when the user types /mfactory run, /mfactory run <n>, /mfactory setup, /mfactory approve, changes, feedback, answer or reject with an issue number, or /mfactory followed by a question, feedback on a job or a new feature.
+description: Run this project's software factory on GitHub issues. Use when the user types /mfactory run, /mfactory run <n>, /mfactory setup, /mfactory approve, changes, feedback, answer or reject with an issue number, asks to move a job to another step, or /mfactory followed by a question, feedback on a job or a new feature.
 ---
 
 # Factory
@@ -150,6 +150,19 @@ them only when the user asks:
 .factory/bin/mfactory close issue 12 --not-planned  # close it as not planned
 .factory/bin/mfactory close job 12                  # end the job as done from any step; the issue stays open
 .factory/bin/mfactory close job 12 --merged 34      # the work merged in PR 34 instead: end the job and record it
+```
+
+## Moving a job by hand
+
+`move` puts an unfinished job at any enabled step, outside the graph's edges:
+back to `build` for another round, to `spec` to rewrite it, or out of
+`escalated`. It clears the counted repeats, so a `max` that escalated the job
+starts again. Words after the step reach the next agent. Run it only when the
+user asks, then continue the loop with `next`:
+
+```bash
+.factory/bin/mfactory move 12 build                       # put job 12 at build
+.factory/bin/mfactory move 12 spec "Drop the CSV export"  # with a note for the spec writer
 ```
 
 ## /mfactory setup

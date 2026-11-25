@@ -751,6 +751,47 @@ class Factory(Humans, Scripted, Queue):
             self.say(f"note: pull request #{job['pr']} is still open")
         self.say(f"note: issue #{job['issue']} is not closed; `{CLI} close issue {job['id']}` closes it")
 
+    def move(self, ref: str, target: str, note: str = "") -> None:
+        """`mfactory move`: put an unfinished job at any enabled step, whatever the graph's edges say."""
+        job: dict[str, Any] = self.store.open(ref)
+        old: str = job["step"]
+        if old in graph.END_STATES:
+            raise Refused(f"{job['id']} is finished ({old}); its worktree and branch are gone, so it can't move")
+        if target == "done":
+            raise Refused(f"done is not a step to move to. `{CLI} close job {job['id']}` ends the job as done")
+        if target in graph.END_STATES:
+            raise Refused(f"{target} is not a step to move to. Move the job to a human step and answer "
+                          f"it with reject, or `{CLI} close job {job['id']}` to end it as done")
+        new: dict[str, Any] | None = self.cfg.steps.get(target)
+        if new is None:
+            live: list[str] = [n for n, s in self.cfg.steps.items() if graph.enabled(s)]
+            raise Refused(f"factory.toml has no step {target!r}. Enabled steps: {', '.join(live)}")
+        if not graph.enabled(new):
+            raise Refused(f"{target} is switched off in factory.toml ([steps.{target}].enabled = false)")
+        if new["type"] in ("merge", "verify") and not job["pr"]:
+            raise Refused(f"{target} needs a pull request and {job['id']} has none yet")
+        if new["type"] == "verify" and not job.get("merge_sha"):
+            raise Refused(f"{target} checks a merged change and pull request #{job['pr']} is not merged")
+        note = note.strip()
+        step: dict[str, Any] | None = self.cfg.steps.get(old)
+        if step is not None:
+            self._leave(job, old, step)
+        self._measure_plan(job, old)
+        # A person chose the step: repeats counted so far and a failed gate no longer apply.
+        job["taken"], job["gate_failed"], job["escalated_from"] = {}, False, None
+        reason: str = f"Moved by @{self.gh.operator()}" + (f": {note}" if note else "")
+        if note:
+            job["handoff"].append(f"A person moved this job to {target}: {note}")
+        entry: dict[str, Any] = {"step": old, "outcome": "MOVED-BY-HAND", "entered_at": job["entered_at"],
+                                 "at": now(), "reason": reason}
+        job["reason"] = reason
+        landed, skipped = self._enter(job, target)
+        job["history"].append(entry | {"to": landed, "skipped": skipped})
+        self._update_cost(job)
+        self.store.save(job)
+        self.say(f"{self.tag(job)}: {old} MOVED-BY-HAND -> {landed}")
+        self.say(f"then: {CLI} next {job['id']}")
+
     # ---- review ------------------------------------------------------------
 
     def _review_verdicts(self, job):

@@ -1,6 +1,7 @@
 """Human steps: asking, waiting, and replies from the CLI and from GitHub comments."""
 
 import pytest
+from conftest import AUTO_MERGE
 from modfactory.util import MARKER, ConfigError, Refused
 
 SPEC_APPROVAL = "[steps.spec-approval]\nenabled = true\n"
@@ -255,3 +256,76 @@ def test_close_job_records_a_pull_request_merged_outside_the_factory(world):
     assert j["pr_url"] == "https://github.test/acme/app/pull/90"
     assert j["history"][-1]["outcome"] == "CLOSED-BY-HAND"
     assert j["history"][-1]["reason"] == "Closed by @operator; merged in PR #90 (abc1234)"
+
+
+def test_move_puts_a_waiting_job_back_at_build_with_a_note(world):
+    job = world.start()
+    j = world.job(job)
+    assert j["step"] == "ready-to-merge" and "factory:needs-human" in world.labels(1)
+    first_round = j["round"]
+    said = world.factory().move(job, "build", "Rebase first.") or world.said
+    assert said == [f"{job} #1: ready-to-merge MOVED-BY-HAND -> build",
+                    f"then: .factory/bin/mfactory next {job}"]
+    j = world.job(job)
+    assert (j["step"], j["round"], j["taken"]) == ("build", first_round + 1, {})
+    assert "factory:needs-human" not in world.labels(1)
+    assert j["history"][-1]["outcome"] == "MOVED-BY-HAND"
+    assert j["history"][-1]["reason"] == "Moved by @operator: Rebase first."
+    prompt = world.next(job)
+    assert prompt[0].startswith("start-agent") and "build" in prompt[0]
+    assert "A person moved this job to build: Rebase first." in prompt[-2]
+    world.play(job)
+    assert world.job(job)["step"] == "ready-to-merge"
+
+
+def test_move_out_of_escalated_starts_a_fresh_budget(world):
+    job = world.start(until="build", config_text="[steps.review]\non = { CHANGES = { max = 0 } }\n")
+    world.play(job, until="review")
+    world.next(job)
+    world.review(job, changes=["code"])
+    world.done(job)
+    assert world.job(job)["step"] == "escalated"
+    world.factory().move(job, "build")
+    j = world.job(job)
+    assert (j["step"], j["taken"], j["escalated_from"]) == ("build", {}, None)
+    world.play(job)
+    assert world.job(job)["step"] == "ready-to-merge"
+
+
+def test_move_refuses_steps_it_cannot_put_a_job_at(world):
+    job = world.start(until="spec")
+    factory = world.factory()
+    with pytest.raises(Refused, match=r"no step 'nope'\. Enabled steps: intake, ask-author, spec, build,"):
+        factory.move(job, "nope")
+    with pytest.raises(Refused, match="close job"):
+        factory.move(job, "done")
+    with pytest.raises(Refused, match="rejected is not a step to move to"):
+        factory.move(job, "rejected")
+    with pytest.raises(Refused, match=r"spec-approval is switched off"):
+        factory.move(job, "spec-approval")
+    with pytest.raises(Refused, match=r"merge is switched off"):
+        factory.move(job, "merge")
+    assert world.job(job)["step"] == "spec"
+    world.factory().store.release()
+    world.play(job, until="ready-to-merge")
+    world.answer(job, "reject", "Not now.")
+    assert world.job(job)["step"] == "rejected"
+    with pytest.raises(Refused, match="is finished"):
+        world.factory().move(job, "build")
+
+
+def test_move_from_the_command_line(world):
+    job = world.start(until="build")
+    world.factory().store.release()  # the command line takes the job's lock itself
+    moved = world.cli("move", job, "spec", input="Tighten the criteria.")
+    assert moved.returncode == 0, moved.stderr
+    assert f"{job} #1: build MOVED-BY-HAND -> spec" in moved.stdout
+    j = world.job(job)
+    assert j["step"] == "spec" and j["reason"] == "Moved by @operator: Tighten the criteria."
+
+
+def test_move_to_merge_needs_a_pull_request(world):
+    job = world.start(until="spec", config_text=AUTO_MERGE)
+    with pytest.raises(Refused, match="merge needs a pull request and .* has none yet"):
+        world.factory().move(job, "merge")
+    assert world.job(job)["step"] == "spec"
