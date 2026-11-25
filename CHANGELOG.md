@@ -8,6 +8,10 @@ changes when it does, and this file says what to change.
 
 - The dashboard shows `.md` job files as formatted Markdown in the job drawer and the job page's Files panel: headings, lists, code, tables, links, bold and italic, in a proportional font with a capped line length. A Preview/Raw toggle above the file switches to the original text, and every file opens in Preview. Leading verdict lines such as `STATUS: DONE` or `RISK: low` show as a strip above the preview. Raw HTML in a file is shown as text, and only `http(s)` links are clickable. Other files stay plain text.
 
+## 0.20.3
+
+- ci: pull request branches start with their change type (`feat/`, `fix/`, `docs/`, `chore/` and the other release types, or `factory/`) instead of `pr/`.
+
 ## 0.20.2
 
 - ci: require a pr/ prefix on pull request branches.
