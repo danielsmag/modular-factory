@@ -27,6 +27,8 @@ DESCRIPTIONS: dict[str, str] = {
     "spec": "Turns an accepted issue into spec.md with testable acceptance criteria.",
     "build": "Implements the spec on the job's branch, opens the pull request, and writes build.md.",
     "debug": "Finds why the project's checks fail and writes a diagnosis. Never changes code.",
+    "post-debug": ("Investigates a problem found after the job's pull request merged and writes a diagnosis "
+                   "for a follow-up fix. Never changes code."),
     "approve": "Decides whether the job's pull request merges or goes to a person.",
     "verify": "Checks the merged change against the spec's acceptance criteria.",
     "custom": "A step this project defines in factory.toml.",

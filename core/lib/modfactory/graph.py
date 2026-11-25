@@ -13,6 +13,7 @@ ROLE_OUTCOMES = {
     "spec": {"DONE"},
     "build": {"READY", "BLOCKED"},
     "debug": {"FOUND", "UNKNOWN"},
+    "post-debug": {"FOUND", "UNKNOWN"},
     "approve": {"APPROVE", "ESCALATE"},
 }
 TYPE_OUTCOMES = {
@@ -198,8 +199,13 @@ def closed_issue_warning(steps: dict[str, dict], issue_link: str) -> str | None:
     target, _ = resolve(steps, edge["to"])
     if target in END_STATES:
         return None
+    follow_up: str = ""
+    if any(isinstance(step, dict) and step.get("type") == "agent" and enabled(step)
+           and role(name, step) == "post-debug" for name, step in steps.items()):
+        follow_up = " A follow-up pull request from post-debug would link a closed issue."
     return (f'[steps.{target}] runs after the merge, but [project].issue_link = "closes" lets GitHub close '
-            f'the issue when the pull request merges, so {target} sees a closed issue. Use issue_link = "refs".')
+            f'the issue when the pull request merges, so {target} sees a closed issue.{follow_up} '
+            'Use issue_link = "refs".')
 
 
 def describe(cfg):

@@ -106,13 +106,13 @@ class Config:
     def base(self):
         return self.data["project"]["base_branch"]
 
-    def job_branch(self, job_id: str, *, revert: bool = False) -> str:
-        """The branch for a job, or for the draft pull request that reverts it.
+    def job_branch(self, job_id: str, *, revert: bool = False, fix: int = 0) -> str:
+        """The branch for a job, for the draft pull request that reverts it, or for its follow-up `fix`.
 
         The pattern is checked here, when the name is chosen, before any branch exists.
         """
         prefix: str = str(self.data["project"]["branch_prefix"])
-        suffix: str = f"revert-{job_id}" if revert else job_id
+        suffix: str = f"revert-{job_id}" if revert else f"{job_id}-fix-{fix}" if fix else job_id
         name: str = prefix + suffix
         pattern: str = str(self.data["project"].get("branch_pattern", "")).strip()
         if pattern and re.fullmatch(pattern, name) is None:
@@ -272,6 +272,7 @@ def a_regex(value: object) -> str | None:
 # A job id the prefix is checked against. Real ids are the same shape: NNN-slug.
 _JOB_SAMPLE = "000-add-dark-mode"
 _REVERT_SAMPLE = "revert-000-add-dark-mode"
+_FIX_SAMPLE = "000-add-dark-mode-fix-1"
 # git check-ref-format: controls, space, DEL, and the characters it forbids anywhere.
 _FORBIDDEN_IN_BRANCH = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
 
@@ -313,8 +314,8 @@ def a_branch_prefix(value: object) -> str | None:
     return None
 
 
-def _branch_pattern_gaps(project: object) -> list[str]:
-    """Samples a set pattern must accept: one job branch and one revert branch."""
+def _branch_pattern_gaps(project: object, steps: object = None) -> list[str]:
+    """Samples a set pattern must accept: one job branch, one revert branch and, with post-debug, one fix branch."""
     if not isinstance(project, dict):
         return []
     prefix: object = project.get("branch_prefix")
@@ -332,6 +333,13 @@ def _branch_pattern_gaps(project: object) -> list[str]:
             gaps.append(
                 f"[project].branch_pattern does not match {sample!r}. "
                 "A job branch is the prefix plus the job id, and a revert branch inserts revert-.")
+    follow_ups: bool = isinstance(steps, dict) and any(
+        isinstance(step, dict) and step.get("type") == "agent" and graph.enabled(step)
+        and graph.role(name, step) == "post-debug" for name, step in steps.items())
+    if follow_ups and re.fullmatch(source, prefix + _FIX_SAMPLE) is None:
+        gaps.append(
+            f"[project].branch_pattern does not match {prefix + _FIX_SAMPLE!r}. "
+            "A post-debug step opens follow-up branches: the job branch plus -fix-N.")
     return gaps
 
 
@@ -445,7 +453,7 @@ def check(cfg):
     if cfg.sources.get(("workspace", "concurrency")) == FILE:
         out.append("[workspace].concurrency is the cap across projects. Set it in workspace.toml, "
                    "or pass --concurrency to `mfactory workspace queue`.")
-    out.extend(_branch_pattern_gaps(d.get("project")))
+    out.extend(_branch_pattern_gaps(d.get("project"), d.get("steps")))
 
     # tools
     tools = d.get("tools", {})

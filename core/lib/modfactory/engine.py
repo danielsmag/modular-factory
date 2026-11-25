@@ -22,7 +22,8 @@ from .util import MARKER, Refused, body, first_line, header, now, quote, run, se
 CLI = ".factory/bin/mfactory"
 # Files the built-in agent roles write, relative to the job folder.
 ROLE_FILES = {"intake": "intake.md", "spec": "spec.md", "build": "build.md",
-              "debug": "round-{round}/debug-{attempt}.md", "approve": "decision.md"}
+              "debug": "round-{round}/debug-{attempt}.md", "approve": "decision.md",
+              "post-debug": "round-{round}/post-debug.md"}
 
 
 class Factory(Humans, Scripted, Queue):
@@ -108,9 +109,13 @@ class Factory(Humans, Scripted, Queue):
             self._refresh_intake(job)
         elif kind == "verify":
             job["verify"] = None
+        elif kind == "agent" and role == "post-debug":
+            job["head_at_entry"] = self._checkout_base(job)
         else:
             if not job["agents"]:
                 self.route(job)
+            if kind == "agent" and role == "build" and job.get("merge_sha"):
+                self._start_follow_up(job)
             self._ensure_worktree(job)
             if kind == "agent" and role == "build":
                 self._start_build(job)
@@ -136,6 +141,38 @@ class Factory(Humans, Scripted, Queue):
             job["attempt"] = 1
             job["gate"], job["reviews"] = None, {}
         job["gate_failed"] = False
+
+    def _start_follow_up(self, job: dict[str, Any]) -> None:
+        """A build after the merge: keep the merged pull request in `prs` and start a new branch from the base.
+
+        The branch name is chosen first, so a branch_pattern that refuses it changes nothing.
+        """
+        n: int = int(job.get("follow_ups") or 0) + 1
+        branch: str = self.cfg.job_branch(job["id"], fix=n)
+        merged: dict[str, Any] = {"number": job["pr"], "url": job["pr_url"], "branch": job["branch"],
+                                  "merge_sha": job["merge_sha"], "round": job["round"]}
+        job["prs"] = [*job.get("prs", []), merged]
+        self._remove_worktree(job["worktree"], job["branch"])
+        job["follow_ups"], job["branch"] = n, branch
+        job["pr"] = job["pr_url"] = job["merge_sha"] = job["verify"] = None
+        job["gate_failed"] = False
+        pr: str = f"pull request #{merged['number']}" if merged["number"] else "the pull request"
+        job["handoff"].append(
+            f"Follow-up {n}: {pr} merged as {(merged['merge_sha'] or 'unknown')[:7]}. This round fixes what "
+            f"was found after the merge, on a new branch {branch} from origin/{self.cfg.base}. It has no "
+            f"pull request yet: open a new one, whose body starts with `Refs #{job['issue']}`.")
+
+    def _investigate_path(self, job: dict[str, Any]) -> str:
+        return str(self.cfg.repo / self.cfg["paths"]["worktrees"] / f"{job['id']}-investigate")
+
+    def _checkout_base(self, job: dict[str, Any]) -> str:
+        """A detached checkout of the current base for the post-merge debugger. Returns its HEAD."""
+        repo, path = self.cfg.repo, self._investigate_path(job)
+        self._remove_worktree(path)
+        run(["git", "fetch", "origin", self.cfg.base], cwd=repo)
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        run(["git", "worktree", "add", "--detach", path, f"origin/{self.cfg.base}"], cwd=repo)
+        return run(["git", "rev-parse", "HEAD"], cwd=path).stdout.strip()
 
     def _ensure_worktree(self, job):
         path = Path(job["worktree"])
@@ -178,6 +215,8 @@ class Factory(Humans, Scripted, Queue):
             self.gh.label(job["issue"], remove=job["waiting"]["label"])
         if step["type"] == "verify":
             self._remove_worktree(self._verify_path(job))
+        if step["type"] == "agent" and self.cfg.role(name) == "post-debug":
+            self._remove_worktree(self._investigate_path(job))
 
     def _move(self, job, outcome, reason=None, to=None):
         """Leave the current step by `outcome`'s edge, or to the escalation step when its max is used up."""
@@ -236,7 +275,11 @@ class Factory(Humans, Scripted, Queue):
 
     def _header(self, job: dict[str, Any], name: str, agent: str | None = None) -> str:
         who: str = shown_agent(agent or self.cfg.agent_name(name, self.risk(job)))
-        worktree: str = job["worktree"] if Path(job["worktree"]).exists() else "not created yet"
+        tree: str = job["worktree"]
+        step: dict[str, Any] = self.cfg.steps.get(name) or {}
+        if step.get("type") == "agent" and self.cfg.role(name) == "post-debug":
+            tree = self._investigate_path(job)
+        worktree: str = tree if Path(tree).exists() else "not created yet"
         return (f"Job: {job['id']}. Step: {name}. Agent: {who}. "
                 f"Round: {job['round']}. Attempt: {job['attempt']}. "
                 f"Job folder: {self.dir(job)}/. "
@@ -262,6 +305,13 @@ class Factory(Humans, Scripted, Queue):
             parts.append(f"Build round {job['round']}, attempt {job['attempt']}.")
         elif role == "debug":
             parts.append(f"Round {job['round']}, attempt {job['attempt']}.")
+        elif role == "post-debug":
+            if job["pr"]:
+                parts.append(f"PR: #{job['pr']}. Merge commit: {job['merge_sha'] or 'unknown'}.")
+            earlier: list[str] = [f"#{p['number']}" for p in job.get("prs", []) if p.get("number")]
+            if earlier:
+                parts.append(f"Earlier pull requests of this job: {', '.join(earlier)}.")
+            parts.append(f"Checkout of origin/{self.cfg.base}: {self._investigate_path(job)}.")
         elif role == "approve":
             parts.append(f"PR: #{job['pr']}. Final round: {job['round']}.")
         elif role == "spec" and self._verify_enabled():
@@ -483,6 +533,8 @@ class Factory(Humans, Scripted, Queue):
             reason = self._intake_done(job, path, outcome)
         elif role == "build":
             reason = self._build_done(job, path, outcome)
+        elif role == "post-debug":
+            self._post_debug_done(job, name, rel, outcome)
         elif Path(job["worktree"]).exists():
             self._require_clean(job, name)
             head = self.git(job, "rev-parse", "HEAD").stdout.strip()
@@ -495,12 +547,16 @@ class Factory(Humans, Scripted, Queue):
             self._require_deploy_section(path)
         if role == "approve" and outcome == "ESCALATE":
             reason = "The approver escalated this job. See decision.md."
-        if role != "debug":
-            job["handoff"] = []
-        else:
+        if role == "debug":
             found = "The debugger's diagnosis is in" if outcome == "FOUND" else \
                 "The debugger could not find the cause; its notes are in"
             job["handoff"].append(f"{found} {rel}.")
+        elif role == "post-debug":
+            found = "The post-merge diagnosis is in" if outcome == "FOUND" else \
+                "The post-merge debugger could not find the cause; its notes are in"
+            job["handoff"].append(f"{found} {rel}.")
+        else:
+            job["handoff"] = []
         job["last_file"] = rel
         line: str = self._move(job, outcome, reason)
         if role == "build":
@@ -527,6 +583,23 @@ class Factory(Humans, Scripted, Queue):
         elif outcome == "REJECT":
             return body(path)
         return None
+
+    def _post_debug_done(self, job: dict[str, Any], name: str, rel: str, outcome: str) -> None:
+        """The post-merge debugger only writes its file. A fix needs the issue open, for the new PR to link."""
+        path: str = self._investigate_path(job)
+        if Path(path).exists():
+            if run(["git", "status", "--porcelain"], cwd=path).stdout.strip():
+                raise Refused(f"the {name} agent left changes in {path}; it must only write {rel}")
+            head: str = run(["git", "rev-parse", "HEAD"], cwd=path).stdout.strip()
+            if head != job.get("head_at_entry"):
+                raise Refused(f"the {name} agent moved HEAD in {path} from "
+                              f"{(job.get('head_at_entry') or '')[:7]} to {head[:7]}; it must only write {rel}")
+        if outcome == "FOUND":
+            issue: dict[str, Any] = self.gh.issue(job["issue"])
+            if issue.get("state") != "OPEN":
+                raise Refused(f"issue #{job['issue']} is closed, so a follow-up pull request would link a "
+                              "closed issue. Reopen it, and set [project].issue_link = \"refs\" so the next "
+                              "merge leaves it open.")
 
     def _require_clean(self, job, name):
         if self.git(job, "status", "--porcelain").stdout.strip():
