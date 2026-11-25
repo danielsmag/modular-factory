@@ -1,7 +1,7 @@
 """Choose the next factory version from a merged pull request title.
 
-The release workflow owns ``core/VERSION`` and the version headings in
-``CHANGELOG.md``. A feature pull request only adds notes under ``## Unreleased``.
+The release workflow owns ``core/VERSION``. The release notes are the feature
+pull request title.
 """
 
 import re
@@ -34,7 +34,6 @@ _VERSION: re.Pattern[str] = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 _RELEASE_COMMIT: re.Pattern[str] = re.compile(
     r"^Release v(?P<version>\d+\.\d+\.\d+)\.\n+Pull request: #(?P<number>\d+)\b"
 )
-_UNRELEASED: str = "## Unreleased\n"
 
 
 class ReleaseError(Exception):
@@ -154,53 +153,7 @@ def parse_release_commit(message: str) -> tuple[Version, int] | None:
     return Version.parse(match.group("version")), int(match.group("number"))
 
 
-@dataclass(frozen=True)
-class PromotedChangelog:
-    """``CHANGELOG.md`` after ``## Unreleased`` becomes a version section."""
-
-    text: str
-    notes: str
-
-
-class Changelog:
-    """Promote ``## Unreleased`` and read a version section back."""
-
-    def __init__(self, text: str) -> None:
-        self._text: str = text if text.endswith("\n") else text + "\n"
-
-    def promote(self, version: Version, fallback_note: str) -> PromotedChangelog:
-        start: int = self._text.find(_UNRELEASED)
-        if start < 0:
-            raise ReleaseError("CHANGELOG.md has no ## Unreleased heading")
-        body_start: int = start + len(_UNRELEASED)
-        next_heading: int = self._text.find("\n## ", body_start)
-        if next_heading < 0:
-            raw_body: str = self._text[body_start:]
-            tail: str = ""
-        else:
-            raw_body = self._text[body_start:next_heading]
-            tail = self._text[next_heading + 1 :]
-        notes: str = raw_body.strip()
-        if notes == "":
-            first_line: str = fallback_note.strip().splitlines()[0] if fallback_note.strip() else "Release."
-            notes = f"- {first_line}"
-        heading: str = f"## {version}"
-        if f"\n{heading}\n" in self._text or self._text.startswith(f"{heading}\n"):
-            raise ReleaseError(f"CHANGELOG.md already has {heading}")
-        promoted: str = self._text[:start] + "## Unreleased\n\n" + f"{heading}\n\n" + notes + "\n\n" + tail
-        if not promoted.endswith("\n"):
-            promoted += "\n"
-        return PromotedChangelog(text=promoted, notes=notes)
-
-    def notes_for(self, version: Version) -> str:
-        heading: str = f"## {version}\n"
-        start: int = self._text.find(heading)
-        if start < 0:
-            raise ReleaseError(f"CHANGELOG.md has no {heading.strip()} section")
-        body_start: int = start + len(heading)
-        next_heading: int = self._text.find("\n## ", body_start)
-        raw_body: str = self._text[body_start:] if next_heading < 0 else self._text[body_start:next_heading]
-        notes: str = raw_body.strip()
-        if notes == "":
-            raise ReleaseError(f"{heading.strip()} has no notes")
-        return notes
+def release_notes(title: str) -> str:
+    """The GitHub release notes for a feature pull request: its title as one bullet."""
+    first_line: str = title.strip().splitlines()[0] if title.strip() else "Release."
+    return f"- {first_line}"

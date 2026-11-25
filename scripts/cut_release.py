@@ -24,8 +24,6 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from release_version import (  # noqa: E402
-    Changelog,
-    PromotedChangelog,
     ReleaseClassifier,
     ReleaseDecision,
     ReleaseError,
@@ -34,6 +32,7 @@ from release_version import (  # noqa: E402
     publish_versions,
     release_body,
     release_commit_message,
+    release_notes,
     release_run_name,
     release_subject,
 )
@@ -129,9 +128,6 @@ class GitRepository:
     def message(self, sha: str) -> str:
         return self._runner.run(["git", "log", "-1", "--format=%B", sha]).stdout
 
-    def file_at(self, sha: str, path: str) -> str:
-        return self._runner.run(["git", "show", f"{sha}:{path}"]).stdout
-
     def commits_since_workflow(self) -> list[str]:
         """First-parent commits on master from the one that added the release workflow, inclusive."""
         found: str = self._runner.run(
@@ -175,17 +171,15 @@ class GitRepository:
     def checkout_branch(self, branch: str, sha: str) -> None:
         self._runner.run(["git", "checkout", "--force", "-B", branch, sha])
 
-    def commit_release(self, version: Version, promoted: PromotedChangelog, pull_request: int) -> None:
+    def commit_release(self, version: Version, pull_request: int) -> None:
         version_path: Path = self._root / "core" / "VERSION"
-        changelog_path: Path = self._root / "CHANGELOG.md"
         version_path.write_text(f"{version}\n", encoding="utf-8")
-        changelog_path.write_text(promoted.text, encoding="utf-8")
         status: str = self._runner.run(["git", "status", "--porcelain"]).stdout
         for line in status.splitlines():
             path: str = line[3:]
-            if path not in {"core/VERSION", "CHANGELOG.md"}:
+            if path != "core/VERSION":
                 raise ReleaseError(f"release commit would touch {path}")
-        self._runner.run(["git", "add", "--", "core/VERSION", "CHANGELOG.md"])
+        self._runner.run(["git", "add", "--", "core/VERSION"])
         message_path: str = ""
         try:
             with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
@@ -336,6 +330,12 @@ class GitHubRepository:
         if not isinstance(payload, dict):
             raise ReleaseError(f"pull request #{number} was not an object")
         return self._listed_pull_request(payload)
+
+    def pull_request_title(self, number: int) -> str:
+        result: CommandResult = self._runner.run(
+            ["gh", "pr", "view", str(number), "--repo", self._repository, "--json", "title", "--jq", ".title"]
+        )
+        return result.stdout.strip()
 
     def release_exists(self, version: Version) -> bool:
         tag: str = f"v{version}"
@@ -520,9 +520,8 @@ class ReleaseCutter:
         version: Version
         sha: str
         for number, (version, sha) in released.items():
-            notes: str = Changelog(self._git.file_at(sha, "CHANGELOG.md")).notes_for(version)
             print(f"release commit for #{number} is {sha}")
-            self._github.ensure_release(version, sha, notes)
+            self._ensure_release_for(version, sha, number)
 
     def _pending(
         self,
@@ -561,25 +560,28 @@ class ReleaseCutter:
         self._git.sync_master()
         current: Version = Version.parse((self._root / "core" / "VERSION").read_text(encoding="utf-8"))
         version: Version = current.bumped(decision.bump)
-        promoted: PromotedChangelog = Changelog(
-            (self._root / "CHANGELOG.md").read_text(encoding="utf-8")
-        ).promote(version, pull.title)
         print(f"release #{pull.number}: {pull.title!r} -> v{version} ({decision.bump.value})")
-        self._open_and_merge(version, promoted, pull.number)
+        self._open_and_merge(version, release_notes(pull.title), pull.number)
 
-    def _open_and_merge(self, version: Version, promoted: PromotedChangelog, pull_request: int) -> None:
+    def _ensure_release_for(self, version: Version, sha: str, pull_request: int) -> None:
+        if self._github.release_exists(version):
+            print(f"v{version} already published")
+            return
+        notes: str = release_notes(self._github.pull_request_title(pull_request))
+        self._github.ensure_release(version, sha, notes)
+
+    def _open_and_merge(self, version: Version, notes: str, pull_request: int) -> None:
         branch: str = f"release-v{version}"
         remote_sha: str | None = self._git.remote_branch_sha(branch)
         listed: ListedPullRequest | None = self._github.pull_request_for_branch(branch)
         if listed is not None and listed.state == "MERGED":
             if listed.merge_commit_sha == "":
                 raise ReleaseError(f"{branch} merged without a commit sha")
-            notes: str = Changelog(self._git.file_at(listed.merge_commit_sha, "CHANGELOG.md")).notes_for(version)
-            self._github.ensure_release(version, listed.merge_commit_sha, notes)
+            self._ensure_release_for(version, listed.merge_commit_sha, pull_request)
             return
         if remote_sha is None:
             self._git.checkout_branch(branch, self._git.master_sha())
-            self._git.commit_release(version, promoted, pull_request)
+            self._git.commit_release(version, pull_request)
             self._git.push_branch(branch)
         else:
             self._git.fetch_branch(branch)
@@ -593,7 +595,7 @@ class ReleaseCutter:
             number = listed.number
         self._git.sync_master()
         merge_sha: str = self._github.merge_squash(number, version, pull_request)
-        self._github.ensure_release(version, merge_sha, promoted.notes)
+        self._github.ensure_release(version, merge_sha, notes)
 
 
 def _set_output(name: str, value: str) -> None:
