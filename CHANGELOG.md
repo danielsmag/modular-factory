@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.22.0
+
 - feat: `[project] issue_link = "refs" | "closes"` sets how the pull request body links the issue. **The default is now `"refs"`**: new pull requests start with `Refs #<issue>`, so merging no longer closes the issue, and steps after the merge (verify, or a human step on the merge step's `MERGED` edge) still see it open. The factory never closes an issue on its own. Close it with `mfactory close issue <job>` (`--not-planned` for a job that won't ship). `done` refuses a `READY` build whose body doesn't start with `Refs #<issue>` or that has a closing keyword next to the issue number. To keep the old behaviour, set `issue_link = "closes"` and run `mfactory sync`. With `"closes"`, `doctor` warns when a step runs after the merge.
 - feat: `mfactory close job <job>` ends a job as `done` from any step. It leaves the issue and any open pull request alone.
 
