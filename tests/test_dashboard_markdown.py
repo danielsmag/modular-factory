@@ -4,6 +4,7 @@ import html
 import json
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -99,3 +100,47 @@ def test_unclosed_inline_markers_stay_literal(md):
 
 def test_crlf_is_the_same_as_lf():
     assert render("# A\r\n\r\ntext\r\n") == render("# A\n\ntext\n")
+
+
+# ---- blocks -----------------------------------------------------------------
+
+def test_lists_and_nesting():
+    assert render("- a\n- b\n  - c\n\n3. x\n4. y") == \
+        '<ul><li>a</li><li>b<ul><li>c</li></ul></li></ul><ol start="3"><li>x</li><li>y</li></ol>'
+
+
+def test_list_items_use_inline_formatting():
+    assert render("1. `npm test` passes") == "<ol><li><code>npm test</code> passes</li></ol>"
+
+
+def test_fenced_code_is_literal():
+    assert render("```py\nx = '<b>' * 2\n  # **no**\n```") == \
+        "<pre><code>x = '&lt;b&gt;' * 2\n  # **no**</code></pre>"
+
+
+def test_unclosed_fence_runs_to_end():
+    assert render("text\n\n```\nline 1\nline 2") == "<p>text</p><pre><code>line 1\nline 2</code></pre>"
+
+
+def test_blockquote():
+    assert render("> Please add **this**.\n> Thanks") == \
+        "<blockquote><p>Please add <strong>this</strong>. Thanks</p></blockquote>"
+
+
+def test_table():
+    assert render("| a | b |\n|---|:-:|\n| `1` | 2 |\n| 3 |") == (
+        '<div class="md-table"><table><thead><tr><th>a</th><th>b</th></tr></thead>'
+        "<tbody><tr><td><code>1</code></td><td>2</td></tr><tr><td>3</td><td></td></tr></tbody></table></div>")
+
+
+def test_rule_and_a_pipe_line_without_separator_is_a_paragraph():
+    assert render("a | b\n\n---\n\nc") == "<p>a | b</p><hr></hr><p>c</p>"
+
+
+@pytest.mark.parametrize("unit", ["*a ", "_a ", "**a ", "[a ", "[a]("])
+def test_a_long_line_of_unmatched_markers_renders_quickly(unit):
+    # The preview re-renders on every live refresh, so a 30 KB line must not take seconds.
+    line = unit * (30000 // len(unit))
+    started = time.monotonic()
+    assert render(line).startswith("<p>")
+    assert time.monotonic() - started < 1.0
