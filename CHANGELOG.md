@@ -6,6 +6,10 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.25.2
+
+- fix: repair an incomplete .factory/ on upgrade.
+
 ## 0.25.1
 
 - fix: `done --reply` no longer overwrites an intake.md the agent wrote itself when the agent replies with a summary; the reply replaces the file only when it carries a whole header (`DECISION:` then `RISK:`).
