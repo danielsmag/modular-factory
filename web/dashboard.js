@@ -500,24 +500,38 @@ function jobCard(job) {
       elapsedNode(job)),
     hint ? el("p", { class: "hint", text: hint }) : null);
 }
-const FILE_ORDER = ["issue.md", "intake.md", "spec.md", "build.md", "decision.md", "verify.md", "rejection.md"];
+const FILE_ORDER = ["issue.md", "intake.md", "spec.md", "build.md", "progress.md", "decision.md",
+  "verify.md", "verify-checks.md", "verify-checks.log", "rejection.md"];
 const REVIEW_ORDER = ["code", "security", "ux", "ui"];
+const CURRENT = 999;
+/* "intake-2.md" -> { base: "intake.md", n: 2 } when the base is a name `known` accepts. */
+function archived(name, known) {
+  const found = String(name).match(/^(.+)-(\d+)(\.[a-z]+)$/);
+  return found && known(found[1] + found[3]) ? { base: found[1] + found[3], n: Number(found[2]) } : null;
+}
+function roundKind(stem, ext) {
+  const log = ext === "log" ? 1 : 0;
+  if (stem === "checks") return CURRENT * 2 + log;
+  const old = stem.match(/^checks-(\d+)$/);
+  if (old) return Number(old[1]) * 2 + log;
+  if (stem.startsWith("review-")) {
+    const at = REVIEW_ORDER.indexOf(stem.slice(7));
+    return (10 + (at >= 0 ? at : 9)) * 10000;
+  }
+  const debug = stem.match(/^debug(?:-(\d+))?$/);
+  if (debug) return 20 * 10000 + Number(debug[1] || 0);
+  if (stem === "merge-checks") return 30 * 10000 + log;
+  return 50 * 10000;
+}
 function fileRank(path) {
   const exact = FILE_ORDER.indexOf(path);
-  if (exact >= 0) return [0, exact, 0, path];
+  if (exact >= 0) return [0, exact, CURRENT, path];
+  const old = archived(path, (name) => FILE_ORDER.includes(name));
+  if (old) return [0, FILE_ORDER.indexOf(old.base), old.n, path];
   const feedback = String(path).match(/^feedback-(\d+)\.md$/);
   if (feedback) return [1, Number(feedback[1]), 0, path];
   const round = String(path).match(/^round-(\d+)\/(.+)\.(md|log)$/);
-  if (round) {
-    const stem = round[2];
-    let kind = 50;
-    if (stem === "checks") kind = round[3] === "log" ? 1 : 0;
-    else if (stem.startsWith("review-")) {
-      const at = REVIEW_ORDER.indexOf(stem.slice(7));
-      kind = 10 + (at >= 0 ? at : 9);
-    } else if (stem.startsWith("debug")) kind = 20;
-    return [2, Number(round[1]), kind, path];
-  }
+  if (round) return [2, Number(round[1]), roundKind(round[2], round[3]), path];
   return [3, 0, 0, path];
 }
 function sortedFiles(files) {
@@ -533,8 +547,13 @@ function fileGroup(path) {
 }
 function fileLabel(path) {
   const round = String(path).match(/^round-(\d+)\/(.+)$/);
-  if (!round) return path;
+  if (!round) {
+    const old = archived(path, (name) => FILE_ORDER.includes(name));
+    return old ? old.base.replace(/\.md$/, "") + " (try " + old.n + ")" : path;
+  }
   const stem = round[2].replace(/\.md$/, "").replace(/\.log$/, "");
+  const tried = stem.match(/^checks-(\d+)$/);
+  if (tried) return "R" + round[1] + " checks" + (String(path).endsWith(".log") ? ".log" : "") + " (try " + tried[1] + ")";
   if (stem === "checks" && String(path).endsWith(".log")) return "R" + round[1] + " checks.log";
   if (stem === "checks") return "R" + round[1] + " checks";
   if (stem.startsWith("review-")) return "R" + round[1] + " " + stem.slice(7);

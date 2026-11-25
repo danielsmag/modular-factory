@@ -559,6 +559,38 @@ if (JSON.stringify(cards) !== JSON.stringify(["9", "10"])) throw new Error(JSON.
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="needs node to run the page's script")
+def test_job_files_are_sorted_in_the_order_the_job_wrote_them(tmp_path: Path) -> None:
+    page: str = dashboard_page().decode()
+    script: str = page.split("<script>", 1)[1].rsplit("</script>", 1)[0].split("/* boot */", 1)[0]
+    script += """
+const want = [
+  "issue.md", "intake-1.md", "intake-2.md", "intake.md", "spec.md", "build.md", "progress.md",
+  "decision.md", "verify.md", "verify-checks.md", "verify-checks.log", "rejection.md",
+  "feedback-1.md", "feedback-2.md",
+  "round-1/checks-1.md", "round-1/checks-1.log", "round-1/checks.md", "round-1/checks.log",
+  "round-1/review-code.md", "round-1/review-security.md",
+  "round-1/debug-2.md", "round-1/debug-10.md", "round-1/merge-checks.md", "round-1/merge-checks.log",
+  "round-2/checks.md", "notes.md",
+];
+const shuffled = want.slice().reverse().map((path) => ({ path }));
+const got = sortedFiles(shuffled).map((file) => file.path);
+if (JSON.stringify(got) !== JSON.stringify(want)) throw new Error(JSON.stringify(got));
+const labels = {
+  "intake-1.md": "intake (try 1)", "feedback-1.md": "feedback-1.md", "intake.md": "intake.md",
+  "round-2/checks-1.md": "R2 checks (try 1)", "round-2/checks-1.log": "R2 checks.log (try 1)",
+};
+for (const [path, label] of Object.entries(labels)) {
+  if (fileLabel(path) !== label) throw new Error(path + " -> " + fileLabel(path));
+}
+"""
+    (tmp_path / "order.js").write_text(script)
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        ["node", str(tmp_path / "order.js")], capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="needs node to run the page's script")
 def test_queue_cards_carry_issue_metadata_and_an_issue_drawer_is_not_a_job_drawer(tmp_path: Path) -> None:
     page: str = dashboard_page().decode()
     script: str = page.split("<script>", 1)[1].rsplit("</script>", 1)[0].split("/* boot */", 1)[0]

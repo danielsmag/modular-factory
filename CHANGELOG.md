@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- The dashboard lists job files in the order the job wrote them. An archived intake such as `intake-1.md` (from a NEEDS-INFO answer) now comes right before `intake.md`, labeled "intake (try 1)", instead of last. `progress.md`, `verify-checks.*`, archived round checks (`checks-1.*`) and `merge-checks.*` have set places, and `debug-N` sorts by number. Only unknown files go last.
+
 ## 0.21.0
 
 - The dashboard shows `.md` job files as formatted Markdown in the job drawer and the job page's Files panel: headings, lists, code, tables, links, bold and italic, in a proportional font with a capped line length. A Preview/Raw toggle above the file switches to the original text, and every file opens in Preview. Leading verdict lines such as `STATUS: DONE` or `RISK: low` show as a strip above the preview. Raw HTML in a file is shown as text, and only `http(s)` links are clickable. Other files stay plain text.
