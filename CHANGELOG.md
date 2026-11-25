@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.20.3
+
 - ci: pull request branches start with their change type (`feat/`, `fix/`, `docs/`, `chore/` and the other release types, or `factory/`) instead of `pr/`.
 
 ## 0.20.2
