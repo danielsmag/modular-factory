@@ -17,10 +17,10 @@ From the repo root:
 
 ```bash
 git fetch origin
-git checkout -b <topic> origin/master
+git checkout -b pr/<topic> origin/master
 ```
 
-`<topic>` is short kebab-case (`add-pr-skill`). One branch per change.
+Every branch is named `pr/<topic>`, where `<topic>` is short kebab-case (`pr/add-pr-skill`). CI rejects a pull request whose branch does not start with `pr/` (or `factory/`). One branch per change.
 
 ## Commits
 

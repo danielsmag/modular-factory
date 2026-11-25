@@ -13,6 +13,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  branch-name:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a pr/ branch
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          case "$BRANCH" in
+            pr/*|factory/*) ;;
+            *) echo "::error::Branch '$BRANCH' must start with pr/ (or factory/ for factory jobs)."; exit 1 ;;
+          esac
+
   lint:
     runs-on: ubuntu-latest
     steps:
