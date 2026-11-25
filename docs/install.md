@@ -59,7 +59,7 @@ ok    .factory/ installed (version 0.1.0)
 ok    factory.toml written
 ok    .gitignore gained /.factory/jobs/, /.worktrees/
 ok    generated files for claude: 10 written
-ok    GitHub labels: factory, factory:needs-info, factory:needs-human
+ok    GitHub labels created: factory, factory:needs-info, factory:needs-human
 ```
 
 | Path | What it is | Commit it? |
@@ -110,7 +110,7 @@ ok    .factory/ installed (version 0.3.1)
 ok    factory.toml written
 ok    .git/info/exclude gained /factory.toml, /.factory/, /.worktrees/, /.claude/agents/mfactory-*, /.claude/agents/factory-*, /.claude/skills/mfactory/, /.cursor/agents/mfactory-*, /.cursor/agents/factory-*, /.agents/skills/mfactory/, /.codex/agents/mfactory-*, /.codex/agents/factory-*
 ok    generated files for claude: 10 written
-ok    GitHub labels: factory, factory:needs-info, factory:needs-human
+ok    GitHub labels created: factory, factory:needs-info, factory:needs-human
 
 Next:
   1. In your tool, run `/mfactory setup` to fill in factory.toml (or edit it yourself).

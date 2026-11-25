@@ -60,6 +60,18 @@ def test_init_installs_everything_a_project_needs(bare):
     assert "Next:" in res.stdout and "/mfactory setup" in res.stdout
 
 
+def test_install_leaves_existing_labels_alone(bare):
+    bare.set_gh(lambda s: s.update(labels=["factory"]))
+    res = bare.cli("install")
+    assert res.returncode == 0, res.stderr
+    assert "ok    label factory already exists" in res.stdout
+    assert "ok    GitHub labels created: factory:needs-info, factory:needs-human" in res.stdout
+    assert bare.gh["labels"] == ["factory", "factory:needs-human", "factory:needs-info"]
+    creates = [call for call in bare.gh["calls"] if call[:2] == ["label", "create"]]
+    assert [call[2] for call in creates] == ["factory:needs-info", "factory:needs-human"]
+    assert not any("--force" in call for call in creates)
+
+
 def test_init_again_keeps_factory_toml_and_changes_nothing_else(bare):
     bare.cli("init")
     (bare.repo / "factory.toml").write_text('schema = 1\n[run]\nconcurrency = 7\n')
