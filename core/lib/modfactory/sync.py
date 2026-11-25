@@ -552,7 +552,7 @@ def agents(cfg: Config) -> list[Agent]:
             description = f"Factory step {key}. {DESCRIPTIONS[kind]}"
             sections = []
             if kind == "intake":
-                surfaces = "\n".join(f"- `{n}`: {s['when']}" for n, s in cfg["surfaces"].items())
+                surfaces = "\n".join(f"- `{n}`: {s['when']}" for n, s in cfg.live_surfaces.items())
                 sections.append(("This project", cfg["project"]["description"].strip()
                                  or "No description is set. Judge what belongs from AGENTS.md and the code."))
                 sections.append(("Surfaces",

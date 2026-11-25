@@ -6,6 +6,7 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- The `ux` and `ui` reviewers and the `ui` surface ship switched off. A project with a user interface sets `enabled = true` in `[reviewers.ux]`, `[reviewers.ui]` and `[surfaces.ui]`, then runs `mfactory sync`; until then, sync removes their agent files. Any reviewer or surface takes `enabled = false`. A switched-off reviewer gets no agent file and no row in `mfactory models`, and a switched-off surface is not offered to intake. A switched-on surface that lists a switched-off reviewer fails validation. The schema is unchanged.
 - `[tools.claude] resume_builder = true` resumes a job's builder across rounds in Claude Code. `next` prints a `name:` line for the build step, and the orchestrator wakes the builder it started under that name with SendMessage. The builder keeps its context, so a CHANGES round costs less. The dashboard splits a resumed builder's transcript into one run per round.
 
 ## 0.19.0

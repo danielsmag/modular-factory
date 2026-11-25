@@ -171,6 +171,18 @@ rules = ["AGENTS.md", "user:CLAUDE.md"]
 # when = "it changes a pipeline, a model, or a warehouse query"
 # reviewers = ["data"]
 #
+# ux and ui ship switched off. A project with a user interface switches
+# them on, with their surface:
+#
+# [reviewers.ux]
+# enabled = true
+#
+# [reviewers.ui]
+# enabled = true
+#
+# [surfaces.ui]
+# enabled = true
+#
 # [steps.docs]
 # type = "agent"
 # instructions_file = "docs/docs-step.md"

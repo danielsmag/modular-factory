@@ -7,6 +7,8 @@ import pytest
 from conftest import AUTO_MERGE, World
 from modfactory.util import MARKER, Refused
 
+UI_ON = "[reviewers.ux]\nenabled = true\n[reviewers.ui]\nenabled = true\n[surfaces.ui]\nenabled = true\n"
+
 
 def test_happy_path_waits_for_a_person_to_merge(world):
     number = world.issue(title="Add dark mode")
@@ -201,6 +203,7 @@ def test_agents_that_only_write_a_file_may_not_move_the_branch(world):
 
 
 def test_intake_reply_is_saved_as_the_file(world):
+    world.configure(UI_ON)
     job = world.create(world.issue())
     lines = world.next(job)
     assert lines[0] == "start-agent mfactory-intake"
@@ -229,7 +232,7 @@ def test_only_intake_may_hand_in_a_reply(world):
 def test_intake_names_only_known_surfaces(world):
     job = world.create(world.issue())
     world.next(job)
-    world.intake(job, surfaces="ui, billing")
+    world.intake(job, surfaces="security, billing")
     with pytest.raises(Refused, match="surfaces factory.toml doesn't have: billing"):
         world.done(job)
 
@@ -253,6 +256,7 @@ def test_review_waits_for_every_reviewer(world):
 
 
 def test_surfaces_add_reviewers_and_they_start_in_parallel(world):
+    world.configure(UI_ON)
     job = world.create(world.issue())
     world.next(job)
     world.intake(job, risk="high", surfaces="ui, security")

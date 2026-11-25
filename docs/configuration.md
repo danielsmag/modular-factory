@@ -525,7 +525,20 @@ deploy does not block the queue.
 
 The `review` step runs every reviewer the job needs, in parallel. Four ship:
 `code` runs on every job; `security` runs on jobs intake marks with the
-`security` surface; `ux` and `ui` on jobs with the `ui` surface.
+`security` surface. `ux` and `ui` run on jobs with the `ui` surface, but they
+and the surface ship switched off. A project with a user interface switches
+them on:
+
+```toml
+[reviewers.ux]
+enabled = true
+
+[reviewers.ui]
+enabled = true
+
+[surfaces.ui]
+enabled = true
+```
 
 A new reviewer is a table with a `focus`, a `prompt` file, or both. `focus`
 alone needs no file:
@@ -557,7 +570,8 @@ A surface is something a change can touch. Intake reads each `when` and names
 the surfaces a job touches; the job then gets those surfaces' reviewers. A
 reviewer that no surface lists runs on every job.
 
-To add a reviewer to a surface that exists, restate the list:
+To add a reviewer to a surface that exists, restate the list. The `ui`
+surface must be switched on, as above:
 
 ```toml
 [reviewers.a11y]
@@ -568,14 +582,22 @@ port = true
 reviewers = ["ux", "ui", "a11y"]
 ```
 
+Any reviewer or surface can be switched off with `enabled = false`. A
+switched-off reviewer gets no agent file and no row in `mfactory models`. A
+switched-off surface is not offered to intake. A switched-on surface that lists
+a switched-off reviewer fails validation, so switch the surface off too, or
+restate its list.
+
 | Key | Meaning |
 | --- | --- |
+| `[reviewers.<name>] enabled` | `false` switches the reviewer off. `ux` and `ui` default to `false`; the others to `true`. |
 | `[reviewers.<name>] focus` | What this reviewer looks for. A reviewer you add needs this or `prompt`. |
 | `[reviewers.<name>] prompt` | A file in the repo, read after the reviewer role. Path from the repo root. The file must exist. |
 | `[reviewers.<name>] context` | Project facts added to its prompt. |
 | `[reviewers.<name>] skills` | Skills it reads: a project skill, `user:name`, `plugin:skill`, or `all`. |
 | `[reviewers.<name>] rules` | Instruction files it reads: `AGENTS.md`, `CLAUDE.md`, a rule path, `user:CLAUDE.md`, or `all`. |
 | `[reviewers.<name>] port` | `true` gives it a port for a dev server, for reviewers that look at the running app. |
+| `[surfaces.<name>] enabled` | `false` hides the surface from intake. Its reviewers do not run on every job. `ui` defaults to `false`. |
 | `[surfaces.<name>] when` | One line telling intake when a change touches this surface. |
 | `[surfaces.<name>] reviewers` | The reviewers that run on jobs with this surface. |
 

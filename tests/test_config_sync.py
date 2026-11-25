@@ -276,8 +276,8 @@ def test_claude_agents_carry_model_effort_and_tools(world):
     assert sorted(files) == [
         ".claude/agents/mfactory-approve.md", ".claude/agents/mfactory-build.md", ".claude/agents/mfactory-intake.md",
         ".claude/agents/mfactory-reviewer-code-low.md", ".claude/agents/mfactory-reviewer-code.md",
-        ".claude/agents/mfactory-reviewer-security.md", ".claude/agents/mfactory-reviewer-ui.md",
-        ".claude/agents/mfactory-reviewer-ux.md", ".claude/agents/mfactory-spec.md", ".claude/skills/mfactory/SKILL.md"]
+        ".claude/agents/mfactory-reviewer-security.md", ".claude/agents/mfactory-spec.md",
+        ".claude/skills/mfactory/SKILL.md"]
     build = frontmatter(files[".claude/agents/mfactory-build.md"])
     assert (build["name"], build["model"], build["effort"]) == ("mfactory-build", "opus", "high")
     assert build["tools"] == "Read, Grep, Glob, Bash, Edit, Write, Skill"
@@ -418,14 +418,45 @@ reviewers = ["perf"]
 
     cfg = load(world, text)
     assert cfg.reviewers_for([]) == ["code"]
-    assert cfg.reviewers_for(["api", "ui"]) == ["code", "perf", "ux", "ui"]
+    assert cfg.reviewers_for(["api", "ui"]) == ["code", "perf"]
+
+
+UI_ON = """
+[reviewers.ux]
+enabled = true
+
+[reviewers.ui]
+enabled = true
+
+[surfaces.ui]
+enabled = true
+"""
+
+
+def test_ux_and_ui_are_off_until_a_project_switches_them_on(world):
+    files, _ = plan(world)
+    assert ".claude/agents/mfactory-reviewer-ux.md" not in files
+    assert "- `ui`:" not in files[".claude/agents/mfactory-intake.md"]
+    cfg = load(world)
+    assert cfg.reviewers_for(["ui", "security"]) == ["code", "security"]
+    assert "reviewer-ui" not in sync.describe_models(cfg)
+
+    assert problems(world, "[surfaces.ui]\nenabled = true\n[reviewers.ui]\nenabled = true\n") == [
+        '[surfaces.ui].reviewers has "ux", but [reviewers.ux] is off. '
+        'Set [surfaces.ui] enabled = false, or drop "ux" from its reviewers',
+    ]
+
+    files, _ = plan(world, UI_ON)
+    assert ".claude/agents/mfactory-reviewer-ux.md" in files
+    assert "- `ui`:" in files[".claude/agents/mfactory-intake.md"]
+    assert load(world, UI_ON).reviewers_for(["ui"]) == ["code", "ux", "ui"]
 
 
 def test_sync_writes_reports_and_removes_what_is_stale(world):
     world.configure('[steps.debug]\nenabled = true\n')
     cfg = config.load(world.repo)
     actions, _ = sync.sync(cfg)
-    assert ("create", ".claude/agents/mfactory-debug.md") in actions and len(actions) == 11
+    assert ("create", ".claude/agents/mfactory-debug.md") in actions and len(actions) == 9
     assert sync.sync(cfg) == ([], ['rule "user:CLAUDE.md" is not installed on this machine'])
 
     (world.repo / ".claude/agents/mfactory-build.md").write_text("hand edit\n")
@@ -491,7 +522,14 @@ all = ["code-style"]
 skills = ["testing"]
 
 [reviewers.ui]
+enabled = true
 skills = ["design-system"]
+
+[reviewers.ux]
+enabled = true
+
+[surfaces.ui]
+enabled = true
 """
 
 
