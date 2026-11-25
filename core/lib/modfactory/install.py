@@ -1,5 +1,6 @@
 """`mfactory install`, `mfactory upgrade` and `mfactory doctor`."""
 
+import ast
 import json
 import shutil
 import subprocess
@@ -45,6 +46,25 @@ def layout(root):
     raise Refused(f"{root} is not a copy of the factory: it has no core/bin/mfactory")
 
 
+def release_items(core):
+    """The ITEMS list of the factory tree at `core`, read without importing it. Falls back to this module's ITEMS."""
+    path = Path(core) / "lib" / "modfactory" / "install.py"
+    try:
+        tree = ast.parse(path.read_text())
+    except (OSError, SyntaxError, ValueError):
+        return list(ITEMS)
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "ITEMS" for t in node.targets):
+            try:
+                value = ast.literal_eval(node.value)
+            except (ValueError, TypeError, SyntaxError):
+                break
+            if isinstance(value, list) and all(isinstance(v, str) for v in value):
+                return value
+            break
+    return list(ITEMS)
+
+
 def copy_core(source, repo):
     """Put the core into `<repo>/.factory/`, leaving `.factory/jobs/` alone.
 
@@ -56,7 +76,7 @@ def copy_core(source, repo):
         return False
     dest.mkdir(exist_ok=True)
     skip = shutil.ignore_patterns("__pycache__", "*.pyc")
-    sources = {item: core / item for item in ITEMS}
+    sources = {item: core / item for item in release_items(core)}
     sources |= {
         "adapters": adapters,
         "LICENSE": licence / "LICENSE",
