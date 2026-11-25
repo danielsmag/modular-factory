@@ -269,8 +269,9 @@ def alive(pid: int) -> bool:
     return True
 
 
-def running() -> RunningDashboard | None:
-    path: Path = state_file()
+def running(path: Path | None = None) -> RunningDashboard | None:
+    """The dashboard the state file names, when its pid is live. A stale file is deleted."""
+    path = path or state_file()
     if not path.is_file():
         return None
     try:
