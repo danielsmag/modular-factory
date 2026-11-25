@@ -17,13 +17,13 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: Require a pr/ branch
+      - name: Require a typed branch name
         env:
           BRANCH: ${{ github.head_ref }}
         run: |
           case "$BRANCH" in
-            pr/*|factory/*) ;;
-            *) echo "::error::Branch '$BRANCH' must start with pr/ (or factory/ for factory jobs)."; exit 1 ;;
+            feat/*|fix/*|hotfix/*|perf/*|revert/*|docs/*|chore/*|ci/*|test/*|style/*|refactor/*|build/*|factory/*) ;;
+            *) echo "::error::Branch '$BRANCH' must start with a change type such as feat/, fix/, docs/ or chore/ (or factory/ for factory jobs)."; exit 1 ;;
           esac
 
   lint:
