@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.20.1
+
 - `mfactory install` creates only the GitHub labels that are missing and no longer passes `--force` to `gh label create`, so a label a team or another tool already made keeps its colour and description. Each existing label prints `ok    label <name> already exists`.
 - `[run] pick = "mine"` limits `mfactory queue` and `workspace queue` to issues the operator opened or is assigned to, so one person can run the factory in a shared repo. `[run] authors` and `[run] assignees` name more logins (`"@me"` is the operator), and an issue is offered if its author or any assignee matches. Issues filtered out are not listed. Jobs already started keep running, and `/mfactory run <n>` still runs any labeled issue. The default, `"all"`, keeps today's behavior. The schema is unchanged.
 
