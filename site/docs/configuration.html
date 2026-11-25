@@ -308,7 +308,10 @@ skills = ["auth-rules"]</code></pre>
   <p>Each agent's prompt names the <code>SKILL.md</code> files to read. This works the same in every tool. In Claude Code, a skill in <code>.claude/skills</code> is also loaded up front. <code>mfactory sync</code> refuses a name that matches no skill and says where it looked.</p>
 
   <h2 id="labels-paths-and-ports">Labels, paths and ports</h2>
-  <pre data-lang="toml"><code>[labels]
+  <pre data-lang="toml"><code>[tracker]
+kind = "github"
+
+[labels]
 queue = "factory"
 needs_info = "factory:needs-info"
 needs_human = "factory:needs-human"
@@ -324,6 +327,7 @@ step = 10</code></pre>
     <table>
       <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
       <tbody>
+        <tr><td class="mono">[tracker] kind</td><td>Where jobs come from and where people reply to the factory. <code>github</code> (GitHub issues) is the only tracker. Pull requests are always on GitHub.</td></tr>
         <tr><td class="mono">[labels] queue</td><td>Issues with this label are built.</td></tr>
         <tr><td class="mono">[labels] needs_info</td><td>Put on an issue while its author is being asked.</td></tr>
         <tr><td class="mono">[labels] needs_human</td><td>Put on an issue while a maintainer, the operator, or a named login is being asked.</td></tr>

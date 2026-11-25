@@ -60,8 +60,11 @@ core/lib/modfactory/      the factory's code
     command.py            `mfactory workspace` subcommands
     service.py            the dashboard server, and start/stop
   service/                services the factory calls
-    gh.py                 GitHub, through the `gh` CLI
+    gh.py                 pull requests on GitHub, through the `gh` CLI
     human.py              asking a person and reading the reply
+    tracker/              where jobs come from and where people reply
+      base.py             what the factory asks of any tracker
+      github.py           GitHub issues: the queue is a label
   store.py, cost.py, util.py
 core/roles/*.md           one prompt per agent step and reviewer
 core/skill/SKILL.md       the orchestrator

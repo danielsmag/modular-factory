@@ -13,6 +13,7 @@ see the configuration
   config show | graph | models | skills
 run jobs (the orchestrator skill uses these)
   queue | create <issue> | next <job> | done <job> | answer <job> <outcome>
+  file <title>              open an issue in the queue; its text is read from standard input
   close issue <job> | close job <job> [--merged <pr>] | move <job> <step> [note]
   delete <job> [--worktree] [--branch] [--remote] [--pr] [--force]
 other
@@ -75,6 +76,9 @@ def parser() -> argparse.ArgumentParser:
                            help="one JSON array, with each issue's title, URL, dates, author and labels")
     create: argparse.ArgumentParser = sub.add_parser("create", help="start a job for a labeled issue")
     create.add_argument("issue")
+    file: argparse.ArgumentParser = sub.add_parser(
+        "file", help="open an issue in the queue; its text is read from standard input")
+    file.add_argument("title", nargs="+")
     nxt: argparse.ArgumentParser = sub.add_parser("next", help="say what the orchestrator must do for a job")
     nxt.add_argument("job")
     done: argparse.ArgumentParser = sub.add_parser("done", help="read the outcome of the step an agent finished")

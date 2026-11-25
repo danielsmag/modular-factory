@@ -26,7 +26,7 @@ from urllib.parse import quote, unquote, urlsplit
 from .. import activity
 from ..config import Config
 from ..config import load as load_config
-from ..service import GitHub
+from ..service import tracker as trackers
 from ..util import FactoryError, Refused, dashboard_page, user_dir
 from .paths import FILE, SERVED
 from .project import Project
@@ -35,7 +35,8 @@ from .registry import Workspace
 
 QUEUE_TTL_SECONDS: float = 15.0
 STATE_NAME: str = "dashboard.json"
-ISSUE_NUMBER: re.Pattern[str] = re.compile(r"[1-9][0-9]{0,9}")
+# An issue number, or a key such as PROJ-123 on a tracker that names its issues.
+ISSUE_KEY: re.Pattern[str] = re.compile(r"[1-9][0-9]{0,9}|[A-Za-z][A-Za-z0-9_]{1,31}-[1-9][0-9]{0,9}")
 
 
 def _web_url(value: object) -> str | None:
@@ -102,10 +103,15 @@ def issue_payload(raw: object) -> dict[str, object]:
     }
 
 
-def issue_response(project: Project, number: int) -> tuple[HTTPStatus, dict[str, object]]:
-    """One issue of a project, read from GitHub on every call."""
+def issue_response(project: Project, ref: str) -> tuple[HTTPStatus, dict[str, object]]:
+    """One issue of a project, read from its tracker on every call."""
+    tracker: trackers.Tracker = trackers.for_repo(project.path)
     try:
-        raw: object = GitHub(project.path).issue_details(number)
+        number: trackers.Key = tracker.key(ref)
+    except FactoryError:
+        return HTTPStatus.NOT_FOUND, {"error": f"{ref} is not an issue of this project"}
+    try:
+        raw: object = tracker.issue_details(number)
     except FactoryError as error:
         lines: list[str] = str(error).strip().splitlines()
         reason: str = lines[-1] if lines else "gh failed"
@@ -188,12 +194,12 @@ def _handler(load: Callable[[], Workspace]) -> type[BaseHTTPRequestHandler]:
                     issue_ident, issue_separator, issue_ref = rest.partition("/issues/")
                     if issue_separator and "/" not in issue_ident:
                         issue_project: Project | None = workspace.project(issue_ident)
-                        if issue_project is None or not ISSUE_NUMBER.fullmatch(issue_ref):
+                        if issue_project is None or not ISSUE_KEY.fullmatch(issue_ref):
                             self.send("not found", "text/plain", HTTPStatus.NOT_FOUND)
                             return
                         status: HTTPStatus
                         issue_body: dict[str, object]
-                        status, issue_body = issue_response(issue_project, int(issue_ref))
+                        status, issue_body = issue_response(issue_project, issue_ref)
                         self.send(json.dumps(issue_body), "application/json", status)
                         return
                     ident, separator, job_path = rest.partition("/jobs/")

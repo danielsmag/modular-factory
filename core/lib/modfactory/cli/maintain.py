@@ -19,6 +19,7 @@ from .. import config, plan_usage
 from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..install import fetch_release, is_personal, layout, project_cli, release_items, upgrade
+from ..service import tracker as trackers
 from ..util import (
     CORE,
     SOURCE_REPO,
@@ -271,13 +272,7 @@ def uninstall(repo: Path, remove_config: bool = False, labels: bool = False,
         if cfg is None:
             say("warn  labels were not deleted: factory.toml could not be read")
         else:
-            for name in cfg["labels"].values():
-                res = run(["gh", "label", "delete", name, "--yes"], cwd=repo, check=False)
-                if res.returncode == 0:
-                    say(f"ok    label {name} deleted")
-                else:
-                    why: list[str] = (res.stderr or res.stdout).strip().splitlines()
-                    say(f"warn  label `{name}` was not deleted: {why[0] if why else 'gh failed'}")
+            trackers.make(cfg).uninstall(say)
     _forget(repo, say)
 
 

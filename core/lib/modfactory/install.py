@@ -14,15 +14,11 @@ from pathlib import Path
 
 from . import checks, config, graph
 from . import sync as syncer
+from .service import tracker as trackers
 from .store import Store
 from .util import CORE, SOURCE_REPO, ConfigError, FactoryError, Refused, run, tail, version
 
 ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "templates", "VERSION"]
-LABELS = {
-    "queue": ("ff4a26", "The software factory builds this issue"),
-    "needs_info": ("d4a72c", "The factory is waiting for the issue's author"),
-    "needs_human": ("b60205", "The factory is waiting for a maintainer"),
-}
 TEMPLATE: Path = CORE / "templates" / "factory.toml"
 _BASE_TOKEN: str = "__BASE_BRANCH__"
 _TOOLS_TOKEN: str = "__TOOLS__"
@@ -194,39 +190,9 @@ def exclude_entries(repo: Path, patterns: list[str]) -> list[str]:
     return missing
 
 
-def _gh_failure(res) -> str:
-    why = (res.stderr or res.stdout).strip().splitlines()
-    return why[0] if why else "gh failed"
-
-
 def create_labels(cfg, say):
-    """Create the factory's labels that are missing. Existing labels are left as they are."""
-    later = "      Create the labels later with `.factory/bin/mfactory install`."
-    try:
-        res = run(["gh", "label", "list", "--limit", "300", "--json", "name"], cwd=cfg.repo, check=False)
-    except FileNotFoundError:
-        say("warn  the GitHub CLI `gh` isn't installed, so the labels were not created")
-        return
-    if res.returncode != 0:
-        say(f"warn  the labels could not be listed: {_gh_failure(res)}")
-        say(later)
-        return
-    have = {label["name"] for label in json.loads(res.stdout or "[]")}
-    created: list[str] = []
-    for key, (colour, description) in LABELS.items():
-        name = cfg["labels"][key]
-        if name in have:
-            say(f"ok    label {name} already exists")
-            continue
-        res = run(["gh", "label", "create", name, "--color", colour, "--description", description],
-                  cwd=cfg.repo, check=False)
-        if res.returncode != 0:
-            say(f"warn  label `{name}` was not created: {_gh_failure(res)}")
-            say(later)
-            return
-        created.append(name)
-    if created:
-        say("ok    GitHub labels created: " + ", ".join(created))
+    """Create what the project's tracker needs: on GitHub, the factory's labels that are missing."""
+    trackers.make(cfg).install(say)
 
 
 def init(repo: Path, tools: list[str] | None = None, say: Callable[[str], None] = print,
@@ -484,16 +450,8 @@ def doctor(repo, run_checks=True, say=print):
     (ok if ignored else fail)(".factory/jobs/ is ignored by git" if ignored
                               else ".factory/jobs/ isn't ignored by git: run `mfactory install`")
 
-    # labels
-    if _version("gh") is not None:
-        res = run(["gh", "label", "list", "--limit", "300", "--json", "name"], cwd=repo, check=False)
-        if res.returncode == 0:
-            have = {label["name"] for label in json.loads(res.stdout)}
-            gone = [n for n in cfg["labels"].values() if n not in have]
-            (fail if gone else ok)(f"GitHub labels missing: {', '.join(gone)}. Run `mfactory install`." if gone
-                                   else "GitHub labels exist")
-        else:
-            warn("could not list the repository's labels")
+    # the tracker: on GitHub, its labels
+    trackers.make(cfg).doctor(ok, warn, fail)
 
     # checks on the base branch
     commands = cfg["checks"]["commands"]

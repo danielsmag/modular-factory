@@ -43,6 +43,9 @@ concurrency = 3           # new and resume rows across every project; workspace.
 commands = []             # worktree cwd; FACTORY_CHECKOUT is the main checkout; first failure stops
 timeout_minutes = 30
 
+[tracker]
+kind = "github"           # where jobs come from and where people reply to the factory
+
 [labels]
 queue = "factory"
 needs_info = "factory:needs-info"

@@ -3,7 +3,7 @@
 import re
 
 from .. import graph
-from ..util import MARKER, Refused, body, now
+from ..util import Refused, body, now
 
 COMMAND = re.compile(r"\s*/(?:m)?factory[ \t]+([a-z][a-z-]*)\b[ \t]*(.*)", re.S)
 NEEDS_TEXT = {"CHANGES", "FEEDBACK", "REJECT", "ANSWER"}
@@ -45,7 +45,7 @@ class Humans:
     def _who(self, job):
         waiting = job["waiting"]
         who: str | list[str] = waiting["who"]
-        operator: str = self.gh.operator() if who == "operator" else ""
+        operator: str = self.tracker.operator() if who == "operator" else ""
         return audience(who, job["author"], operator)
 
     def _commands(self, job, step, slash=True):
@@ -60,11 +60,9 @@ class Humans:
     def _ask(self, job, name, step):
         """Post the question where the person will see it, label the issue, and park the job."""
         who: str | list[str] = step.get("who", "maintainer")
-        labels = self.cfg["labels"]
-        label = labels["needs_info"] if who == "author" else labels["needs_human"]
         kind, number = ("pr", job["pr"]) if job["pr"] and not job["merge_sha"] else ("issue", job["issue"])
         tool_only: bool = step.get("replies") == "tool"
-        operator: str = self.gh.operator() if who == "operator" else ""
+        operator: str = self.tracker.operator() if who == "operator" else ""
 
         title: str = ask_title(who, step.get("ask") or "")
         parts = [f"### Factory: {title}", f"Step `{name}` of job `{job['id']}`."]
@@ -92,8 +90,11 @@ class Humans:
 
         if step.get("pr_ready") and kind == "pr" and (self.gh.pr(job["pr"], "isDraft") or {}).get("isDraft"):
             self.gh.call("pr", "ready", job["pr"])
-        self.gh.comment(kind, number, text)
-        self.gh.label(job["issue"], add=label)
+        if kind == "pr":
+            self.gh.comment(number, text)
+        else:
+            self.tracker.comment(number, text)
+        label: str | None = self.tracker.waiting_on(job["issue"], who)
         waiting: dict[str, object] = {"step": name, "who": who, "label": label, "since": now(), "asked_on": kind}
         if who == "operator":
             waiting["operator"] = operator
@@ -110,12 +111,12 @@ class Humans:
     def _may_reply(self, job, step, login):
         who: str | list[str] = step.get("who", "maintainer")
         if who == "author":
-            return login == job["author"] or login == self.gh.operator()
+            return login == job["author"] or login == self.tracker.operator()
         if who == "operator":
-            return login == self.gh.operator()
+            return login == self.tracker.operator()
         if isinstance(who, list):
             return login in who
-        return self.gh.can_write(login)
+        return self.tracker.can_write(login)
 
     def _find_reply(self, job, step):
         """The first comment after the factory's last one that answers this step, or None.
@@ -129,8 +130,8 @@ class Humans:
         if job["pr"] and not job["merge_sha"]:
             threads.append(("pr", job["pr"]))
         for kind, number in threads:
-            comments = self.gh.comments(kind, number)
-            asked = [i for i, c in enumerate(comments) if c["body"].startswith(MARKER)]
+            comments = self.gh.comments(number) if kind == "pr" else self.tracker.comments(number)
+            asked = [i for i, c in enumerate(comments) if c["factory"]]
             if not asked:
                 continue
             for c in comments[asked[-1] + 1:]:
@@ -140,7 +141,7 @@ class Humans:
                 m = COMMAND.fullmatch(c["body"])
                 if m:
                     outcome = m.group(1).upper()
-                    text = re.sub(rf"^#?{job['issue']}\b[ \t]*", "", m.group(2)).strip()
+                    text = re.sub(rf"^#?{re.escape(str(job['issue']))}\b[ \t]*", "", m.group(2)).strip()
                     if outcome in step["on"] and (text or outcome not in NEEDS_TEXT):
                         return outcome, text, login, c["id"]
                 elif "ANSWER" in step["on"]:
@@ -200,9 +201,9 @@ class Humans:
         text = (text or "").strip()
         if outcome in NEEDS_TEXT and not text:
             raise Refused(f"{outcome} needs words: pass them on stdin")
-        login = self.gh.operator()
+        login = self.tracker.operator()
         if outcome == "ANSWER":
-            self.gh.comment("issue", job["issue"], text, marker=False)  # so issue.md carries it
+            self.tracker.comment(job["issue"], text, factory=False)  # so issue.md carries it
         self.say(self._apply_reply(job, outcome, text, login))
 
     # ---- A pull request merged by hand -------------------------------------

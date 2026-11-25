@@ -190,7 +190,12 @@ def run(args: argparse.Namespace) -> int:
                 print(f"nothing to do: no open issue is labeled `{cfg['labels']['queue']}` and no job is unfinished")
         elif command == "create":
             job = factory.create(args.issue)
-            print(f"created {job['id']} for #{job['issue']} at {job['step']}")
+            print(f"created {job['id']} for {factory.tracker.ref(job['issue'])} at {job['step']}")
+        elif command == "file":
+            text: str = _stdin_text()
+            if not text.strip():
+                raise Refused("the issue's text goes on stdin")
+            print(factory.tracker.create_issue(" ".join(args.title), text, queue=True))
         elif command == "next":
             factory.next(args.job)
         elif command == "done":

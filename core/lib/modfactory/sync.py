@@ -14,6 +14,7 @@ from typing import Any, LiteralString
 
 from . import graph, plan_usage
 from .config import BUILTIN_REVIEWERS, Config
+from .service import tracker as trackers
 from .util import CORE, GENERATED, ConfigError, is_generated
 
 SKILL_DIRS: list[str] = [".agents/skills", ".claude/skills", ".cursor/skills", ".codex/skills"]
@@ -541,10 +542,7 @@ def _pull_request_title(cfg: Config, kind: str) -> str | None:
 
 def _pull_request_body(cfg: Config) -> str:
     """How build links the issue on the first line of the pull request body, from `[project].issue_link`."""
-    if cfg["project"].get("issue_link") == "closes":
-        return "The first line is `Closes #<issue>`. GitHub closes the issue when the pull request merges."
-    return ("The first line is `Refs #<issue>`. Do not put a closing keyword (close, fix, resolve) "
-            "next to the issue number: the issue stays open after the merge.")
+    return trackers.make(cfg).pr_link_rule()
 
 
 def _prompt_file(settings: dict[str, Any], key: str) -> str | None:

@@ -34,12 +34,13 @@ class Store:
         return [self.read(job_id) for job_id in self.ids()]
 
     def find(self, ref):
-        """A job id (`004-dark-mode`), its number as in the id (`004`), or its issue (`12` or `#12`)."""
+        """A job id (`004-dark-mode`), its number as in the id (`004`), or its issue's key (`12` or `#12`)."""
         ref = str(ref)
         jobs = self.all()
         matches = [j for j in jobs if j["id"] == ref or j["id"].startswith(ref + "-")]
-        if not matches and ref.lstrip("#").isdigit():
-            matches = [j for j in jobs if j["issue"] == int(ref.lstrip("#"))]
+        if not matches:
+            key = ref.lstrip("#").lower()
+            matches = [j for j in jobs if str(j["issue"]).lower() == key]
         if not matches:
             raise Refused(f"no job matches {ref!r}. Jobs: {', '.join(self.ids()) or 'none'}")
         return matches[0]["id"]

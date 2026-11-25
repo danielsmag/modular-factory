@@ -239,10 +239,10 @@ feedback or asking for something new, ask.
 - **A new feature**: file it as an issue and stop. Don't create a job or run
   it: report the issue number and that `/mfactory run <n>` (or the next
   `/mfactory run`) builds it. Run it now only when the user asks for that in
-  the same request. Use the label from `[labels].queue`:
+  the same request. `file` puts the issue in the queue and prints its address:
 
   ```bash
-  gh issue create --label factory --title "<short imperative title>" --body-file - <<'FACTORY_REPLY'
+  .factory/bin/mfactory file "<short imperative title>" <<'FACTORY_REPLY'
   <the feature, in the user's words>
   FACTORY_REPLY
   ```

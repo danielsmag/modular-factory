@@ -106,6 +106,13 @@ def _number(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
+def _key(value: object) -> int | str | None:
+    """An issue's key: a number on GitHub, text on a tracker that names issues."""
+    if isinstance(value, str):
+        return value or None
+    return _number(value)
+
+
 def normalize_job(raw: object) -> dict[str, object] | None:
     """One job with the fields the page reads, whatever factory version wrote it. None without an id."""
     if not isinstance(raw, dict):
@@ -116,7 +123,7 @@ def normalize_job(raw: object) -> dict[str, object] | None:
     job: dict[str, object] = dict(raw)
     job["title"] = _text(raw.get("title"), ident)
     job["step"] = _text(raw.get("step"), "")
-    job["issue"] = _number(raw.get("issue"))
+    job["issue"] = _key(raw.get("issue"))
     job["round"] = _number(raw.get("round")) or 0
     job["updated_at"] = _text(raw.get("updated_at"), "")
     history: object = raw.get("history")

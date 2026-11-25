@@ -1,4 +1,4 @@
-"""What to run: new jobs and the queue of labeled issues."""
+"""What to run: new jobs and the tracker's queue of issues."""
 
 from collections.abc import Callable
 from typing import Any, Protocol
@@ -7,6 +7,7 @@ from . import graph
 from .config import Config
 from .service import GitHub
 from .service.human import audience
+from .service.tracker import Key, Tracker
 from .store import Store
 from .util import Refused, now
 
@@ -16,6 +17,7 @@ class _QueueHost(Protocol):
 
     cfg: Config
     gh: GitHub
+    tracker: Tracker
     store: Store
 
     def _write_issue_md(self, job: dict[str, Any], issue: dict[str, Any] | None = None) -> dict[str, Any]: ...
@@ -32,33 +34,35 @@ class _QueueHost(Protocol):
 
 
 class Queue:
-    """Job queue. `Factory` owns `cfg`, `gh`, and `store` and mixes this in."""
+    """Job queue. `Factory` owns `cfg`, `gh`, `tracker`, and `store` and mixes this in."""
 
     cfg: Config
     gh: GitHub
+    tracker: Tracker
     store: Store
 
     def create(self: _QueueHost, number: object) -> dict[str, Any]:
-        """A new job for an open issue that carries the queue label."""
-        number = int(str(number).lstrip("#"))
-        labels = self.cfg["labels"]
+        """A new job for an open issue that is in the tracker's queue."""
+        key: Key = self.tracker.key(number)
+        ref: str = self.tracker.ref(key)
         for j in self.store.all():
-            if j["issue"] == number:
-                raise Refused(f"issue #{number} already has job {j['id']} (at {j['step']}). "
+            if j["issue"] == key:
+                raise Refused(f"issue {ref} already has job {j['id']} (at {j['step']}). "
                               f"To start over, run mfactory delete {j['id']}.")
         running = [j["id"] for j in self.store.running()]
         limit = self.cfg["run"]["concurrency"]
         if len(running) >= limit:
             raise Refused(f"concurrency {limit} reached; running: {', '.join(running)}")
-        issue = self.gh.issue(number)
+        issue = self.tracker.issue(key)
         if issue["state"] != "OPEN":
-            raise Refused(f"issue #{number} is {issue['state'].lower()}")
-        if labels["queue"] not in {label["name"] for label in issue["labels"]}:
-            raise Refused(f"issue #{number} isn't labeled `{labels['queue']}`. Only labeled issues run.")
+            raise Refused(f"issue {ref} is {issue['state'].lower()}")
+        gate: str | None = self.tracker.queue_gate(issue)
+        if gate:
+            raise Refused(gate)
         n, job_id = self.store.new_id(issue["title"])
         branch: str = self.cfg.job_branch(job_id)
         job = {
-            "id": job_id, "number": n, "issue": number, "title": issue["title"],
+            "id": job_id, "number": n, "issue": key, "title": issue["title"],
             "issue_url": issue["url"], "author": issue["author"]["login"],
             "step": None, "entered_at": None, "running_since": None, "running_order": None,
             "round": 0, "attempt": 0, "gate_failed": False, "taken": {}, "handoff": [],
@@ -90,7 +94,7 @@ class Queue:
         assignees: list[str] = mine + list(run.get("assignees") or [])
         if not authors and not assignees:
             return lambda issue: True
-        operator: str = self.gh.operator() if "@me" in authors + assignees else ""
+        operator: str = self.tracker.operator() if "@me" in authors + assignees else ""
 
         def logins(names: list[str]) -> set[str]:
             return {operator if name == "@me" else name for name in names}
@@ -112,7 +116,7 @@ class Queue:
         return self.queue_and_issues()[0]
 
     def queue_and_issues(self: _QueueHost) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]:
-        """The rows of `queue`, and the labeled open issues the one `gh issue list` call returned."""
+        """The rows of `queue`, and the open issues the tracker's queue holds."""
         labels, limit = self.cfg["labels"], self.cfg["run"]["concurrency"]
         self.store.reconcile_index()
         for stale in self.store.all():
@@ -121,7 +125,7 @@ class Queue:
                 if job:
                     self._adopt_merge(job)
         jobs = {j["issue"]: j for j in self.store.all()}
-        issues = self.gh.queue(labels["queue"])
+        issues = self.tracker.queue()
         open_numbers = {i["number"] for i in issues}
 
         running = [j["id"] for j in self.store.running()]
@@ -140,7 +144,7 @@ class Queue:
                     replied.append(("resume", n, j["id"], name, "a reply is waiting"))
                 else:
                     who_value: str | list[str] = step.get("who", "maintainer")
-                    operator_login: str = self.gh.operator() if who_value == "operator" else ""
+                    operator_login: str = self.tracker.operator() if who_value == "operator" else ""
                     who_phrase: str = audience(who_value, j["author"], operator_login)
                     waiting.append(("wait", n, j["id"], name, f"waiting for {who_phrase}"))
             elif step["type"] == "verify":

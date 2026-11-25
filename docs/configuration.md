@@ -876,6 +876,9 @@ A missing project file you list yourself fails `mfactory sync`. A missing user f
 ## Labels, paths and ports
 
 ```toml
+[tracker]
+kind = "github"
+
 [labels]
 queue = "factory"
 needs_info = "factory:needs-info"
@@ -892,6 +895,7 @@ step = 10
 
 | Key | Meaning |
 | --- | --- |
+| `[tracker] kind` | Where jobs come from and where people reply to the factory. `github` (GitHub issues) is the only tracker. Pull requests are always on GitHub. |
 | `[labels] queue` | Issues with this label are built. |
 | `[labels] needs_info` | Put on an issue while its author is being asked. |
 | `[labels] needs_human` | Put on an issue while a maintainer, the operator, or a named login is being asked. |

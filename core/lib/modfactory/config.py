@@ -387,6 +387,7 @@ TABLES = {
             "authors": a_login_list, "assignees": a_login_list},
     "workspace": {"concurrency": an_int(1)},
     "checks": {"commands": a_string_list, "timeout_minutes": an_int(1)},
+    "tracker": {"kind": one_of("github")},
     "labels": {"queue": a_filled_string, "needs_info": a_filled_string, "needs_human": a_filled_string},
     "paths": {"worktrees": a_filled_string, "protected": a_string_list},
     "ports": {"base": an_int(1024), "step": an_int(3)},
