@@ -57,7 +57,7 @@ function writeSplit(px) {
 const state = {
   index: null, graph: null, config: null, error: null, query: "", range: "30", file: null, source: "all", drawer: null,
   workspace: false, projects: [], selected: readChoice(), queueRows: [], queueErrors: [], queueStale: false,
-  split: readSplit(), now: {}, nowSeq: 0, nowSeen: {},
+  split: readSplit(), now: {}, nowSeq: 0, nowSeen: {}, raw: false,
 };
 if (queryProject()) writeChoice(state.selected);
 
@@ -655,6 +655,31 @@ function grip() {
 function splitStyle() {
   return "--split:" + state.split + "px";
 }
+function isMarkdown(path) {
+  return /\.md$/i.test(path || "");
+}
+function fileModeButton(raw, label) {
+  const on = state.raw === raw;
+  return el("button", {
+    type: "button", text: label, "data-focus": "file-mode:" + (raw ? "raw" : "preview"),
+    "aria-pressed": on ? "true" : "false",
+    onclick: () => { if (state.raw !== raw) { state.raw = raw; render(); } },
+  });
+}
+// A job file: Markdown as a preview with a Preview/Raw toggle, anything else as plain text.
+function fileView({ path, text, extra = "", focus = null }) {
+  const cls = (name) => name + (extra ? " " + extra : "");
+  if (!isMarkdown(path)) return el("div", { class: "fileview" }, el("pre", { class: cls("file"), tabindex: 0, "data-focus": focus, text }));
+  const bar = el("div", { class: "fv-bar" },
+    el("div", { class: "tabs", role: "group", "aria-label": "File view" }, fileModeButton(false, "Preview"), fileModeButton(true, "Raw")));
+  if (state.raw) return el("div", { class: "fileview" }, bar, el("pre", { class: cls("file"), tabindex: 0, "data-focus": focus, text }));
+  const { header, body } = splitHeader(text);
+  const strip = header.length
+    ? el("div", { class: "fv-head" }, header.map((line, n) => el("span", { class: n === 0 ? tone(line) || null : null, text: line })))
+    : null;
+  return el("div", { class: "fileview" }, bar,
+    el("div", { class: cls("file md"), tabindex: 0, "data-focus": focus }, strip, renderMarkdown(body, el)));
+}
 function fileList(job, files) {
   const box = el("div", { class: "d-files" });
   let group = "";
@@ -1084,7 +1109,7 @@ function drawer() {
         close),
       state.drawer.tab === "activity"
         ? activityBody(job)
-        : el("div", { class: "d-body", style: splitStyle() }, fileList(job, files), grip(), el("pre", { class: "file d-doc", tabindex: 0, "data-focus": "drawer-doc", text: state.drawer.text || "" }))));
+        : el("div", { class: "d-body", style: splitStyle() }, fileList(job, files), grip(), fileView({ path: state.drawer.path, text: state.drawer.text || "", extra: "d-doc", focus: "drawer-doc" }))));
 }
 function day(stamp) {
   const found = /^\d{4}-\d{2}-\d{2}/.exec(String(stamp || ""));
@@ -1750,7 +1775,7 @@ function jobDetail(job) {
       el("div", { class: "filelist" }, files.map((f) => el("button", { type: "button", "aria-pressed": String(!!open && open.path === f.path), onclick: () => showFile(job, f.path) },
         el("span", { class: "path", text: f.path }), el("span", { class: "verdict", text: f.first_line || "" })))),
       grip(),
-      el("pre", { class: "file", tabindex: 0, text: open ? open.text : "Pick a file to read it." }))
+      fileView({ path: open ? open.path : null, text: open ? open.text : "Pick a file to read it." }))
       : el("div", { class: "empty", text: "No files yet." })));
   return el("div", { class: "detail" }, parts);
 }
@@ -1916,7 +1941,7 @@ function render() {
   const inside = !!(active && target.contains(active));
   const token = inside ? focusToken(active) : "";
   const keep = inside ? null : active;
-  const scrollers = ".joblist, pre.file, .d-doc, .d-files, .d-runs, .d-timeline, .sh-out, .filelist";
+  const scrollers = ".joblist, .file, .d-doc, .d-files, .d-runs, .d-timeline, .sh-out, .filelist";
   const scroll = [...target.querySelectorAll(scrollers)].map((n) => n.scrollTop);
   const kanban = target.querySelector(".kanban");
   const kanbanLeft = kanban ? kanban.scrollLeft : 0;

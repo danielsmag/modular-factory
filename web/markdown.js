@@ -295,3 +295,14 @@ function mdBlocks(lines, make, tight) {
 function renderMarkdown(text, make) {
   return mdBlocks(String(text || "").replace(/\r\n?/g, "\n").split("\n"), make, false);
 }
+
+// Job files open with verdict lines such as `STATUS: READY` or `RISK: low`.
+// The preview shows them as a strip above the rendered body.
+const MD_HEADER_LINE = /^(?:[A-Z][A-Z_-]*:[ \t]*\S.*|(?:APPROVE|REJECTED|ESCALATE)[ \t]*)$/;
+function splitHeader(text) {
+  const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
+  let n = 0;
+  while (n < lines.length && MD_HEADER_LINE.test(lines[n])) n += 1;
+  if (!n) return { header: [], body: String(text || "") };
+  return { header: lines.slice(0, n).map((line) => line.trim()), body: lines.slice(n).join("\n").replace(/^\n+/, "") };
+}

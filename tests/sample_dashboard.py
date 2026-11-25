@@ -135,8 +135,16 @@ def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=Fals
             "## Summary\n- The request is clear and fits the project\n- One small pull request\n")
     if "spec" in names:
         (folder / "spec.md").write_text(
-            f"STATUS: DONE\n\n# {title}\n\n## Summary\n- What will be built\n\n## Acceptance criteria\n"
-            "1. `npm test -- --run` passes with the new tests\n2. The page shows the new control\n")
+            f"STATUS: DONE\n\n# {title}\n\n## Summary\n"
+            "Add the control to the **invoice page**, behind the _existing_ `invoices_v2` flag. "
+            "See the [design notes](https://example.com/notes) and keep file_rows unchanged.\n\n"
+            "- What will be built\n  - a button in the toolbar\n  - a confirmation dialog\n- What stays the same\n\n"
+            "## Acceptance criteria\n"
+            "1. `npm test -- --run` passes with the new tests\n2. The page shows the new control\n\n"
+            "## Changes\n\n| File | Change |\n|---|---|\n"
+            "| `src/invoice.ts` | new handler |\n| `src/toolbar.tsx` | button |\n\n"
+            "```ts\nexport function confirmSend(id: string): Promise<boolean> {\n  return dialog.ask(id);\n}\n```\n\n"
+            "> Out of scope: the email template.\n")
     if "build" in names:
         (folder / "build.md").write_text("STATUS: READY\n\n## Summary\n- Implemented and tested\n")
     if "gate" in names:

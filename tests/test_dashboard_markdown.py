@@ -144,3 +144,18 @@ def test_a_long_line_of_unmatched_markers_renders_quickly(unit):
     started = time.monotonic()
     assert render(line).startswith("<p>")
     assert time.monotonic() - started < 1.0
+
+
+# ---- header lines -------------------------------------------------------------
+
+def test_split_header_takes_the_leading_key_lines():
+    assert split("DECISION: ACCEPT\nRISK: low\nSURFACES: none\n\n## Summary\n- x\n") == \
+        {"header": ["DECISION: ACCEPT", "RISK: low", "SURFACES: none"], "body": "## Summary\n- x\n"}
+
+
+def test_split_header_without_header():
+    assert split("# Issue #4: Title\n\nBody") == {"header": [], "body": "# Issue #4: Title\n\nBody"}
+
+
+def test_split_header_bare_verdict():
+    assert split("APPROVE\n\nok") == {"header": ["APPROVE"], "body": "ok"}
