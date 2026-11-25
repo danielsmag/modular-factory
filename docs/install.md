@@ -316,6 +316,11 @@ upgrade from an old CLI). The plan then shows `repair, missing: ...`, and upgrad
 `.factory/` again and runs `sync`. The copy takes its item list from the release it installs,
 not from the CLI that runs it.
 
+The global upgrade and `install.sh --global` keep `workspace.toml`, `dashboard.json`,
+`dashboard.log` and `plan-usage.json` in `~/.mfactory` and replace everything else. A
+dashboard left running is still on the old code, and the output ends with
+`mfactory stop dashboard && mfactory start dashboard` to restart it.
+
 A project whose `schema` differs from the release is skipped. The others still upgrade.
 The summary quotes that version's [changelog](../CHANGELOG.md) and tells you to set
 `schema`, then run `mfactory upgrade` again.
