@@ -73,7 +73,7 @@ If `gh` is unavailable or unauthenticated, say so and stop; do not work around i
 
 ## Pull request title
 
-The title is what gets released. After the pull request merges to `master` and CI passes, GitHub opens `release-vX.Y.Z`, squash-merges it, tags `vX.Y.Z`, and publishes the GitHub release. The release title is that tag. The Actions run that publishes it is named with that tag. That release commit updates `core/VERSION` and moves `## Unreleased` in `CHANGELOG.md`. Do not edit `core/VERSION`. Put user-facing notes under `## Unreleased`.
+The title is what gets released. After the pull request merges to `master` and CI passes, GitHub opens `release-vX.Y.Z`, squash-merges it, tags `vX.Y.Z`, and publishes the GitHub release. The release title is that tag. The Actions run that publishes it is named with that tag. That release commit updates `core/VERSION`. Do not edit `core/VERSION`. The release notes are the pull request title, so write it for users.
 
 | Title | Bump |
 | --- | --- |

@@ -322,7 +322,7 @@ dashboard left running is still on the old code, and the output ends with
 `mfactory stop dashboard && mfactory start dashboard` to restart it.
 
 A project whose `schema` differs from the release is skipped. The others still upgrade.
-The summary quotes that version's [changelog](../CHANGELOG.md) and tells you to set
+The summary points to that version's [release notes](https://github.com/danielsmag/modular-factory/releases) and tells you to set
 `schema`, then run `mfactory upgrade` again.
 
 One project failing does not stop the others. The summary ends with the next step:

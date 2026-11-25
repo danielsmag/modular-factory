@@ -341,7 +341,7 @@ def upgrade(repo, ref="latest", source=None, say=print):
         have = config.read_toml(repo / config.FILE).get("schema") if (repo / config.FILE).exists() else new_schema
         if new_schema != have:
             raise Refused(f"version {after} reads schema {new_schema}, and {config.FILE} is schema {have}. "
-                          f"Follow the upgrade notes in CHANGELOG.md for {after}, set schema = {new_schema}, "
+                          f"Follow the release notes for v{after}, set schema = {new_schema}, "
                           "then upgrade again.")
         copy_core(root, repo)
     say(f"ok    .factory/ {before} -> {after}")
