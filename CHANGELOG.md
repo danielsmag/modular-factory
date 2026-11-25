@@ -6,6 +6,10 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.20.2
+
+- ci: require a pr/ prefix on pull request branches.
+
 ## 0.20.1
 
 - `mfactory install` creates only the GitHub labels that are missing and no longer passes `--force` to `gh label create`, so a label a team or another tool already made keeps its colour and description. Each existing label prints `ok    label <name> already exists`.
