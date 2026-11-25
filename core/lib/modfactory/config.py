@@ -5,7 +5,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from . import graph
+from . import board, graph
 from .util import CORE, ConfigError, Refused, adapters_dir
 
 SCHEMA = 1
@@ -106,13 +106,15 @@ class Config:
     def base(self):
         return self.data["project"]["base_branch"]
 
-    def job_branch(self, job_id: str, *, revert: bool = False, fix: int = 0) -> str:
+    def job_branch(self, job_id: str, *, revert: bool = False, fix: int = 0, tag: str = "") -> str:
         """The branch for a job, for the draft pull request that reverts it, or for its follow-up `fix`.
 
-        The pattern is checked here, when the name is chosen, before any branch exists.
+        `tag` is what the tracker puts before the job id, such as a Jira key. The pattern is checked
+        here, when the name is chosen, before any branch exists.
         """
         prefix: str = str(self.data["project"]["branch_prefix"])
-        suffix: str = f"revert-{job_id}" if revert else f"{job_id}-fix-{fix}" if fix else job_id
+        named: str = tag + job_id
+        suffix: str = f"revert-{named}" if revert else f"{named}-fix-{fix}" if fix else named
         name: str = prefix + suffix
         pattern: str = str(self.data["project"].get("branch_pattern", "")).strip()
         if pattern and re.fullmatch(pattern, name) is None:
@@ -283,7 +285,8 @@ def a_regex(value: object) -> str | None:
 
 # A job id the prefix is checked against. Real ids are the same shape: NNN-slug.
 _JOB_SAMPLE = "000-add-dark-mode"
-_REVERT_SAMPLE = "revert-000-add-dark-mode"
+# A Jira key and the hyphen after it, as a Jira job's branch carries them before the job id.
+_KEY_SAMPLE = "PROJ-123-"
 _FIX_SAMPLE = "000-add-dark-mode-fix-1"
 # git check-ref-format: controls, space, DEL, and the characters it forbids anywhere.
 _FORBIDDEN_IN_BRANCH = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
@@ -326,8 +329,11 @@ def a_branch_prefix(value: object) -> str | None:
     return None
 
 
-def _branch_pattern_gaps(project: object, steps: object = None) -> list[str]:
-    """Samples a set pattern must accept: one job branch, one revert branch and, with post-debug, one fix branch."""
+def _branch_pattern_gaps(project: object, steps: object = None, tag: str = "") -> list[str]:
+    """Samples a set pattern must accept: one job branch, one revert branch and, with post-debug, one fix branch.
+
+    `tag` is what the tracker puts before the job id in a branch name, such as a Jira key and a hyphen.
+    """
     if not isinstance(project, dict):
         return []
     prefix: object = project.get("branch_prefix")
@@ -340,17 +346,19 @@ def _branch_pattern_gaps(project: object, steps: object = None) -> list[str]:
     if not source:
         return []
     gaps: list[str] = []
-    for sample in (prefix + _JOB_SAMPLE, prefix + _REVERT_SAMPLE):
+    keyed: str = " A Jira job's branch has the issue key before the job id." if tag else ""
+    for sample in (prefix + tag + _JOB_SAMPLE, prefix + "revert-" + tag + _JOB_SAMPLE):
         if re.fullmatch(source, sample) is None:
             gaps.append(
                 f"[project].branch_pattern does not match {sample!r}. "
-                "A job branch is the prefix plus the job id, and a revert branch inserts revert-.")
+                f"A job branch is the prefix plus the job id, and a revert branch inserts revert-.{keyed}")
     follow_ups: bool = isinstance(steps, dict) and any(
         isinstance(step, dict) and step.get("type") == "agent" and graph.enabled(step)
         and graph.role(name, step) == "post-debug" for name, step in steps.items())
-    if follow_ups and re.fullmatch(source, prefix + _FIX_SAMPLE) is None:
+    fix_sample: str = prefix + tag + _FIX_SAMPLE
+    if follow_ups and re.fullmatch(source, fix_sample) is None:
         gaps.append(
-            f"[project].branch_pattern does not match {prefix + _FIX_SAMPLE!r}. "
+            f"[project].branch_pattern does not match {fix_sample!r}. "
             "A post-debug step opens follow-up branches: the job branch plus -fix-N.")
     return gaps
 
@@ -377,6 +385,50 @@ def a_login_list(value: object) -> str | None:
     return 'must be a list of GitHub logins or "@me"'
 
 
+TRACKER_KINDS = ("github", "jira")
+ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# A Jira site: https, or plain http for a server on this machine.
+SITE = re.compile(r"https://[A-Za-z0-9.-]+(?::\d+)?/?|http://(?:127\.0\.0\.1|localhost)(?::\d+)?/?")
+
+
+def a_site(value: object) -> str | None:
+    """Empty, or the address of a Jira site with no path."""
+    if isinstance(value, str) and (not value or SITE.fullmatch(value)):
+        return None
+    return "must be an https:// address, such as https://acme.atlassian.net"
+
+
+def an_env_name(value: object) -> str | None:
+    """The name of an environment variable. The value it holds never goes in factory.toml."""
+    if isinstance(value, str) and ENV_NAME.fullmatch(value):
+        return None
+    return "must be the name of an environment variable"
+
+
+JIRA_KEYS = {"site": a_site, "board": an_int(0), "jql": a_string, "email_env": an_env_name,
+             "token_env": an_env_name, "issue_type": a_filled_string, "maintainers": a_string_list,
+             "columns": lambda value: None}
+# A Jira account id: letters, digits, hyphens and a colon, such as 712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70.
+ACCOUNT = re.compile(r"[A-Za-z0-9][A-Za-z0-9:_-]{0,127}")
+
+
+def a_jira_who(value: object) -> str | None:
+    """Who may reply in Jira: a role, or a non-empty list of account ids."""
+    if isinstance(value, str) and value in WHO_WORDS:
+        return None
+    if isinstance(value, list) and value and all(isinstance(item, str) and ACCOUNT.fullmatch(item) for item in value):
+        return None
+    return 'must be "author", "maintainer", "operator", or a list of Jira account ids'
+
+
+def a_jira_account_list(value: object) -> str | None:
+    """Jira account ids for the queue filter. `@me` is the operator. Empty means no filter."""
+    if isinstance(value, list) and all(isinstance(item, str) and (item == "@me" or ACCOUNT.fullmatch(item))
+                                       for item in value):
+        return None
+    return 'must be a list of Jira account ids or "@me"'
+
+
 TABLES = {
     "project": {"description": a_string, "base_branch": a_filled_string,
                 "merge_method": one_of("merge", "squash", "rebase"),
@@ -387,7 +439,6 @@ TABLES = {
             "authors": a_login_list, "assignees": a_login_list},
     "workspace": {"concurrency": an_int(1)},
     "checks": {"commands": a_string_list, "timeout_minutes": an_int(1)},
-    "tracker": {"kind": one_of("github")},
     "labels": {"queue": a_filled_string, "needs_info": a_filled_string, "needs_human": a_filled_string},
     "paths": {"worktrees": a_filled_string, "protected": a_string_list},
     "ports": {"base": an_int(1024), "step": an_int(3)},
@@ -417,7 +468,7 @@ REVIEWER_KEYS = {"enabled": a_bool, "focus": a_filled_string, "prompt": a_filled
                  "skills": a_string_list, "rules": a_string_list, "tools": a_tool_list, "port": a_bool}
 SURFACE_KEYS = {"enabled": a_bool, "when": a_filled_string, "reviewers": a_string_list}
 BUILTIN_REVIEWERS = ("code", "security", "ux", "ui")
-TOP = set(TABLES) | {"schema", "tools", "steps", "reviewers", "surfaces", "models"}
+TOP = set(TABLES) | {"schema", "tools", "steps", "reviewers", "surfaces", "models", "tracker"}
 
 
 def _path_inside(path: Path, root: Path) -> bool:
@@ -464,12 +515,38 @@ def check(cfg):
     if d.get("schema") != SCHEMA:
         out.append(f"schema = {d.get('schema')!r}, but this factory reads schema {SCHEMA}. "
                    "Run `mfactory upgrade`, or set schema to match.")
-    for name, spec in TABLES.items():
+    # People are named by GitHub login, or by Jira account id when Jira is the tracker.
+    uses_jira: bool = isinstance(d.get("tracker"), dict) and d["tracker"].get("kind") == "jira"
+    tables = TABLES if not uses_jira else TABLES | {
+        "run": TABLES["run"] | {"authors": a_jira_account_list, "assignees": a_jira_account_list}}
+    human_keys = STEP_KEYS["human"] | ({"who": a_jira_who} if uses_jira else {})
+    for name, spec in tables.items():
         test_table(name, d.get(name, {}), spec)
     if cfg.sources.get(("workspace", "concurrency")) == FILE:
         out.append("[workspace].concurrency is the cap across projects. Set it in workspace.toml, "
                    "or pass --concurrency to `mfactory workspace queue`.")
-    out.extend(_branch_pattern_gaps(d.get("project"), d.get("steps")))
+    out.extend(_branch_pattern_gaps(d.get("project"), d.get("steps"), _KEY_SAMPLE if uses_jira else ""))
+
+    # the tracker
+    tracker = d.get("tracker", {})
+    test_table("tracker", tracker, {"kind": one_of(*TRACKER_KINDS), "jira": lambda value: None})
+    jira = tracker.get("jira", {}) if isinstance(tracker, dict) else {}
+    test_table("tracker.jira", jira, JIRA_KEYS)
+    if isinstance(tracker, dict) and isinstance(jira, dict):
+        valid_steps = {n: s for n, s in d.get("steps", {}).items()
+                       if isinstance(s, dict) and s.get("type") in graph.TYPES}
+        if "columns" in jira or uses_jira:
+            out.extend(board.problems(valid_steps, jira.get("columns", {}), "tracker.jira.columns", uses_jira))
+        if uses_jira:
+            if not jira.get("site"):
+                out.append("[tracker.jira].site is missing: the address of the Jira site, "
+                           "such as https://acme.atlassian.net")
+            if not jira.get("board"):
+                out.append("[tracker.jira].board is missing: the id of the kanban board, "
+                           "the number in its address")
+            if isinstance(d.get("project"), dict) and d["project"].get("issue_link") == "closes":
+                out.append('[project].issue_link = "closes" needs GitHub issues: a pull request cannot '
+                           'close a Jira issue. Use issue_link = "refs".')
 
     # tools
     tools = d.get("tools", {})
@@ -498,7 +575,8 @@ def check(cfg):
         if not isinstance(step, dict) or step.get("type") not in graph.TYPES:
             out.append(f"[{label}].type must be one of: {', '.join(graph.TYPES)}")
             continue
-        spec = STEP_COMMON | STEP_KEYS[step["type"]] | {"on": lambda v: None}
+        own_keys = human_keys if step["type"] == "human" else STEP_KEYS[step["type"]]
+        spec = STEP_COMMON | own_keys | {"on": lambda v: None}
         test_table(label, step, spec)
         role_name: str = graph.role(name, step) if step["type"] == "agent" else ""
         if role_name == "custom" and not step.get("instructions") and not step.get("instructions_file"):

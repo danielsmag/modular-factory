@@ -17,6 +17,14 @@ class Tracker(Protocol):
     """
 
     kind: str
+    # The tracker's name, as people say it.
+    label: str
+    # True when a person may be asked, and may reply, on the job's pull request too.
+    pr_threads: bool
+    # The longest comment the tracker takes, in characters.
+    comment_limit: int
+    # True when the pull request's title must carry the issue's key.
+    links_by_title: bool
 
     # -- keys
 
@@ -37,7 +45,19 @@ class Tracker(Protocol):
         ...
 
     def queue(self) -> list[dict[str, Any]]:
-        """The open issues waiting for a job."""
+        """The open issues waiting for a job, in the order to start them."""
+        ...
+
+    def withdrawn(self, key: Key, queued: set[Key]) -> str | None:
+        """Why a running job's issue no longer asks to be built, or None. `queued` is the keys in `queue`."""
+        ...
+
+    def empty_note(self) -> str:
+        """What an empty queue means, as the start of a sentence."""
+        ...
+
+    def requeue_hint(self) -> str:
+        """How a person puts an issue back in the queue."""
         ...
 
     def queue_gate(self, issue: dict[str, Any]) -> str | None:
@@ -70,8 +90,12 @@ class Tracker(Protocol):
         """The account running the factory."""
         ...
 
-    def can_write(self, login: str) -> bool:
-        """True for the operator and for anyone who may answer a maintainer step."""
+    def mention(self, login: str, name: str | None = None) -> str:
+        """An account as text for people to read. `name` is its shown name, when the caller has it."""
+        ...
+
+    def can_write(self, login: str, key: Key) -> bool:
+        """True for the operator and for anyone who may answer a maintainer step of this issue."""
         ...
 
     # -- waiting for a person
@@ -82,7 +106,21 @@ class Tracker(Protocol):
 
     def waiting_off(self, key: Key, flag: str | None) -> None: ...
 
+    # -- the board
+
+    def move(self, key: Key, step: str) -> None:
+        """Show on the board that the issue's job is at `step`. Refuses when the card will not move."""
+        ...
+
     # -- the pull request's link to the issue
+
+    def branch_tag(self, key: Key) -> str:
+        """What a job's branch name carries of the issue, before the job id. Empty for nothing."""
+        ...
+
+    def pr_title_problem(self, title: str, key: Key) -> str | None:
+        """What is wrong with a pull request title, or None."""
+        ...
 
     def pr_link_rule(self) -> str:
         """What the build agent is told about linking the issue from the pull request body."""

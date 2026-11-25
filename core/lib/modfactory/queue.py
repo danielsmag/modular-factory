@@ -6,7 +6,6 @@ from typing import Any, Protocol
 from . import graph
 from .config import Config
 from .service import GitHub
-from .service.human import audience
 from .service.tracker import Key, Tracker
 from .store import Store
 from .util import Refused, now
@@ -27,6 +26,8 @@ class _QueueHost(Protocol):
     def _adopt_merge(self, job: dict[str, Any]) -> bool: ...
 
     def _find_reply(self, job: dict[str, Any], step: dict[str, Any]) -> tuple[str, str, str, Any] | None: ...
+
+    def _audience(self, job: dict[str, Any], who: str | list[str]) -> str: ...
 
     def queue_and_issues(self) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]: ...
 
@@ -60,10 +61,12 @@ class Queue:
         if gate:
             raise Refused(gate)
         n, job_id = self.store.new_id(issue["title"])
-        branch: str = self.cfg.job_branch(job_id)
+        branch: str = self.cfg.job_branch(job_id, tag=self.tracker.branch_tag(key))
+        # A tracker whose logins are ids, not names, also gives the name people know the author by.
+        named: dict[str, Any] = {"author_name": issue["author"]["name"]} if issue["author"].get("name") else {}
         job = {
             "id": job_id, "number": n, "issue": key, "title": issue["title"],
-            "issue_url": issue["url"], "author": issue["author"]["login"],
+            "issue_url": issue["url"], "author": issue["author"]["login"], **named,
             "step": None, "entered_at": None, "running_since": None, "running_order": None,
             "round": 0, "attempt": 0, "gate_failed": False, "taken": {}, "handoff": [],
             "branch": branch,
@@ -117,7 +120,7 @@ class Queue:
 
     def queue_and_issues(self: _QueueHost) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]:
         """The rows of `queue`, and the open issues the tracker's queue holds."""
-        labels, limit = self.cfg["labels"], self.cfg["run"]["concurrency"]
+        limit = self.cfg["run"]["concurrency"]
         self.store.reconcile_index()
         for stale in self.store.all():
             if stale["pr"] and not stale["merge_sha"] and stale["step"] not in graph.END_STATES:
@@ -143,14 +146,12 @@ class Queue:
                 if self._find_reply(j, step):
                     replied.append(("resume", n, j["id"], name, "a reply is waiting"))
                 else:
-                    who_value: str | list[str] = step.get("who", "maintainer")
-                    operator_login: str = self.tracker.operator() if who_value == "operator" else ""
-                    who_phrase: str = audience(who_value, j["author"], operator_login)
+                    who_phrase: str = self._audience(j, step.get("who", "maintainer"))
                     waiting.append(("wait", n, j["id"], name, f"waiting for {who_phrase}"))
             elif step["type"] == "verify":
                 rows.append(("resume", n, j["id"], name, "validating after " + step["after"]))
-            elif n not in open_numbers and not (j["pr"] or j.get("prs")):
-                other.append(("skip", n, j["id"], name, f"issue is closed or no longer labeled {labels['queue']}"))
+            elif not (j["pr"] or j.get("prs")) and (gone := self.tracker.withdrawn(n, open_numbers)):
+                other.append(("skip", n, j["id"], name, gone))
             else:
                 turn = running.index(j["id"]) < limit
                 rows.append(("resume" if turn else "hold", n, j["id"], name,
@@ -158,7 +159,7 @@ class Queue:
         free = limit - len(running)
         picks: Callable[[dict[str, Any]], bool] = self._picks()
         fresh = [("new", i["number"], "-", "-", i["title"])
-                 for i in sorted(issues, key=lambda i: i["number"]) if i["number"] not in jobs and picks(i)]
+                 for i in issues if i["number"] not in jobs and picks(i)]
         for row in replied + fresh:
             if free > 0:
                 rows.append(row)
@@ -179,7 +180,7 @@ def queue_json(rows: list[tuple[Any, ...]], issues: list[dict[str, Any]]) -> lis
             "action": action, "issue": number, "job": job, "step": step, "note": note,
             "title": issue.get("title"), "issue_url": issue.get("url"),
             "created_at": issue.get("createdAt"), "updated_at": issue.get("updatedAt"),
-            "author": author.get("login") if isinstance(author, dict) else None,
+            "author": (author.get("name") or author.get("login")) if isinstance(author, dict) else None,
             "labels": [label["name"] for label in issue.get("labels") or []],
         })
     return out

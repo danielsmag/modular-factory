@@ -187,7 +187,7 @@ def run(args: argparse.Namespace) -> int:
             for row in rows:
                 print("  ".join(str(cell) for cell in row))
             if not rows:
-                print(f"nothing to do: no open issue is labeled `{cfg['labels']['queue']}` and no job is unfinished")
+                print(f"nothing to do: {factory.tracker.empty_note()} and no job is unfinished")
         elif command == "create":
             job = factory.create(args.issue)
             print(f"created {job['id']} for {factory.tracker.ref(job['issue'])} at {job['step']}")

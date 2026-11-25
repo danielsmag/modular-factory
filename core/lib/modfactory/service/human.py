@@ -1,23 +1,31 @@
 """Human steps: ask a person, park the job, and read the reply from the CLI or a comment."""
 
 import re
+from collections.abc import Callable
 
 from .. import graph
 from ..util import Refused, body, now
 
 COMMAND = re.compile(r"\s*/(?:m)?factory[ \t]+([a-z][a-z-]*)\b[ \t]*(.*)", re.S)
 NEEDS_TEXT = {"CHANGES", "FEEDBACK", "REJECT", "ANSWER"}
-COMMENT_LIMIT = 60000
 
 
-def audience(who: str | list[str], author: str, operator: str) -> str:
-    """Who a human step is waiting for, as a sentence fragment."""
+def _at(login: str, name: str | None = None) -> str:
+    return f"@{login}"
+
+
+def audience(who: str | list[str], author: str, operator: str,
+             mention: Callable[[str], str] = _at) -> str:
+    """Who a human step is waiting for, as a sentence fragment.
+
+    `author` and `operator` are already written as people read them. `mention` writes a listed login.
+    """
     if who == "author":
-        return f"the author (@{author})"
+        return f"the author ({author})"
     if who == "operator":
-        return f"the operator (@{operator})"
+        return f"the operator ({operator})"
     if isinstance(who, list):
-        names: list[str] = [f"@{login}" for login in who]
+        names: list[str] = [mention(login) for login in who]
         if len(names) == 1:
             return names[0]
         if len(names) == 2:
@@ -26,7 +34,7 @@ def audience(who: str | list[str], author: str, operator: str) -> str:
     return "a maintainer"
 
 
-def ask_title(who: str | list[str], asked: str) -> str:
+def ask_title(who: str | list[str], asked: str, mention: Callable[[str], str] = _at) -> str:
     """The comment heading when the step does not set `ask`."""
     if asked:
         return asked
@@ -35,18 +43,21 @@ def ask_title(who: str | list[str], asked: str) -> str:
     if who == "operator":
         return "this job needs the operator"
     if isinstance(who, list):
-        return "this job needs " + audience(who, "", "")
+        return "this job needs " + audience(who, "", "", mention)
     return "this job needs a maintainer"
 
 
 class Humans:
     # ---- Asking ------------------------------------------------------------
 
+    def _audience(self, job, who):
+        """Who `who` is for this job, with the author and the operator as the tracker shows people."""
+        mention = self.tracker.mention
+        operator: str = mention(self.tracker.operator()) if who == "operator" else ""
+        return audience(who, mention(job["author"], job.get("author_name")), operator, mention)
+
     def _who(self, job):
-        waiting = job["waiting"]
-        who: str | list[str] = waiting["who"]
-        operator: str = self.tracker.operator() if who == "operator" else ""
-        return audience(who, job["author"], operator)
+        return self._audience(job, job["waiting"]["who"])
 
     def _commands(self, job, step, slash=True):
         rows = []
@@ -60,14 +71,15 @@ class Humans:
     def _ask(self, job, name, step):
         """Post the question where the person will see it, label the issue, and park the job."""
         who: str | list[str] = step.get("who", "maintainer")
-        kind, number = ("pr", job["pr"]) if job["pr"] and not job["merge_sha"] else ("issue", job["issue"])
+        open_pr: bool = bool(job["pr"] and not job["merge_sha"])
+        kind, number = ("pr", job["pr"]) if open_pr and self.tracker.pr_threads else ("issue", job["issue"])
         tool_only: bool = step.get("replies") == "tool"
         operator: str = self.tracker.operator() if who == "operator" else ""
 
-        title: str = ask_title(who, step.get("ask") or "")
+        title: str = ask_title(who, step.get("ask") or "", self.tracker.mention)
         parts = [f"### Factory: {title}", f"Step `{name}` of job `{job['id']}`."]
         if who == "operator" or isinstance(who, list):
-            parts.append(f"Waiting for {audience(who, job['author'], operator)}.")
+            parts.append(f"Waiting for {self._audience(job, who)}.")
         if job.get("reason"):
             parts.append(job["reason"])
         shows = step.get("shows") or job.get("last_file")
@@ -82,13 +94,15 @@ class Humans:
             how += [f"- {c}" for c in self._commands(job, step, slash=False)]
             if "ANSWER" in step["on"]:
                 how.append("- or answer in plain words")
-        if kind == "pr" and name == self.cfg["run"]["escalate_to"]:
-            how.append("- or merge this pull request to approve it as it is")
-        elif kind == "pr" and step.get("pr_ready"):
-            how.append("- or merge this pull request yourself; the factory will continue from there")
-        text = "\n\n".join(parts)[:COMMENT_LIMIT] + "\n\n---\n" + "\n".join(how)
+        # Asked on the issue of a tracker that is not GitHub, the pull request is named by its address.
+        this_pr: str = "this pull request" if kind == "pr" else f"the pull request {job['pr_url']}"
+        if open_pr and name == self.cfg["run"]["escalate_to"]:
+            how.append(f"- or merge {this_pr} to approve it as it is")
+        elif open_pr and step.get("pr_ready"):
+            how.append(f"- or merge {this_pr} yourself; the factory will continue from there")
+        text = "\n\n".join(parts)[:self.tracker.comment_limit] + "\n\n---\n" + "\n".join(how)
 
-        if step.get("pr_ready") and kind == "pr" and (self.gh.pr(job["pr"], "isDraft") or {}).get("isDraft"):
+        if step.get("pr_ready") and open_pr and (self.gh.pr(job["pr"], "isDraft") or {}).get("isDraft"):
             self.gh.call("pr", "ready", job["pr"])
         if kind == "pr":
             self.gh.comment(number, text)
@@ -116,7 +130,7 @@ class Humans:
             return login == self.tracker.operator()
         if isinstance(who, list):
             return login in who
-        return self.tracker.can_write(login)
+        return self.tracker.can_write(login, job["issue"])
 
     def _find_reply(self, job, step):
         """The first comment after the factory's last one that answers this step, or None.
@@ -127,7 +141,7 @@ class Humans:
         if step.get("replies") == "tool":
             return None
         threads = [("issue", job["issue"])]
-        if job["pr"] and not job["merge_sha"]:
+        if self.tracker.pr_threads and job["pr"] and not job["merge_sha"]:
             threads.append(("pr", job["pr"]))
         for kind, number in threads:
             comments = self.gh.comments(number) if kind == "pr" else self.tracker.comments(number)
@@ -141,7 +155,7 @@ class Humans:
                 m = COMMAND.fullmatch(c["body"])
                 if m:
                     outcome = m.group(1).upper()
-                    text = re.sub(rf"^#?{re.escape(str(job['issue']))}\b[ \t]*", "", m.group(2)).strip()
+                    text = re.sub(rf"(?i)^#?{re.escape(str(job['issue']))}\b[ \t]*", "", m.group(2)).strip()
                     if outcome in step["on"] and (text or outcome not in NEEDS_TEXT):
                         return outcome, text, login, c["id"]
                 elif "ANSWER" in step["on"]:
@@ -156,16 +170,17 @@ class Humans:
         if comment_id:
             job["consumed"].append(comment_id)
         reason, target = None, None
+        who: str = self.tracker.mention(login)
         if outcome == "REJECT":
-            (d / "rejection.md").write_text(f"REJECTED\n\nBy @{login} at the {name} step.\n\n{text}\n")
-            reason = f"Rejected by @{login}: {text}"
+            (d / "rejection.md").write_text(f"REJECTED\n\nBy {who} at the {name} step.\n\n{text}\n")
+            reason = f"Rejected by {who}: {text}"
         elif outcome == "ANSWER":
-            job["handoff"].append(f"@{login} answered the questions; their answer is in issue.md.")
+            job["handoff"].append(f"{who} answered the questions; their answer is in issue.md.")
         elif text:
             k = len(list(d.glob("feedback-*.md"))) + 1
             (d / f"feedback-{k}.md").write_text(
-                f"# Feedback {k}\n\nFrom @{login} at the {name} step ({outcome}).\n\n{text}\n")
-            job["handoff"].append(f"@{login} replied {outcome} at the {name} step: read feedback-{k}.md "
+                f"# Feedback {k}\n\nFrom {who} at the {name} step ({outcome}).\n\n{text}\n")
+            job["handoff"].append(f"{who} replied {outcome} at the {name} step: read feedback-{k}.md "
                                   "and act on it. It comes before the spec and the reviews where they disagree.")
         if name == self.cfg["run"]["escalate_to"]:
             job["taken"], job["gate_failed"] = {}, False  # a person's feedback gives a fresh budget

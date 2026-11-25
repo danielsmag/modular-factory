@@ -25,6 +25,12 @@ def _failure(res: CompletedProcess[str]) -> str:
 
 class GitHubTracker:
     kind = "github"
+    label = "GitHub"
+    # A person may be asked, and may reply, on the job's pull request as well as on the issue.
+    pr_threads = True
+    comment_limit = 60000
+    # The pull request links the issue from its body, so its title is free.
+    links_by_title = False
 
     def __init__(self, gh: GitHub, labels: dict[str, str], issue_link: str = "refs"):
         self.gh = gh
@@ -67,8 +73,22 @@ class GitHubTracker:
         return json.loads(res.stdout)
 
     def queue(self) -> list[dict[str, Any]]:
-        return self.gh.json("issue", "list", "--label", self.labels["queue"], "--state", "open", "--limit", "200",
-                            "--json", "number,title,url,createdAt,updatedAt,author,assignees,labels")
+        """The open issues with the queue label, oldest number first."""
+        found: list[dict[str, Any]] = self.gh.json(
+            "issue", "list", "--label", self.labels["queue"], "--state", "open", "--limit", "200",
+            "--json", "number,title,url,createdAt,updatedAt,author,assignees,labels")
+        return sorted(found, key=lambda issue: issue["number"])
+
+    def withdrawn(self, key: Key, queued: set[Key]) -> str | None:
+        if key in queued:
+            return None
+        return f"issue is closed or no longer labeled {self.labels['queue']}"
+
+    def empty_note(self) -> str:
+        return f"no open issue is labeled `{self.labels['queue']}`"
+
+    def requeue_hint(self) -> str:
+        return "put the factory label back to run it again"
 
     def queue_gate(self, issue: dict[str, Any]) -> str | None:
         label: str = self.labels["queue"]
@@ -108,7 +128,10 @@ class GitHubTracker:
             self._operator = self.gh.json("api", "user")["login"]
         return self._operator
 
-    def can_write(self, login: str) -> bool:
+    def mention(self, login: str, name: str | None = None) -> str:
+        return f"@{login}"
+
+    def can_write(self, login: str, key: Key | None = None) -> bool:
         """True for the operator and for anyone with write access to the repo."""
         if login == self.operator():
             return True
@@ -135,7 +158,18 @@ class GitHubTracker:
         if remove:
             self.gh.call("issue", "edit", key, "--remove-label", remove, check=False)
 
+    # -- the board: GitHub issues have none
+
+    def move(self, key: Key, step: str) -> None:
+        return None
+
     # -- the pull request's link to the issue
+
+    def branch_tag(self, key: Key) -> str:
+        return ""
+
+    def pr_title_problem(self, title: str, key: Key) -> str | None:
+        return None
 
     def pr_link_rule(self) -> str:
         if self.issue_link == "closes":

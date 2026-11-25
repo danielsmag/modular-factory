@@ -11,10 +11,11 @@ from ...util import CORE, FactoryError
 from ..gh import GitHub
 from .base import Key, Tracker, Who
 from .github import GitHubTracker
+from .jira import JiraTracker
 
-TRACKERS = {"github": GitHubTracker}
+TRACKERS = {"github": GitHubTracker, "jira": JiraTracker}
 
-__all__ = ["TRACKERS", "GitHubTracker", "Key", "Tracker", "Who", "for_repo", "make"]
+__all__ = ["TRACKERS", "GitHubTracker", "JiraTracker", "Key", "Tracker", "Who", "for_repo", "make"]
 
 
 def make(cfg, gh: GitHub | None = None) -> Tracker:

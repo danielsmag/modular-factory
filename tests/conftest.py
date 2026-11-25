@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "core" / "lib"))
 os.environ["FACTORY_VERIFY_POLL"] = "0.05"
 
+import stub_jira  # noqa: E402
 from modfactory import config, sync  # noqa: E402
 from modfactory.engine import Factory  # noqa: E402
 
@@ -52,6 +53,30 @@ skip = "REJECT"
 
 [steps.merge]
 enabled = true
+"""
+
+
+# One Jira status per default step, as in the fake board of tests/stub_jira.py.
+JIRA_COLUMNS = """
+[tracker.jira.columns]
+queue = "Ready for factory"
+intake = "Intake"
+ask-author = "Needs info"
+spec = "Spec"
+spec-approval = "Spec approval"
+build = "Build"
+gate = "Checks"
+debug = "Debug"
+review = "Review"
+approve = "Approve"
+ready-to-merge = "Ready to merge"
+merge = "Merging"
+ready-to-verify = "Ready to verify"
+verify = "Verify"
+escalated = "Escalated"
+done = "Done"
+rejected = "Rejected"
+failed = "Failed"
 """
 
 
@@ -99,6 +124,17 @@ class World:
         self.origin = tmp / "origin.git"
         self.state_file = tmp / "gh.json"
         self._factory = None
+        self.jira = None
+
+    # ---- Jira --------------------------------------------------------------
+
+    def use_jira(self, extra="", columns=JIRA_COLUMNS, settings=""):
+        """Make this project take its jobs from a fake Jira board. `world.jira` is that board."""
+        if self.jira is None:
+            self.jira = stub_jira.FakeJira()
+        self.configure(f'[tracker]\nkind = "jira"\n\n[tracker.jira]\nsite = "{self.jira.url}"\nboard = 7\n'
+                       f"{settings}\n{columns}\n{extra}")
+        return self.jira
 
     # ---- GitHub ------------------------------------------------------------
 
@@ -113,6 +149,9 @@ class World:
 
     def issue(self, title="Add a thing", body="Please add it.", labels=("factory",), author="alice",
               assignees=()):
+        if self.jira:
+            return self.jira.ticket(title, body, reporter=author, assignee=next(iter(assignees), None),
+                                    labels=[n for n in labels if n != "factory"])
         number = self.gh["next_number"] + 1
 
         def add(state):
@@ -215,8 +254,12 @@ class World:
         if push:
             git("push", "-q", "-u", "origin", j["branch"], cwd=tree)
             if not self.gh["prs"] or all(p["headRefName"] != j["branch"] for p in self.gh["prs"].values()):
+                # A Jira key goes in the title too, so Jira links the pull request.
+                named = isinstance(j["issue"], str)
+                title = f"{j['title']} [{j['issue']}]" if named else j["title"]
+                link = f"Refs {j['issue']}" if named else f"Refs #{j['issue']}"
                 subprocess.run(["gh", "pr", "create", "--draft", "--base", "main", "--head", j["branch"],
-                                "--title", j["title"], "--body", f"Refs #{j['issue']}"], cwd=tree, check=True,
+                                "--title", title, "--body", link], cwd=tree, check=True,
                                capture_output=True)
         self.write(job, "build.md", f"STATUS: {status}\n\n## Summary\n- built\n\n## Blocked\nNeeds a decision.\n")
 
@@ -280,6 +323,7 @@ def world(tmp_path, monkeypatch, repo_template):
         "GIT_COMMITTER_EMAIL": "test@example.com", "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_CONFIG_NOSYSTEM": "1",
         "CLAUDE_CONFIG_DIR": str(tmp_path / "claude"),
+        "JIRA_EMAIL": stub_jira.EMAIL, "JIRA_API_TOKEN": stub_jira.TOKEN,
     }.items():
         monkeypatch.setenv(key, value)
     w.state_file.write_text(json.dumps({
@@ -295,3 +339,5 @@ def world(tmp_path, monkeypatch, repo_template):
     yield w
     if w._factory:
         w._factory.store.release()
+    if w.jira:
+        w.jira.stop()
