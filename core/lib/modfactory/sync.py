@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, LiteralString
 
-from . import graph
+from . import graph, plan_usage
 from .config import BUILTIN_REVIEWERS, Config
 from .util import CORE, GENERATED, ConfigError, is_generated
 
@@ -896,6 +896,11 @@ def sync(cfg, check=False):
             path.unlink()
             if not any(path.parent.iterdir()):
                 path.parent.rmdir()
+    change = plan_usage.settings_change(cfg.repo, plan_usage.wired(cfg))
+    if change:
+        actions.append(("status line", plan_usage.SETTINGS))
+        if not check:
+            plan_usage.apply(cfg.repo, change)
     return actions, notes
 
 

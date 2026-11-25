@@ -57,7 +57,7 @@ function writeSplit(px) {
 const state = {
   index: null, graph: null, config: null, error: null, query: "", range: "30", file: null, source: "all", drawer: null,
   workspace: false, projects: [], selected: readChoice(), queueRows: [], queueErrors: [], queueStale: false,
-  split: readSplit(), now: {}, nowSeq: 0, nowSeen: {}, raw: false,
+  split: readSplit(), now: {}, nowSeq: 0, nowSeen: {}, raw: false, planUsage: null, unit: null,
 };
 if (queryProject()) writeChoice(state.selected);
 
@@ -1473,6 +1473,61 @@ function areaChart(all) {
   });
   return { root, total, mean: total / values.length };
 }
+function claudeOn() {
+  if (state.workspace) return visibleProjects().some((project) => (project.tools || []).includes("claude"));
+  return !!(state.index && (state.index.tools || []).includes("claude"));
+}
+function filled(map) {
+  return !!map && typeof map === "object" && Object.keys(map).length > 0;
+}
+function percent(v) {
+  if (!v) return "0%";
+  return v < 0.1 ? "<0.1%" : (v < 10 ? v.toFixed(1) : Math.round(v)) + "%";
+}
+function resetText(at) {
+  if (at === null || at === undefined || at === "") return "";
+  const d = typeof at === "number" ? new Date(at < 1e12 ? at * 1000 : at) : new Date(at);
+  if (isNaN(d.getTime())) return "";
+  const clock = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (d.getTime() - Date.now() < 86400000) return "resets " + clock;
+  return "resets " + d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) + " " + clock;
+}
+function planCards() {
+  const snap = state.planUsage;
+  if (!snap || !claudeOn()) return null;
+  const card = (key, label, path) => {
+    const w = snap[key];
+    if (!w || typeof w.used_percentage !== "number") return null;
+    const used = w.used_percentage;
+    return statCard(label, Math.round(used) + "%", resetText(w.resets_at), path, false, used >= 80 ? "hot" : "flat");
+  };
+  const cards = [
+    card("five_hour", "Session (5hr)", "M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z"),
+    card("seven_day", "Weekly (7 day)", "M4 6h16M4 6v14h16V6M8 3v6M16 3v6"),
+  ].filter(Boolean);
+  if (!cards.length) return null;
+  return el("div", { class: "cards plan", title: "Claude Code plan usage, as /usage shows it. Seen " + new Date(snap.at).toLocaleString() }, cards);
+}
+function planByStep(all) {
+  const measured = all.some((j) => filled(j.plan_by_step));
+  const shared = all.some((j) => filled(j.usage_share_by_step));
+  if (!claudeOn() || (!measured && !shared)) return null;
+  const totals = {};
+  for (const job of all) {
+    for (const [step, used] of Object.entries(job.plan_by_step || {})) {
+      const t = (totals[step] = totals[step] || { week: 0, session: 0, share: 0 });
+      t.week += Number(used.seven_day) || 0;
+      t.session += Number(used.five_hour) || 0;
+    }
+    for (const [step, share] of Object.entries(job.usage_share_by_step || {})) {
+      const t = (totals[step] = totals[step] || { week: 0, session: 0, share: 0 });
+      t.share += Number(share) || 0;
+    }
+  }
+  const main = (t) => (measured ? t.week : t.share);
+  const rows = Object.entries(totals).filter(([, t]) => main(t) > 0 || t.share > 0).sort((a, b) => main(b[1]) - main(a[1]) || b[1].share - a[1].share).slice(0, 6);
+  return { measured, rows };
+}
 function byStep(all) {
   const priced = all.some((j) => j.cost_usd !== null && j.cost_usd !== undefined);
   const totals = {};
@@ -1536,6 +1591,7 @@ function overview() {
       el("div", {}, el("h1", { text: "Overview" }), el("p", { class: "sub", text: overviewSub() })),
       el("span", { class: "src", text: shown.length + " of " + all.length })),
     ...problemLines(),
+    planCards(),
     el("div", { class: "cards" },
       statCard("Running", String(running.length), slotNote(), "M5 3l14 9-14 9z", true),
       statCard("Merged", String(merged.length), week ? "+" + week + " this week" : "none this week", "M5 12l5 5L20 7", false, week ? "" : "flat"),
@@ -1551,16 +1607,43 @@ function overview() {
           el("div", {}, "Merged in period", el("b", { text: String(chart.total) })),
           el("div", {}, "Per day", el("b", { text: chart.mean.toFixed(1) })),
           el("div", {}, "Merged of finished", el("b", { class: "good", text: all.some((j) => j.finished_at) ? Math.round((100 * merged.length) / all.filter((j) => j.finished_at).length) + "%" : "-" })))),
-      el("div", { class: "panel" },
-        el("h2", { text: split.priced ? "Cost by step" : "Time by step" }),
-        el("p", { class: "sub", text: split.priced ? "API-equivalent, all jobs" : "Agents and scripts, all jobs" }),
-        split.rows.length ? el("div", { class: "bars" }, split.rows.map(([step, v]) => el("div", { class: "bar" },
-          el("div", { class: "row" }, el("span", { class: "name", text: step }), el("span", { class: "num", text: split.priced ? money(v) : span(v) })),
-          el("div", { class: "track" }, el("div", { class: "fill", style: "width:" + Math.max(2, (100 * v) / split.rows[0][1]).toFixed(1) + "%" })),
-          el("div", { class: "pct", text: ((100 * v) / split.sum).toFixed(1) + "%" }))))
-          : el("div", { class: "empty", text: "Nothing has run yet." }))),
+      stepPanel(all, split)),
     el("div", { class: "panel" }, el("div", { class: "head" }, el("h2", { text: "Jobs" }), el("span", { class: "src", text: shown.length + " of " + all.length })), jobTable(shown)),
   ];
+}
+function stepPanel(all, split) {
+  const plan = planByStep(all);
+  const unit = plan && (state.unit === "plan" || !state.unit || !split.priced) ? "plan" : "usd";
+  const unitTab = (key, text) => el("button", { type: "button", "aria-pressed": String(unit === key), text, onclick: () => { state.unit = key; render(); } });
+  const tabs = plan && split.priced ? el("div", { class: "tabs", role: "group", "aria-label": "Unit" }, unitTab("plan", "PLAN"), unitTab("usd", "API $")) : null;
+  let title = split.priced ? "Cost by step" : "Time by step";
+  let sub = split.priced ? "API-equivalent $, all jobs" : "Agents and scripts, all jobs";
+  let bars;
+  if (unit === "plan") {
+    title = "Cost by step";
+    sub = plan.measured
+      ? "Weekly plan limit used, measured before and after each step. Approximate"
+      : "Share of this machine's Claude Code usage over 7 days. Approximate";
+    const main = (t) => (plan.measured ? t.week : t.share);
+    const top = plan.rows.length ? main(plan.rows[0][1]) || 1 : 1;
+    bars = plan.rows.map(([step, t]) => {
+      const extra = [];
+      if (plan.measured) extra.push("5hr " + percent(t.session));
+      if (plan.measured && t.share) extra.push(percent(t.share) + " of usage");
+      return el("div", { class: "bar" },
+        el("div", { class: "row" }, el("span", { class: "name", text: step }), el("span", { class: "num", text: percent(main(t)) + (plan.measured ? " weekly" : " of usage") })),
+        el("div", { class: "track" }, el("div", { class: "fill", style: "width:" + Math.max(2, (100 * main(t)) / top).toFixed(1) + "%" })),
+        el("div", { class: "pct", text: extra.join(" · ") }));
+    });
+  } else {
+    bars = split.rows.map(([step, v]) => el("div", { class: "bar" },
+      el("div", { class: "row" }, el("span", { class: "name", text: step }), el("span", { class: "num", text: split.priced ? money(v) : span(v) })),
+      el("div", { class: "track" }, el("div", { class: "fill", style: "width:" + Math.max(2, (100 * v) / split.rows[0][1]).toFixed(1) + "%" })),
+      el("div", { class: "pct", text: ((100 * v) / split.sum).toFixed(1) + "%" })));
+  }
+  return el("div", { class: "panel" },
+    el("div", { class: "head" }, el("div", {}, el("h2", { text: title }), el("p", { class: "sub", text: sub })), tabs),
+    bars.length ? el("div", { class: "bars" }, bars) : el("div", { class: "empty", text: "Nothing has run yet." }));
 }
 // ---- pipeline ----
 function order(graph) {
@@ -2119,8 +2202,10 @@ async function refreshQueue() {
 async function refreshWorkspace() {
   const body = await load("/projects.json");
   const next = body.projects || [];
-  const changed = JSON.stringify(next) !== JSON.stringify(state.projects);
+  const plan = body.plan_usage || null;
+  const changed = JSON.stringify([next, plan]) !== JSON.stringify([state.projects, state.planUsage]);
   state.projects = next;
+  state.planUsage = plan;
   const hadError = state.error;
   state.error = null;
   if (changed || hadError || route().view === "config") {
@@ -2134,8 +2219,8 @@ async function refreshWorkspace() {
 }
 async function refreshSingle() {
   const [index, graph] = await Promise.all([load("jobs/index.json"), load("jobs/graph.json")]);
-  const changed = JSON.stringify([index.jobs, graph]) !== JSON.stringify([state.index && state.index.jobs, state.graph]);
-  state.index = index; state.graph = graph;
+  const changed = JSON.stringify([index.jobs, graph, index.plan_usage]) !== JSON.stringify([state.index && state.index.jobs, state.graph, state.planUsage]);
+  state.index = index; state.graph = graph; state.planUsage = index.plan_usage || null;
   const hadError = state.error; state.error = null;
   if (route().view === "config" || !state.config) state.config = await load("jobs/config.json");
   // Re-drawing only on change keeps selections and scroll positions while you read.
@@ -2168,6 +2253,7 @@ async function refresh() {
         probed = true;
         state.workspace = true;
         state.projects = found.projects;
+        state.planUsage = found.plan_usage || null;
         state.error = null;
         render();
         refetchDrawer();

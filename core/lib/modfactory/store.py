@@ -4,7 +4,7 @@ import fcntl
 import json
 import re
 
-from . import config, graph
+from . import config, graph, plan_usage
 from .util import Refused, first_line, now, version, write_atomic
 
 RUNNING_TYPES = {"agent", "checks", "review", "merge"}
@@ -115,6 +115,7 @@ class Store:
             "tools": cfg.tools,
             "concurrency": cfg["run"]["concurrency"],
             "labels": cfg["labels"],
+            "plan_usage": plan_usage.read(),
             "jobs": [dict(job, files=self.files(job["id"])) for job in self.all()],
         }
 

@@ -471,7 +471,8 @@ def test_sync_writes_reports_and_removes_what_is_stale(world):
     world.configure('[steps.debug]\nenabled = true\n')
     cfg = config.load(world.repo)
     actions, _ = sync.sync(cfg)
-    assert ("create", ".claude/agents/mfactory-debug.md") in actions and len(actions) == 9
+    assert ("create", ".claude/agents/mfactory-debug.md") in actions and len(actions) == 10
+    assert ("status line", ".claude/settings.local.json") in actions
     assert sync.sync(cfg) == ([], ['rule "user:CLAUDE.md" is not installed on this machine'])
 
     (world.repo / ".claude/agents/mfactory-build.md").write_text("hand edit\n")

@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import activity, checks, cost, graph
+from . import activity, checks, cost, graph, plan_usage
 from .config import RISKS, shown_agent
 from .queue import Queue
 from .scripted import Scripted
@@ -20,6 +20,8 @@ from .store import Store
 from .util import MARKER, Refused, body, first_line, header, now, quote, run, section
 
 CLI = ".factory/bin/mfactory"
+# Steps where an agent works, so the plan usage they add up can be measured.
+AGENT_TYPES = {"agent", "review", "verify"}
 # Files the built-in agent roles write, relative to the job folder.
 ROLE_FILES = {"intake": "intake.md", "spec": "spec.md", "build": "build.md",
               "debug": "round-{round}/debug-{attempt}.md", "approve": "decision.md",
@@ -122,6 +124,7 @@ class Factory(Humans, Scripted, Queue):
             job["head_at_entry"] = self.git(job, "rev-parse", "HEAD").stdout.strip()
         found = {rel: self.signature(job, rel) for rel in self._expected_files(job, target, step)}
         job["entry_files"] = {rel: sig for rel, sig in found.items() if sig}
+        job["plan_at_entry"] = plan_usage.read() if kind in AGENT_TYPES and plan_usage.wired(self.cfg) else None
         return target, skipped
 
     def _refresh_intake(self, job):
@@ -236,6 +239,7 @@ class Factory(Humans, Scripted, Queue):
             job["taken"][key] = job["taken"].get(key, 0) + 1
 
         self._leave(job, name, step)
+        self._measure_plan(job, name)
         if target == escalate:
             job["escalated_from"] = name
         job["reason"] = limit_reason or reason
@@ -255,10 +259,22 @@ class Factory(Humans, Scripted, Queue):
             notes.append("waiting for " + self._who(job))
         return f"{self.tag(job)}: {name} {outcome} -> {landed}" + (f" ({'; '.join(notes)})" if notes else "")
 
+    def _measure_plan(self, job: dict[str, Any], name: str) -> None:
+        """Add the plan usage the step used, from the status line's figures at entry and now."""
+        before: object = job.pop("plan_at_entry", None)
+        used: dict[str, float] | None = plan_usage.delta(before, plan_usage.read())
+        if used is None:
+            return
+        by_step: dict[str, Any] = job.setdefault("plan_by_step", {})
+        by_step[name] = plan_usage.add(by_step.get(name), used)
+
     def _update_cost(self, job: dict[str, Any]) -> None:
         found = cost.job_cost(self.cfg, job, self.dir(job))
         if found:
             job["cost_usd"], job["cost_by_step"], job["cost_unpriced_models"] = found
+        share = cost.usage_share(self.cfg, self.dir(job))
+        if share:  # a step whose usage left the window keeps its last share
+            job["usage_share_by_step"] = (job.get("usage_share_by_step") or {}) | share
         activity.write_snapshot(self.cfg, job, self.dir(job))
 
     # ---- Routing -----------------------------------------------------------

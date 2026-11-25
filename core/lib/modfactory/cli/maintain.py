@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from .. import config
+from .. import config, plan_usage
 from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..install import fetch_release, is_personal, layout, project_cli, upgrade
@@ -239,6 +239,10 @@ def uninstall(repo: Path, remove_config: bool = False, labels: bool = False,
     removed: list[str] = []
     for path in _generated_paths(repo):
         _unlink(path, repo, removed)
+    unwired = plan_usage.settings_change(repo, False)
+    if unwired:
+        plan_usage.apply(repo, unwired)
+        removed.append(f"the plan usage status line from {plan_usage.SETTINGS}")
     factory_dir: Path = repo / ".factory"
     if factory_dir.exists():
         shutil.rmtree(factory_dir)
