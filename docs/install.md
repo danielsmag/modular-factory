@@ -311,7 +311,10 @@ mfactory upgrade --all                        # workspace projects only
 and every project in the workspace. Standing in an installed checkout that is not listed
 updates that checkout too. It prints a plan first, then replaces `.factory/` (not
 `.factory/jobs/`), runs `sync`, and leaves `factory.toml` alone. A checkout already on
-that version is left as it is.
+that version is left as it is, unless its `.factory/` is missing files (for example after an
+upgrade from an old CLI). The plan then shows `repair, missing: ...`, and upgrade copies
+`.factory/` again and runs `sync`. The copy takes its item list from the release it installs,
+not from the CLI that runs it.
 
 A project whose `schema` differs from the release is skipped. The others still upgrade.
 The summary quotes that version's [changelog](../CHANGELOG.md) and tells you to set
