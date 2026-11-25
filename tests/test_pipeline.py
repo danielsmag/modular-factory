@@ -223,6 +223,15 @@ def test_a_one_line_reply_keeps_the_file_the_agent_wrote(world):
     assert world.job(job)["intake"]["risk"] == "medium"
 
 
+def test_a_summary_reply_keeps_the_file_the_agent_wrote(world):
+    job = world.create(world.issue())
+    world.next(job)
+    world.intake(job, risk="medium")
+    world.done(job, reply="DECISION: ACCEPT\n\nI accepted it at medium risk.\n- It is in scope.\n")
+    assert world.job(job)["intake"]["risk"] == "medium"
+    assert "RISK: medium" in (world.dir(job) / "intake.md").read_text()
+
+
 def test_only_intake_may_hand_in_a_reply(world):
     job = world.start(until="spec")
     with pytest.raises(Refused, match="only the intake agent returns its file as a reply"):

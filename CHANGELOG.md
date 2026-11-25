@@ -6,7 +6,9 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
-- fix: `mfactory upgrade` repairs a `.factory/` that is on the current version but missing files (such as `templates` after an upgrade from 0.3.x), and copies the item list of the release it installs.
+## 0.25.1
+
+- fix: `done --reply` no longer overwrites an intake.md the agent wrote itself when the agent replies with a summary; the reply replaces the file only when it carries a whole header (`DECISION:` then `RISK:`).
 - style: the dashboard uses the shell-command blue for running work (card border, pulse, "running" chip, the "now" rows), job and issue IDs, links, and code. Orange still means a human is needed.
 
 ## 0.25.0
