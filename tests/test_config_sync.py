@@ -24,7 +24,7 @@ def problems(world, text):
 def test_tables_merge_key_by_key_and_other_values_replace(world):
     cfg = load(world, '[run]\nconcurrency = 5\n[checks]\ncommands = ["make test"]\n')
     assert cfg["run"] == {"concurrency": 5, "start": "intake", "escalate_to": "escalated",
-                          "pick": "all", "authors": [], "assignees": []}
+                          "pick": "all", "report_problems": False, "authors": [], "assignees": []}
     assert cfg["checks"] == {"commands": ["make test"], "timeout_minutes": 30}
     assert cfg["workspace"] == {"concurrency": 3}
     assert cfg.sources[("workspace", "concurrency")] == "default"
@@ -134,7 +134,8 @@ deploy = { model = "opus" }
 reviewer-code = { low = { speed = "fast" } }
 """) == [
         "[run].concurrency must be a whole number of at least 1 (got 0)",
-        "[run].max_rounds is not a setting. Known: assignees, authors, concurrency, escalate_to, pick, start",
+        "[run].max_rounds is not a setting. "
+        "Known: assignees, authors, concurrency, escalate_to, pick, report_problems, start",
         '[checks].commands must be a list of non-empty strings (got "npm test")',
         '[tools].enabled has "copilot", which is not a tool. Known: claude, codex, cursor',
         '[steps.build].port must be true or false (got "yes")',

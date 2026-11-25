@@ -248,6 +248,8 @@ class Factory(Humans, Scripted, Queue):
         landed, skipped = self._enter(job, target)
         job["history"].append(entry | {"to": landed, "skipped": skipped})
         self._update_cost(job)
+        if target == escalate:
+            self._report_problem(job, name, outcome)
         self.store.save(job)
 
         notes = []
@@ -258,6 +260,19 @@ class Factory(Humans, Scripted, Queue):
         if job.get("waiting"):
             notes.append("waiting for " + self._who(job))
         return f"{self.tag(job)}: {name} {outcome} -> {landed}" + (f" ({'; '.join(notes)})" if notes else "")
+
+    def _report_problem(self, job: dict[str, Any], step: str, outcome: str) -> None:
+        """When `[run].report_problems` is on, open one issue per job that went wrong. Never queues it."""
+        if not self.cfg["run"]["report_problems"] or job.get("problem_issue"):
+            return
+        reason: str = job["reason"] or f"{step} ended with {outcome}"
+        try:
+            job["problem_issue"] = self.gh.create_issue(
+                f"Factory problem: {job['title']} (#{job['issue']})",
+                f"Job `{job['id']}` for #{job['issue']} needs a person. It left `{step}` with {outcome}.\n\n"
+                f"{reason}\n\nThe job's files are under `.factory/jobs/{job['id']}/`.")
+        except Refused as e:
+            job["reason"] = f"{job['reason'] or reason} (could not open a problem issue: {e})"
 
     def _measure_plan(self, job: dict[str, Any], name: str) -> None:
         """Add the plan usage the step used, from the status line's figures at entry and now."""

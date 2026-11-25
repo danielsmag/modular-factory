@@ -129,7 +129,8 @@ def main(argv):
             n = state["next_number"]
             state["issues"][str(n)] = {
                 "number": n, "title": named["title"], "body": body_of(named), "state": "OPEN",
-                "author": {"login": state["user"]}, "assignees": [], "labels": [{"name": named["label"]}],
+                "author": {"login": state["user"]}, "assignees": [],
+                "labels": [{"name": named["label"]}] if "label" in named else [],
                 "url": f"https://github.test/acme/app/issues/{n}", "comments": [],
                 "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z"}
             out = state["issues"][str(n)]["url"]
