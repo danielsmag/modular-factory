@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.25.1
+
 - fix: `done --reply` no longer overwrites an intake.md the agent wrote itself when the agent replies with a summary; the reply replaces the file only when it carries a whole header (`DECISION:` then `RISK:`).
 - style: the dashboard uses the shell-command blue for running work (card border, pulse, "running" chip, the "now" rows), job and issue IDs, links, and code. Orange still means a human is needed.
 
