@@ -23,6 +23,8 @@ LIST_FIELDS = "summary,status,reporter,assignee,labels,created,updated"
 IDS_PER_CALL = 1000
 # Issue keys in one JQL `key in (...)`.
 KEYS_PER_CALL = 50
+# Cards read from the board to find one in each status, for checking the workflow's transitions.
+SAMPLE_CARDS = 500
 
 
 def _same(a: str, b: str) -> bool:
@@ -38,7 +40,12 @@ class JiraTracker:
     # Jira's development panel finds a pull request by the issue key in its title.
     links_by_title = True
 
-    def __init__(self, settings: dict[str, Any], client: Client | None = None):
+    def __init__(self, settings: dict[str, Any], client: Client | None = None,
+                 steps: dict[str, Any] | None = None, start: str = "", escalate: str = ""):
+        # The pipeline, for reports that compare the board with it.
+        self.steps: dict[str, Any] = steps or {}
+        self.start: str = start
+        self.escalate: str = escalate
         self.board: int = settings["board"]
         self.jql: str = str(settings.get("jql") or "").strip()
         self.columns: dict[str, Any] = settings.get("columns") or {}
@@ -53,7 +60,8 @@ class JiraTracker:
 
     @classmethod
     def from_config(cls, cfg, gh=None) -> "JiraTracker":
-        return cls(cfg["tracker"]["jira"])
+        return cls(cfg["tracker"]["jira"], steps=cfg.steps, start=cfg["run"]["start"],
+                   escalate=cfg["run"]["escalate_to"])
 
     # -- keys
 
@@ -136,6 +144,10 @@ class JiraTracker:
     def withdrawn(self, key: Key, queued: set[Key]) -> str | None:
         """A running job's card has left the queue column for its step's column, which is no reason to stop."""
         return None
+
+    def queue_note(self) -> str:
+        shown: str = ", ".join(f"`{name}`" for name in board.queue_statuses(self.columns))
+        return f"the queue is {shown} on board {self.board}"
 
     def empty_note(self) -> str:
         shown: str = ", ".join(f"`{name}`" for name in board.queue_statuses(self.columns))
@@ -332,11 +344,103 @@ class JiraTracker:
     def install(self, say) -> None:
         """Jira needs nothing created: the board's columns are the queue and the steps."""
 
+    def board_report(self) -> dict[str, Any]:
+        """The mapping against the live board: a row per step, what is wrong, and what could not be checked."""
+        layout: dict[str, Any] = self.api.get(f"/rest/agile/1.0/board/{self.board}/configuration")
+        names: dict[str, str] = {str(s.get("id")): str(s.get("name")) for s in self.api.get("/rest/api/3/status")
+                                 if isinstance(s, dict)}
+        column_of: dict[str, str] = {}
+        on_board: list[str] = []
+        for column in (layout.get("columnConfig") or {}).get("columns") or []:
+            for status in column.get("statuses") or []:
+                name: str | None = names.get(str(status.get("id")))
+                if name and name.casefold() not in column_of:
+                    column_of[name.casefold()] = str(column.get("name"))
+                    on_board.append(name)
+        known: set[str] = {name.casefold() for name in names.values()}
+        used: set[str] = set()
+
+        def row(step: str, kind: str, enabled: bool, status: str | None) -> dict[str, Any]:
+            column: str | None = None
+            problem: str | None = None
+            if status is not None:
+                used.add(status.casefold())
+                column = column_of.get(status.casefold())
+                if status.casefold() not in known:
+                    problem = f"Jira has no status `{status}`"
+                elif column is None:
+                    problem = f"`{status}` is on no column of board {self.board}, so the card leaves the board"
+            return {"step": step, "type": kind, "enabled": enabled, "status": status, "column": column,
+                    "problem": problem}
+
+        queue: list[str] = board.queue_statuses(self.columns)
+        rows: list[dict[str, Any]] = [row(board.QUEUE, "-", True, status) for status in queue]
+        rows += [row(name, step["type"], step.get("enabled", True), self.status_for(name))
+                 for name, step in self.steps.items()]
+        rows += [row(state, "end", True, self.status_for(state)) for state in ("done", "rejected", "failed")]
+        sound: set[str] = {r["status"].casefold() for r in rows if r["status"] and not r["problem"]}
+        problems, unchecked = self._workflow_gaps(queue, sound)
+        return {"tracker": self.kind, "site": self.site, "board": self.board, "rows": rows,
+                "unused": [name for name in on_board if name.casefold() not in used],
+                "problems": problems, "unchecked": unchecked}
+
+    def _workflow_gaps(self, queue: list[str], sound: set[str]) -> tuple[list[str], list[str]]:
+        """Moves the pipeline needs and the workflow lacks, and the statuses no card could show them for.
+
+        Jira lists an issue's transitions, not a workflow's, so each status is checked through one card
+        that is in it now.
+        """
+        needed: dict[str, list[tuple[str, str, str]]] = {}
+        for a, b, why in board.transitions(self.steps, self.status_for, queue, self.start, self.escalate):
+            if a.casefold() in sound and b.casefold() in sound:
+                needed.setdefault(a, []).append((a, b, why))
+        if not needed:
+            return [], []
+        sample: dict[str, str] = {}
+        for card in self.api.pages("GET", f"/rest/agile/1.0/board/{self.board}/issue", "issues",
+                                   limit=SAMPLE_CARDS, fields="status"):
+            where: str = ((card.get("fields") or {}).get("status") or {}).get("name") or ""
+            sample.setdefault(where.casefold(), card["key"])
+        problems: list[str] = []
+        unchecked: list[str] = []
+        for status, moves in needed.items():
+            key: str | None = sample.get(status.casefold())
+            if key is None:
+                unchecked.append(status)
+                continue
+            found: dict[str, Any] = self.api.get(f"/rest/api/3/issue/{key}", fields="status", expand="transitions")
+            allowed: set[str] = {str((t.get("to") or {}).get("name") or "").casefold()
+                                 for t in found.get("transitions") or []}
+            problems += [f"the workflow has no transition from `{a}` to `{b}` ({why})"
+                         for a, b, why in moves if b.casefold() not in allowed]
+        return problems, unchecked
+
     def doctor(self, ok, warn, fail) -> None:
         try:
             ok(f"Jira: signed in to {self.site} as {self.mention(self.operator())}")
+            report: dict[str, Any] = self.board_report()
         except Refused as error:
             fail(str(error))
+            return
+        bad: list[dict[str, Any]] = [r for r in report["rows"] if r["problem"]]
+        for found in bad:
+            fail(f"[tracker.jira.columns].{found['step']}: {found['problem']}")
+        if not bad:
+            ok(f"Jira board {self.board}: every mapped status is on the board")
+        for problem in report["problems"]:
+            fail(f"Jira: {problem}")
+        if report["unchecked"]:
+            warn(f"Jira: transitions not checked from {', '.join(report['unchecked'])}: "
+                 "no card is in those statuses now")
+        for name, step in self.steps.items():
+            if step.get("type") != "human" or not step.get("enabled", True):
+                continue
+            if self.status_for(name) is None:
+                warn(f"[steps.{name}] has no status in [tracker.jira.columns], so it is answered by comment only")
+            for status, outcomes in board.drags(self.steps, self.status_for, name).items():
+                if len(outcomes) > 1:
+                    warn(f"[steps.{name}]: moving the card to `{status}` could mean {' or '.join(outcomes)}, "
+                         "so it is answered by comment only")
 
     def uninstall(self, say) -> None:
         """Nothing was created in Jira, so nothing is deleted."""

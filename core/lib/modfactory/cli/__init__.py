@@ -43,6 +43,35 @@ def _index_note(factory: Factory, out: TextIO) -> None:
     print(f"note: index.json dropped {', '.join(dropped)} (job folder gone)", file=out, flush=True)
 
 
+def _tracker_show(factory: Factory, as_json: bool) -> int:
+    """`mfactory tracker show`: each step, its status and its board column. 1 when the board has a problem."""
+    report: dict[str, Any] | None = factory.tracker.board_report()
+    if report is None:
+        print(f"{factory.tracker.label} issues have no board: {factory.tracker.queue_note()}")
+        return 0
+    wrong: bool = bool(report["problems"]) or any(row["problem"] for row in report["rows"])
+    if as_json:
+        print(json.dumps(report))
+        return 1 if wrong else 0
+    print(f"{factory.tracker.label} board {report['board']} at {report['site']}")
+    table: list[tuple[str, str, str, str, str]] = [("step", "type", "status", "column", "")]
+    for row in report["rows"]:
+        note: str = row["problem"] or ("switched off" if not row["enabled"] else
+                                       "" if row["status"] else "no status: the card stays where it is")
+        table.append((row["step"], row["type"], row["status"] or "-", row["column"] or "-", note))
+    widths: list[int] = [max(len(line[i]) for line in table) for i in range(4)]
+    for line in table:
+        print("  ".join(cell.ljust(width) for cell, width in zip(line, widths, strict=False)) + (
+            f"  {line[4]}" if line[4] else ""))
+    if report["unused"]:
+        print(f"statuses no step uses: {', '.join(report['unused'])}")
+    for problem in report["problems"]:
+        print(f"problem: {problem}")
+    if report["unchecked"]:
+        print(f"transitions not checked from: {', '.join(report['unchecked'])} (no card is in those statuses now)")
+    return 1 if wrong else 0
+
+
 def _stdin_text() -> str:
     return "" if sys.stdin.isatty() else sys.stdin.read()
 
@@ -214,6 +243,13 @@ def run(args: argparse.Namespace) -> int:
         elif command == "route":
             job = factory.store.read(factory.store.find(args.job))
             print(json.dumps(job["agents"] or factory.route(dict(job)), indent=1))
+        elif command == "tracker" and args.tracker_what == "show":
+            return _tracker_show(factory, args.json)
+        elif command == "tracker":
+            if factory.tracker.board_report() is None:
+                print(f"{factory.tracker.label} issues have no board: nothing to move")
+                return 0
+            return 0 if factory.sync_cards() else 1
     return 0
 
 

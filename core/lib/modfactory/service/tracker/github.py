@@ -84,6 +84,9 @@ class GitHubTracker:
             return None
         return f"issue is closed or no longer labeled {self.labels['queue']}"
 
+    def queue_note(self) -> str:
+        return f"the queue is the `{self.labels['queue']}` label"
+
     def empty_note(self) -> str:
         return f"no open issue is labeled `{self.labels['queue']}`"
 
@@ -170,6 +173,9 @@ class GitHubTracker:
         return {}
 
     def last_move(self, key: Key, status: str) -> dict[str, Any] | None:
+        return None
+
+    def board_report(self) -> dict[str, Any] | None:
         return None
 
     # -- the pull request's link to the issue

@@ -87,3 +87,53 @@ def drag_outcomes(steps: dict[str, Any], status_of: Callable[[str], str | None],
         if _same(known, status):
             return outcomes
     return []
+
+
+# ---- What the board's workflow must allow ----------------------------------
+
+
+def transitions(steps: dict[str, Any], status_of: Callable[[str], str | None], queue: list[str], start: str,
+                escalate: str) -> list[tuple[str, str, str]]:
+    """Every move of a card the pipeline can make, as (from status, to status, the edge that needs it).
+
+    A step that is switched off is passed through, as a job passes through it. A step with no status
+    keeps the card where it was, so the move goes on to the steps after it.
+    """
+    out: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(a: str, b: str, why: str) -> None:
+        pair: tuple[str, str] = (a.casefold(), b.casefold())
+        if pair[0] != pair[1] and pair not in seen:
+            seen.add(pair)
+            out.append((a, b, why))
+
+    def landings(target: str, trail: tuple[str, ...] = ()) -> list[str]:
+        """The statuses a card can next be put in when its job goes to `target`."""
+        target, _ = graph.resolve(steps, target)
+        status: str | None = status_of(target)
+        if status is not None:
+            return [status]
+        if target in graph.END_STATES or target in trail:
+            return []
+        found: list[str] = []
+        for edge in steps[target].get("on", {}).values():
+            found += landings(edge["to"], trail + (target,))
+            if "max" in edge:
+                found += landings(escalate, trail + (target,))
+        return found
+
+    for status in queue:
+        for landing in landings(start):
+            add(status, landing, "a new job")
+    for name, step in steps.items():
+        own: str | None = status_of(name)
+        if own is None or not graph.enabled(step):
+            continue
+        for outcome, edge in step.get("on", {}).items():
+            for landing in landings(edge["to"]):
+                add(own, landing, f"{name} {outcome}")
+            if "max" in edge:
+                for landing in landings(escalate):
+                    add(own, landing, f"{name} {outcome} reaches its max")
+    return out

@@ -6,6 +6,7 @@ A tracker with no board gives no status for any step, and everything here return
 from typing import Any
 
 from .. import board, graph
+from ..util import Refused
 from .human import COMMAND, NEEDS_TEXT
 
 NOTE_HEADING = "### Factory: the card was moved back"
@@ -141,3 +142,34 @@ class Cards:
                 if job:
                     self._settle_card(job, name, kind, data)
         return answered
+
+    def sync_cards(self) -> bool:
+        """`mfactory tracker sync`: put every unfinished job's card in its step's status. False when one failed.
+
+        For use after the board or `[tracker.jira.columns]` changed. Finished jobs keep their cards.
+        """
+        jobs: list[dict[str, Any]] = [j for j in self.store.all()
+                                      if j["step"] not in graph.END_STATES and j["step"] in self.cfg.steps]
+        mapped: list[Any] = [j["issue"] for j in jobs if self.tracker.status_for(j["step"]) is not None]
+        where: dict[Any, str] = self.tracker.statuses(mapped) if mapped else {}
+        fine: bool = True
+        for j in jobs:
+            head: str = f"{self.tracker.ref(j['issue'])}  {j['id']}  {j['step']}"
+            expected: str | None = self.tracker.status_for(j["step"])
+            current: str | None = where.get(j["issue"])
+            if expected is None:
+                self.say(f"skip   {head}  no status for this step")
+            elif current is not None and _same(current, expected):
+                self.say(f"ok     {head}  `{current}`")
+            else:
+                job: dict[str, Any] = self.store.open(j["id"])
+                try:
+                    self.tracker.move(job["issue"], job["step"])
+                except Refused as error:
+                    fine = False
+                    self.say(f"FAIL   {head}  {error}")
+                    continue
+                job["board"] = {"status": expected}
+                self.store.save(job)
+                self.say(f"moved  {head}  `{current or 'unknown'}` -> `{expected}`")
+        return fine

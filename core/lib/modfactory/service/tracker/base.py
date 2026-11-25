@@ -52,6 +52,10 @@ class Tracker(Protocol):
         """Why a running job's issue no longer asks to be built, or None. `queued` is the keys in `queue`."""
         ...
 
+    def queue_note(self) -> str:
+        """How the queue is kept, as a clause."""
+        ...
+
     def empty_note(self) -> str:
         """What an empty queue means, as the start of a sentence."""
         ...
@@ -122,6 +126,10 @@ class Tracker(Protocol):
 
     def last_move(self, key: Key, status: str) -> dict[str, Any] | None:
         """The newest move of the card into `status`: `by` (a person), `from` and `to`. None when unknown."""
+        ...
+
+    def board_report(self) -> dict[str, Any] | None:
+        """The steps against the live board: `rows`, `unused`, `problems`, `unchecked`. None with no board."""
         ...
 
     # -- the pull request's link to the issue

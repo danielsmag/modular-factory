@@ -336,7 +336,7 @@ def test_doctor_says_which_jira_account_is_signed_in(world):
     found = tracker(world)
     ok, failed = [], []
     found.doctor(ok.append, ok.append, failed.append)
-    assert ok == [f"Jira: signed in to {world.jira.url} as Olivia Operator"]
+    assert ok[0] == f"Jira: signed in to {world.jira.url} as Olivia Operator"
     assert failed == []
 
 

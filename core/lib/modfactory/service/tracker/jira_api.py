@@ -102,10 +102,16 @@ class Client:
     def post(self, path: str, body: object, **params: Any) -> Any:
         return self.request("POST", path, params, body)
 
-    def pages(self, method: str, path: str, key: str, body: object = None, **params: Any) -> list[Any]:
-        """Every item of a paged list, read `PAGE` at a time. `key` is the field that holds one page."""
+    def pages(self, method: str, path: str, key: str, body: object = None, limit: int | None = None,
+              **params: Any) -> list[Any]:
+        """Every item of a paged list, read `PAGE` at a time. `key` is the field that holds one page.
+
+        `limit` stops reading once that many items are in hand.
+        """
         out: list[Any] = []
         while True:
+            if limit is not None and len(out) >= limit:
+                return out
             found: object = self.request(method, path, dict(params, startAt=len(out), maxResults=PAGE), body)
             page: object = found.get(key) if isinstance(found, dict) else None
             if not isinstance(page, list) or not page:
