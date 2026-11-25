@@ -71,22 +71,23 @@ def has_dashboard_page() -> bool:
 def dashboard_page() -> bytes:
     """The dashboard as one document.
 
-    `dashboard.css` and `dashboard.js` are inlined. The browser is not given a
-    separate file to load: the page's policy allows only inline style and script.
+    `dashboard.css`, `markdown.js` and `dashboard.js` are inlined. The browser is
+    not given a separate file to load: the page's policy allows only inline style
+    and script.
     """
     root: Path = web_dir()
-    names: tuple[str, ...] = ("dashboard.html", "dashboard.css", "dashboard.js")
+    inlined: tuple[str, ...] = ("dashboard.css", "markdown.js", "dashboard.js")
+    names: tuple[str, ...] = ("dashboard.html", *inlined)
     missing: list[str] = [name for name in names if not (root / name).is_file()]
     if missing:
         raise FactoryError(f"{root} is missing {', '.join(missing)}")
     page: str = (root / "dashboard.html").read_text()
-    style: str = (root / "dashboard.css").read_text()
-    script: str = (root / "dashboard.js").read_text()
-    style_mark: str = "/* dashboard.css */\n"
-    script_mark: str = "/* dashboard.js */\n"
-    if style_mark not in page or script_mark not in page:
+    marks: dict[str, str] = {name: f"/* {name} */\n" for name in inlined}
+    if any(mark not in page for mark in marks.values()):
         raise FactoryError(f"{root / 'dashboard.html'} is missing its style or script marker")
-    return page.replace(style_mark, style, 1).replace(script_mark, script, 1).encode()
+    for name, mark in marks.items():
+        page = page.replace(mark, (root / name).read_text(), 1)
+    return page.encode()
 
 
 def now():
