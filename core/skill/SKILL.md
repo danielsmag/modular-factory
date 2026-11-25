@@ -134,8 +134,13 @@ request the factory commented on; `next` and `queue` pick those up. A step
 with `replies = "tool"` ignores those comments; only the `answer` command
 counts. Merging a job's pull request by hand also counts as approving it.
 
-A rejected job is over. To run its issue again, delete `.factory/jobs/<job>`
-and put the factory's label back on the issue.
+A rejected job is over. To run its issue again, run `mfactory delete <job>`
+and put the factory's label back on the issue. `delete` removes the job
+folder and rewrites the dashboard index. It refuses while a worktree, a
+local branch, a remote branch, or an open pull request still exists. Pass
+`--worktree`, `--branch`, `--remote`, or `--pr` for each one, or `--force`
+for all four. `--branch` also removes the worktree, because a checked-out
+branch cannot be deleted. The issue stays open.
 
 ## Closing issues and jobs
 

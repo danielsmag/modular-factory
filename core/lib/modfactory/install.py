@@ -14,6 +14,7 @@ from pathlib import Path
 
 from . import checks, config, graph
 from . import sync as syncer
+from .store import Store
 from .util import CORE, SOURCE_REPO, ConfigError, FactoryError, Refused, run, tail, version
 
 ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "templates", "VERSION"]
@@ -410,6 +411,11 @@ def doctor(repo, run_checks=True, say=print):
     closed: str | None = graph.closed_issue_warning(cfg.steps, cfg["project"].get("issue_link", "refs"))
     if closed:
         warn(closed)
+    dropped: list[str] = Store(cfg).reconcile_index()
+    if dropped:
+        ok(f"index.json rewritten; dropped {', '.join(dropped)}")
+    else:
+        ok("index.json matches the job folders")
 
     # tools
     for tool in cfg.tools:

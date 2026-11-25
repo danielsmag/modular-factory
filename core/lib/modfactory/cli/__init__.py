@@ -35,6 +35,14 @@ def _stale_note(cfg, out: TextIO = sys.stdout) -> None:
               "Run `.factory/bin/mfactory sync` and commit the result.", file=out, flush=True)
 
 
+def _index_note(factory: Factory, out: TextIO) -> None:
+    """Say when the dashboard index listed job folders that are gone."""
+    dropped: list[str] = factory.store.reconcile_index()
+    if not dropped:
+        return
+    print(f"note: index.json dropped {', '.join(dropped)} (job folder gone)", file=out, flush=True)
+
+
 def _stdin_text() -> str:
     return "" if sys.stdin.isatty() else sys.stdin.read()
 
@@ -169,10 +177,12 @@ def run(args: argparse.Namespace) -> int:
         factory: Factory = Factory(cfg)
         if command == "queue" and args.json:
             _stale_note(cfg, sys.stderr)
+            _index_note(factory, sys.stderr)
             queued: tuple[list[tuple[Any, ...]], list[dict[str, Any]]] = factory.queue_and_issues()
             print(json.dumps(queue_json(*queued)))
         elif command == "queue":
             _stale_note(cfg)
+            _index_note(factory, sys.stdout)
             rows = factory.queue()
             for row in rows:
                 print("  ".join(str(cell) for cell in row))
@@ -191,6 +201,9 @@ def run(args: argparse.Namespace) -> int:
             factory.close_issue(args.job, not_planned=args.not_planned)
         elif command == "close":
             factory.close_job(args.job, merged=args.merged)
+        elif command == "delete":
+            factory.delete(args.job, worktree=args.worktree, branch=args.branch, remote=args.remote,
+                           pr=args.pr, force=args.force)
         elif command == "move":
             factory.move(args.job, args.step, " ".join(args.text) or _stdin_text())
         elif command == "route":

@@ -45,7 +45,7 @@ class Queue:
         for j in self.store.all():
             if j["issue"] == number:
                 raise Refused(f"issue #{number} already has job {j['id']} (at {j['step']}). "
-                              f"To start over, delete .factory/jobs/{j['id']}.")
+                              f"To start over, run mfactory delete {j['id']}.")
         running = [j["id"] for j in self.store.running()]
         limit = self.cfg["run"]["concurrency"]
         if len(running) >= limit:
@@ -114,6 +114,7 @@ class Queue:
     def queue_and_issues(self: _QueueHost) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]:
         """The rows of `queue`, and the labeled open issues the one `gh issue list` call returned."""
         labels, limit = self.cfg["labels"], self.cfg["run"]["concurrency"]
+        self.store.reconcile_index()
         for stale in self.store.all():
             if stale["pr"] and not stale["merge_sha"] and stale["step"] not in graph.END_STATES:
                 job = self.store.try_open(stale["id"])
@@ -131,7 +132,7 @@ class Queue:
             if name in graph.END_STATES:
                 if n in open_numbers:
                     other.append(("skip", n, j["id"], name,
-                                  f"finished; delete .factory/jobs/{j['id']} to run it again"))
+                                  f"finished; mfactory delete {j['id']} to run it again"))
             elif step is None:
                 other.append(("skip", n, j["id"], name, "factory.toml no longer has this step"))
             elif step["type"] == "human":
