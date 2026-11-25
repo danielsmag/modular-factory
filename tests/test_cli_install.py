@@ -263,7 +263,10 @@ def test_doctor_passes_on_a_ready_project(world):
                  "Everything a run needs is in place."):
         assert line in res.stdout, line
     assert "ok    the checks pass on origin/main" in res.stdout
-    assert "warn  Claude Code: `claude` isn't on PATH" in res.stdout
+    if shutil.which("claude"):
+        assert "ok    Claude Code: " in res.stdout
+    else:
+        assert "warn  Claude Code: `claude` isn't on PATH" in res.stdout
     assert "still points at it" not in res.stdout
     assert "nothing asks a person to merge" not in res.stdout
 
