@@ -510,14 +510,14 @@ class Factory(Humans, Scripted, Queue):
     def _intake_done(self, job, path, outcome):
         h = header(path)
         surfaces = [s.strip() for s in h.get("SURFACES", "").split(",") if s.strip() and s.strip() != "none"]
-        unknown = [s for s in surfaces if s not in self.cfg["surfaces"]]
+        unknown = [s for s in surfaces if s not in self.cfg.live_surfaces]
         if h.get("DECISION") != outcome:
             raise Refused(f"intake.md's first line must be `DECISION: {' | '.join(self.cfg.steps[job['step']]['on'])}`")
         if h.get("RISK") not in RISKS:
             raise Refused(f"intake.md says RISK: {h.get('RISK')!r}; it must be one of {', '.join(RISKS)}")
         if unknown:
             raise Refused(f"intake.md names surfaces factory.toml doesn't have: {', '.join(unknown)}. "
-                          f"Known: {', '.join(self.cfg['surfaces']) or 'none'}")
+                          f"Known: {', '.join(self.cfg.live_surfaces) or 'none'}")
         job["intake"] = {"decision": outcome, "risk": h["RISK"], "surfaces": surfaces,
                          "rescoped": h.get("RESCOPED") == "yes"}
         if outcome == "ACCEPT":

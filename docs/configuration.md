@@ -568,14 +568,32 @@ port = true
 reviewers = ["ux", "ui", "a11y"]
 ```
 
+A project with no user interface can switch reviewers off. A switched-off
+reviewer gets no agent file and no row in `mfactory models`. A switched-off
+surface is not offered to intake. An enabled surface that lists a switched-off
+reviewer fails validation, so switch the surface off too, or restate its list:
+
+```toml
+[reviewers.ux]
+enabled = false
+
+[reviewers.ui]
+enabled = false
+
+[surfaces.ui]
+enabled = false
+```
+
 | Key | Meaning |
 | --- | --- |
+| `[reviewers.<name>] enabled` | `false` switches the reviewer off, built-in or added. |
 | `[reviewers.<name>] focus` | What this reviewer looks for. A reviewer you add needs this or `prompt`. |
 | `[reviewers.<name>] prompt` | A file in the repo, read after the reviewer role. Path from the repo root. The file must exist. |
 | `[reviewers.<name>] context` | Project facts added to its prompt. |
 | `[reviewers.<name>] skills` | Skills it reads: a project skill, `user:name`, `plugin:skill`, or `all`. |
 | `[reviewers.<name>] rules` | Instruction files it reads: `AGENTS.md`, `CLAUDE.md`, a rule path, `user:CLAUDE.md`, or `all`. |
 | `[reviewers.<name>] port` | `true` gives it a port for a dev server, for reviewers that look at the running app. |
+| `[surfaces.<name>] enabled` | `false` hides the surface from intake. Its reviewers do not run on every job. |
 | `[surfaces.<name>] when` | One line telling intake when a change touches this surface. |
 | `[surfaces.<name>] reviewers` | The reviewers that run on jobs with this surface. |
 

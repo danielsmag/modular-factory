@@ -6,6 +6,7 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- `[reviewers.<name>] enabled = false` switches a reviewer off, built-in or added, and `[surfaces.<name>] enabled = false` hides a surface from intake. A project with no user interface can drop `ux`, `ui` and the `ui` surface. A switched-off reviewer gets no agent file and no row in `mfactory models`. An enabled surface that lists a switched-off reviewer fails validation. The schema is unchanged.
 - `[tools.claude] resume_builder = true` resumes a job's builder across rounds in Claude Code. `next` prints a `name:` line for the build step, and the orchestrator wakes the builder it started under that name with SendMessage. The builder keeps its context, so a CHANGES round costs less. The dashboard splits a resumed builder's transcript into one run per round.
 
 ## 0.19.0

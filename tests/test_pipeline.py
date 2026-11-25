@@ -234,6 +234,16 @@ def test_intake_names_only_known_surfaces(world):
         world.done(job)
 
 
+def test_intake_cannot_name_a_switched_off_surface(world):
+    world.configure("[reviewers.ux]\nenabled = false\n[reviewers.ui]\nenabled = false\n"
+                    "[surfaces.ui]\nenabled = false\n")
+    job = world.create(world.issue())
+    world.next(job)
+    world.intake(job, surfaces="ui")
+    with pytest.raises(Refused, match="surfaces factory.toml doesn't have: ui. Known: security"):
+        world.done(job)
+
+
 def test_intake_reject_ends_the_job_and_tells_the_author(world):
     number = world.issue()
     job = world.create(number)

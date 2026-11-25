@@ -85,6 +85,16 @@ class Config:
         return self.data["reviewers"]
 
     @property
+    def live_reviewers(self):
+        """The reviewers that are switched on."""
+        return [name for name, r in self.reviewers.items() if graph.enabled(r)]
+
+    @property
+    def live_surfaces(self):
+        """The surfaces intake may name: the ones that are switched on."""
+        return {name: s for name, s in self.data["surfaces"].items() if graph.enabled(s)}
+
+    @property
     def tools(self):
         return self.data["tools"]["enabled"]
 
@@ -128,7 +138,8 @@ class Config:
                 continue
             if step.get("type") == "agent" or (step.get("type") == "verify" and (every or step.get("agent"))):
                 keys.append(name)
-        return keys + [f"reviewer-{name}" for name in self.reviewers]
+        reviewers = self.reviewers if every else self.live_reviewers
+        return keys + [f"reviewer-{name}" for name in reviewers]
 
     def variants(self, key):
         """Risk levels for which any enabled tool gives this agent its own model or effort."""
@@ -152,11 +163,18 @@ class Config:
         return chosen
 
     def reviewers_for(self, surfaces):
-        """Reviewers no surface claims run on every job; a surface adds its own."""
+        """Reviewers no surface claims run on every job; a surface adds its own.
+
+        A reviewer on a switched-off surface stays claimed, so it does not start
+        running on every job. Switched-off reviewers and surfaces add nothing.
+        """
         claimed = {r for s in self.data["surfaces"].values() for r in s.get("reviewers", [])}
-        chosen = [r for r in self.reviewers if r not in claimed]
+        live = self.live_reviewers
+        chosen = [r for r in live if r not in claimed]
         for surface in surfaces:
-            chosen += [r for r in self.data["surfaces"][surface]["reviewers"] if r not in chosen]
+            if surface not in self.live_surfaces:
+                continue
+            chosen += [r for r in self.data["surfaces"][surface]["reviewers"] if r in live and r not in chosen]
         return chosen
 
 
@@ -362,8 +380,9 @@ STEP_KEYS = {
                "wait": a_string, "timeout_minutes": an_int(1), "url": a_string,
                "skills": a_string_list, "rules": a_string_list, "context": a_string, "port": a_bool},
 }
-REVIEWER_KEYS = {"focus": a_filled_string, "prompt": a_filled_string, "context": a_string,
+REVIEWER_KEYS = {"enabled": a_bool, "focus": a_filled_string, "prompt": a_filled_string, "context": a_string,
                  "skills": a_string_list, "rules": a_string_list, "port": a_bool}
+SURFACE_KEYS = {"enabled": a_bool, "when": a_filled_string, "reviewers": a_string_list}
 BUILTIN_REVIEWERS = ("code", "security", "ux", "ui")
 TOP = set(TABLES) | {"schema", "tools", "steps", "reviewers", "surfaces", "models"}
 
@@ -475,7 +494,8 @@ def check(cfg):
             out.append(f"[reviewers.{name}]: a reviewer name is lowercase letters, digits and hyphens")
         test_table(f"reviewers.{name}", reviewer, REVIEWER_KEYS)
         if isinstance(reviewer, dict):
-            if name not in BUILTIN_REVIEWERS and not reviewer.get("focus") and not reviewer.get("prompt"):
+            needs_focus = name not in BUILTIN_REVIEWERS and reviewer.get("enabled", True) is not False
+            if needs_focus and not reviewer.get("focus") and not reviewer.get("prompt"):
                 out.append(f"[reviewers.{name}].focus is missing: say what this reviewer looks for")
             prompt_value: object = reviewer.get("prompt")
             if isinstance(prompt_value, str) and prompt_value.strip():
@@ -485,15 +505,28 @@ def check(cfg):
     for name, surface in d.get("surfaces", {}).items():
         if not NAME.fullmatch(name) or name == "none":
             out.append(f'[surfaces.{name}]: a surface name is lowercase letters, digits and hyphens, not "none"')
-        test_table(f"surfaces.{name}", surface, {"when": a_filled_string, "reviewers": a_string_list})
+        test_table(f"surfaces.{name}", surface, SURFACE_KEYS)
         if isinstance(surface, dict):
             for key in ("when", "reviewers"):
                 if key not in surface:
                     out.append(f"[surfaces.{name}].{key} is missing")
             listed = surface.get("reviewers", [])
             for r in listed if isinstance(listed, list) else []:
-                if r not in d.get("reviewers", {}):
+                known = d.get("reviewers", {})
+                if r not in known:
                     out.append(f'[surfaces.{name}].reviewers has "{r}", but there is no [reviewers.{r}]')
+                elif surface.get("enabled", True) is not False and isinstance(known[r], dict) \
+                        and known[r].get("enabled", True) is False:
+                    out.append(f'[surfaces.{name}].reviewers has "{r}", but [reviewers.{r}] is off. '
+                               f'Set [surfaces.{name}] enabled = false, or drop "{r}" from its reviewers')
+    reviewers_table = d.get("reviewers", {})
+    if isinstance(reviewers_table, dict):
+        any_live = any(not (isinstance(r, dict) and r.get("enabled", True) is False)
+                       for r in reviewers_table.values())
+        for step_name, step in steps.items():
+            if isinstance(step, dict) and step.get("type") == "review" and graph.enabled(step) and not any_live:
+                out.append(f"every reviewer is off, but [steps.{step_name}] is on. "
+                           f"Switch it off with [steps.{step_name}] enabled = false")
 
     # models
     keys = None if graph_problems else set(cfg.agent_keys(every=True)) | {"default"}
