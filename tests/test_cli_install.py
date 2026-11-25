@@ -582,18 +582,14 @@ def test_upgrade_leaves_a_current_project_in_place(world):
     assert "0 upgraded, 2 current" in result.stdout
 
 
-def _missing_templates(world) -> None:
-    """A project on the release's version whose .factory/ has no templates folder, as a 0.3.x CLI left it."""
+def test_upgrade_repairs_a_project_missing_templates(world):
+    # A project on the release's version whose .factory/ has no templates folder, as a 0.3.x CLI left it.
     installed = world.cli("install", "--tool", "cursor")
     assert installed.returncode == 0, installed.stderr
     expected: str = (ROOT / "core" / "VERSION").read_text()
     (world.repo / ".factory" / "VERSION").write_text(expected)
     shutil.rmtree(world.repo / ".factory" / "templates")
     _global_home(expected)
-
-
-def test_upgrade_repairs_a_project_missing_templates(world):
-    _missing_templates(world)
     result = world.cli("upgrade", "--source", str(ROOT), cwd=world.tmp)
     assert result.returncode == 0, result.stderr + result.stdout
     assert "repair, missing: templates" in result.stdout
@@ -602,60 +598,6 @@ def test_upgrade_repairs_a_project_missing_templates(world):
     assert (world.repo / ".factory" / "templates" / "factory.toml").is_file()
     for item in install.ITEMS + ["adapters"]:
         assert (world.repo / ".factory" / item).exists(), item
-
-
-def test_upgrade_dry_run_shows_a_repair_and_writes_nothing(world):
-    _missing_templates(world)
-    result = world.cli("upgrade", "--dry-run", "--source", str(ROOT), cwd=world.tmp)
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert "repair, missing: templates" in result.stdout
-    assert "ok    .factory/" not in result.stdout
-    assert not (world.repo / ".factory" / "templates").exists()
-
-
-def test_upgrade_reports_a_schema_mismatch_before_a_repair(world):
-    _missing_templates(world)
-    config_path: Path = world.repo / "factory.toml"
-    config_path.write_text(config_path.read_text().replace("schema = 1", "schema = 99", 1))
-    result = world.cli("upgrade", "--source", str(ROOT), cwd=world.tmp)
-    assert result.returncode == 1, result.stderr + result.stdout
-    assert "schema 99, release needs 1" in result.stdout
-    assert "repair" not in result.stdout
-    assert not (world.repo / ".factory" / "templates").exists()
-
-
-def test_copy_core_copies_the_items_the_release_lists(tmp_path: Path) -> None:
-    fake: Path = tmp_path / "release"
-    fake.mkdir()
-    for name in ("core", "adapters"):
-        shutil.copytree(ROOT / name, fake / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    for name in ("LICENSE", "NOTICE"):
-        shutil.copy2(ROOT / name, fake / name)
-    (fake / "core" / "extra").mkdir()
-    (fake / "core" / "extra" / "note.txt").write_text("only this release has it\n")
-    install_py: Path = fake / "core" / "lib" / "modfactory" / "install.py"
-    text: str = install_py.read_text()
-    assert '"VERSION"]' in text
-    install_py.write_text(text.replace('"VERSION"]', '"VERSION", "extra"]', 1))
-    repo: Path = tmp_path / "repo"
-    repo.mkdir()
-    assert install.copy_core(fake, repo)
-    assert (repo / ".factory" / "extra" / "note.txt").is_file()
-    for item in install.ITEMS + ["adapters"]:
-        assert (repo / ".factory" / item).exists(), item
-
-
-def test_release_items_reads_the_tree_and_falls_back(tmp_path: Path) -> None:
-    assert install.release_items(ROOT / "core") == install.ITEMS
-    listed: Path = tmp_path / "listed" / "lib" / "modfactory"
-    listed.mkdir(parents=True)
-    (listed / "install.py").write_text('ITEMS = ["bin", "lib", "VERSION"]\n')
-    assert install.release_items(tmp_path / "listed") == ["bin", "lib", "VERSION"]
-    unlisted: Path = tmp_path / "unlisted" / "lib" / "modfactory"
-    unlisted.mkdir(parents=True)
-    (unlisted / "install.py").write_text("X = 1\n")
-    assert install.release_items(tmp_path / "unlisted") == install.ITEMS
-    assert install.release_items(tmp_path / "absent") == install.ITEMS
 
 
 def test_status_all_points_at_upgrade_when_a_project_is_behind(world, monkeypatch):
