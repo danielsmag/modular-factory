@@ -238,7 +238,9 @@ Intake reads an issue nobody has reviewed. Each tool can limit what it may do.
   write and shows a note to upgrade that project. Files from a newer factory
   are not shown; the note says to upgrade the global CLI.
 - **Overview is the job table.** Running slots, a running total of merged jobs
-  with a steady-pace line, and cost or time by step. Not jobs per day: with a
+  with a steady-pace line, and cost or time by step. With Claude Code on a
+  plan, cost by step can show plan usage instead of API-equivalent dollars,
+  and cards show the Session and Weekly limits. Not jobs per day: with a
   few merges a week, a per-day chart is mostly zeros. The board stays jobs by
   step, with a Now panel of the agents still on the current step.
 - **The pipeline view is a column of steps** with forward edges on the right
@@ -322,6 +324,13 @@ project's `factory/bin/job`, `factory/bin/gate`, `factory/bin/route` and
   Resuming the previous builder by message is not the default, because not
   every tool can do it. `done` deletes `progress.md` once the build outcome is
   accepted.
+- **Plan usage comes from the status line.** Claude Code gives the 5-hour and
+  weekly limits only to a status line script, as `rate_limits`. There is no
+  flag, file or endpoint, and the per-subagent breakdown in `/usage` is not
+  exposed at all. So `mfactory statusline` wraps the user's status line and
+  saves the figures, and the engine keeps the difference between a step's
+  start and end in `job.json`, so old jobs keep their numbers. The share of
+  machine usage is worked out from transcripts, priced like the cost.
 - **The stop hook, the cost and resuming the builder** are optional and Claude
   Code only. With `resume_builder`, `next` prints a `name:` that carries the
   job, model and effort. The orchestrator wakes the builder it started under

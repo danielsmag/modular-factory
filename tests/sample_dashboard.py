@@ -122,6 +122,10 @@ def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=Fals
             "[steps.gate].on.FAIL max = 3 reached" if step == "escalated" else None),
         "escalated_from": None, "last_file": None, "verify": None, "history": history,
         "cost_usd": round(sum(cost.values()), 2), "cost_by_step": cost,
+        # Plan usage: weekly and 5-hour points per step, and each step's share of this machine's usage.
+        "plan_by_step": {step: {"seven_day": round(usd * 0.08, 2), "five_hour": round(usd * 0.6, 2)}
+                         for step, usd in cost.items() if step != "intake" or number % 2},
+        "usage_share_by_step": {step: round(usd * 0.15, 2) for step, usd in cost.items()},
         "created_at": stamp(created), "finished_at": stamp(t) if finished else None, "updated_at": stamp(t),
     }
     if stop == "done" and number == 1:  # a fix after the merge, from the same job
@@ -272,6 +276,13 @@ def main():
             plan += [("spec-approval", 0, "maintainer", False), ("escalated", 1, "maintainer", True)]
             for number, (stop, days_ago, waiting, detour) in enumerate(plan, 1):
                 make(jobs_dir, number, TITLES[(number - 1) % len(TITLES)], stop, days_ago, rng, waiting, detour)
+        os.environ["FACTORY_HOME"] = str(Path(tmp) / "home")
+        (Path(tmp) / "home").mkdir()
+        resets = datetime.now(UTC) + timedelta(hours=2, minutes=10)
+        (Path(tmp) / "home" / "plan-usage.json").write_text(json.dumps({
+            "at": stamp(datetime.now(UTC)),
+            "five_hour": {"used_percentage": 37.0, "resets_at": int(resets.timestamp())},
+            "seven_day": {"used_percentage": 64.5, "resets_at": int((resets + timedelta(days=3)).timestamp())}}))
         queue, issues = sample_queue(datetime.now(UTC))
         stub_github(Path(tmp), issues)
         publish(repo, jobs_dir, [] if args.empty else queue)
