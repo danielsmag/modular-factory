@@ -242,6 +242,18 @@ def a_string_list(v):
     return None if ok else "must be a list of non-empty strings"
 
 
+TOOL_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_*-]*")
+
+
+def a_tool_list(value: object) -> str | None:
+    """Claude Code tool names for an agent. `all` alone drops the allowlist; `default` is the built-in list."""
+    if not isinstance(value, list) or not all(isinstance(i, str) and TOOL_NAME.fullmatch(i) for i in value):
+        return 'must be a list of tool names, such as ["default", "WebFetch", "mcp__github__*"], or ["all"]'
+    if "all" in value and len(value) > 1:
+        return 'must be ["all"] on its own'
+    return None
+
+
 def an_int(minimum):
     def test(v):
         ok = isinstance(v, int) and not isinstance(v, bool) and v >= minimum
@@ -380,13 +392,14 @@ TABLES = {
     "skills": {"all": a_string_list},
     "rules": {"all": a_string_list},
 }
-TOOL_KEYS = {"claude": {"stop_hook": a_bool, "cost": a_bool, "resume_builder": a_bool},
+TOOL_KEYS = {"claude": {"stop_hook": a_bool, "cost": a_bool, "resume_builder": a_bool,
+                        "agent_tools": a_tool_list},
              "codex": {"intake_shell": a_bool}}
 STEP_COMMON = {"type": one_of(*graph.TYPES), "enabled": a_bool, "skip": a_filled_string}
 STEP_KEYS = {
     "agent": {"role": one_of(*graph.ROLE_OUTCOMES, "custom"), "instructions": a_filled_string,
               "instructions_file": a_filled_string, "writes": a_filled_string, "skills": a_string_list,
-              "rules": a_string_list, "context": a_string, "port": a_bool},
+              "rules": a_string_list, "tools": a_tool_list, "context": a_string, "port": a_bool},
     "checks": {},
     "review": {},
     "human": {"who": a_who, "shows": a_string, "ask": a_string, "pr_ready": a_bool,
@@ -395,10 +408,11 @@ STEP_KEYS = {
     "verify": {"after": one_of("merge", "deploy"), "commands": a_string_list, "agent": a_bool,
                "retries": an_int(0), "on_failure": one_of("comment", "issue", "revert-pr"),
                "wait": a_string, "timeout_minutes": an_int(1), "url": a_string,
-               "skills": a_string_list, "rules": a_string_list, "context": a_string, "port": a_bool},
+               "skills": a_string_list, "rules": a_string_list, "tools": a_tool_list, "context": a_string,
+               "port": a_bool},
 }
 REVIEWER_KEYS = {"enabled": a_bool, "focus": a_filled_string, "prompt": a_filled_string, "context": a_string,
-                 "skills": a_string_list, "rules": a_string_list, "port": a_bool}
+                 "skills": a_string_list, "rules": a_string_list, "tools": a_tool_list, "port": a_bool}
 SURFACE_KEYS = {"enabled": a_bool, "when": a_filled_string, "reviewers": a_string_list}
 BUILTIN_REVIEWERS = ("code", "security", "ux", "ui")
 TOP = set(TABLES) | {"schema", "tools", "steps", "reviewers", "surfaces", "models"}

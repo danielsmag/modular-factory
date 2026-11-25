@@ -84,8 +84,9 @@ concurrency = 3
 | `[tools] enabled` | `["claude"]` | The tools to write agent files for: `claude`, `cursor`, `codex`. |
 | `[tools.claude] stop_hook` | `false` | Run the checks when the build agent stops, and send it back to work if they fail. Claude Code only. |
 | `[tools.claude] resume_builder` | `false` | In later rounds, wake the job's builder with SendMessage instead of starting a new one, so it keeps what it read. It is resumed only by the session that started it and only while its model and effort are unchanged. Claude Code only. |
+| `[tools.claude] agent_tools` | `["all"]` | Claude Code tools every agent may use. `["all"]` gives every tool the session has, plugin and MCP tools included. See [Tools](#tools). |
 | `[tools.claude] cost` | `true` | Work out each job's cost from Claude Code's transcripts. Other tools record no cost. |
-| `[tools.codex] intake_shell` | `false` | Let the Codex intake agent run commands. See [Design notes](design.md#intake-has-no-shell). |
+| `[tools.codex] intake_shell` | `false` | Let the Codex intake agent run commands. See [Design notes](design.md#limiting-intake). |
 | `[run] concurrency` | `3` | Jobs this project works on at once. A job waiting for a person, or being validated after merge, does not count. |
 | `[workspace] concurrency` | `3` | `new` and `resume` rows kept across every project when this factory runs `workspace queue`. `workspace.toml` or `--concurrency` overrides it. A project's `factory.toml` cannot. |
 | `[run] start` | `"intake"` | The step a new job starts in. |
@@ -357,6 +358,7 @@ Keys of an `agent` step:
 | `context` | Project facts added to the agent's prompt, such as where things live. Works on built-in steps too. |
 | `skills` | Skills this agent reads: a project skill, `user:name`, `plugin:skill`, or `all`. |
 | `rules` | Instruction files this agent reads: `AGENTS.md`, `CLAUDE.md`, a rule path, `user:CLAUDE.md`, or `all`. |
+| `tools` | Claude Code tools this agent may use. Replaces `[tools.claude] agent_tools`. See [Tools](#tools). |
 | `port` | `true` gives the agent a port number for a dev server. |
 | `role` | Use a built-in step's prompt under another name: `intake`, `spec`, `build`, `debug` or `approve`. |
 
@@ -682,6 +684,7 @@ restate its list.
 | `[reviewers.<name>] context` | Project facts added to its prompt. |
 | `[reviewers.<name>] skills` | Skills it reads: a project skill, `user:name`, `plugin:skill`, or `all`. |
 | `[reviewers.<name>] rules` | Instruction files it reads: `AGENTS.md`, `CLAUDE.md`, a rule path, `user:CLAUDE.md`, or `all`. |
+| `[reviewers.<name>] tools` | Claude Code tools it may use. Replaces `[tools.claude] agent_tools`. See [Tools](#tools). |
 | `[reviewers.<name>] port` | `true` gives it a port for a dev server, for reviewers that look at the running app. |
 | `[surfaces.<name>] enabled` | `false` hides the surface from intake. Its reviewers do not run on every job. `ui` defaults to `false`. |
 | `[surfaces.<name>] when` | One line telling intake when a change touches this surface. |
@@ -779,7 +782,40 @@ and the prompt gains its path.
 
 Codex counts a plugin when `~/.codex/config.toml` enables `plugins."<plugin>@..."`.
 Claude prefers the install recorded in `~/.claude/plugins/installed_plugins.json`
-when that file names the plugin. Cursor uses its plugin cache.
+when that file names the plugin, and skips a plugin that `~/.claude/settings.json`
+sets to `false` in `enabledPlugins`. Cursor uses its plugin cache.
+
+## Tools
+
+A plugin can add skills and MCP tools. Its skills go in `skills`, and its MCP
+tools need the agent to be allowed to call them. By default every Claude Code
+agent may use every tool the session has, so plugins work with no setup:
+
+```toml
+[tools.claude]
+agent_tools = ["all"]                # the default
+```
+
+To narrow an agent, give it a list. `default` stands for that agent's built-in
+list (intake: `Read, Grep, Glob, Write`; build: `Read, Grep, Glob, Bash, Edit, Write, Skill`).
+A list on a step or reviewer replaces `agent_tools` for that agent.
+
+```toml
+[steps.intake]
+tools = ["default"]                  # read and write, no shell
+
+[steps.build]
+tools = ["default", "WebFetch", "mcp__github__*"]
+
+[reviewers.security]
+tools = ["default", "mcp__plugin_semgrep_semgrep__*"]
+```
+
+Use Claude Code's tool names. `mcp__<server>__*` allows every tool of one MCP
+server. A plugin's MCP server is named `plugin_<plugin>_<server>`. `["all"]` must be on
+its own. When an agent lists a plugin skill, `Skill` is added to its list.
+Codex and Cursor agent files have no tool list, so `tools` changes only Claude
+Code agents, and sync notes this when another tool is enabled.
 
 ## Instruction files
 
