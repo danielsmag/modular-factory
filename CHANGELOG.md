@@ -7,6 +7,9 @@ changes when it does, and this file says what to change.
 ## Unreleased
 
 - `[run] pick = "mine"` limits `mfactory queue` and `workspace queue` to issues the operator opened or is assigned to, so one person can run the factory in a shared repo. `[run] authors` and `[run] assignees` name more logins (`"@me"` is the operator), and an issue is offered if its author or any assignee matches. Issues filtered out are not listed. Jobs already started keep running, and `/mfactory run <n>` still runs any labeled issue. The default, `"all"`, keeps today's behavior. The schema is unchanged.
+
+## 0.20.0
+
 - The `ux` and `ui` reviewers and the `ui` surface ship switched off. A project with a user interface sets `enabled = true` in `[reviewers.ux]`, `[reviewers.ui]` and `[surfaces.ui]`, then runs `mfactory sync`; until then, sync removes their agent files. Any reviewer or surface takes `enabled = false`. A switched-off reviewer gets no agent file and no row in `mfactory models`, and a switched-off surface is not offered to intake. A switched-on surface that lists a switched-off reviewer fails validation. The schema is unchanged.
 - `[tools.claude] resume_builder = true` resumes a job's builder across rounds in Claude Code. `next` prints a `name:` line for the build step, and the orchestrator wakes the builder it started under that name with SendMessage. The builder keeps its context, so a CHANGES round costs less. The dashboard splits a resumed builder's transcript into one run per round.
 
