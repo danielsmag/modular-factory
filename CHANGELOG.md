@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- fix: asking `/mfactory` to file a new feature now only opens the issue; it starts the job only when you ask it to run in the same request.
+
 ## 0.26.0
 
 - feat: `[run] report_problems = true` opens a GitHub issue when a job escalates to a person. Off by default.
