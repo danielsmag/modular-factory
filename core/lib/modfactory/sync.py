@@ -423,11 +423,17 @@ def _one_rule(repo: Path, home: Path, raw: str) -> RuleRef:
     return RuleRef(raw, "project", raw, False)
 
 
-def _rules(cfg: Config, own: list[str], where: str, problems: list[str], home: Path) -> list[RuleRef]:
+def _rules(cfg: Config, own: list[str], where: str, problems: list[str], home: Path,
+           defaulted: bool = False) -> list[RuleRef]:
     rows: list[RuleRef] = []
     seen: set[str] = set()
     for name in list(cfg["rules"]["all"]) + [item for item in own if item not in cfg["rules"]["all"]]:
         listed_at = "[rules].all" if name in cfg["rules"]["all"] else f"{where}.rules"
+        if defaulted and name == "AGENTS.md" and name not in cfg["rules"]["all"]:
+            # The shipped default falls back to CLAUDE.md and is skipped when neither exists.
+            name = next((f for f in ("AGENTS.md", "CLAUDE.md") if (cfg.repo / f).is_file()), "")
+            if not name:
+                continue
         try:
             fresh = _all_rules(cfg.repo, home) if name == "all" else [_one_rule(cfg.repo, home, name)]
         except ConfigError as error:
@@ -611,7 +617,8 @@ def agents(cfg: Config) -> list[Agent]:
         if settings.get("context", "").strip():
             sections.append(("Project context", settings["context"].strip()))
         skills = _skills(cfg, settings.get("skills", []), where, problems, home)
-        rules = _rules(cfg, settings.get("rules", []), where, problems, home)
+        defaulted = kind == "build" and cfg.sources.get(("steps", key, "rules")) == "default"
+        rules = _rules(cfg, settings.get("rules", []), where, problems, home, defaulted)
         tools = list(settings.get("tools", cfg["tools"].get("claude", {}).get("agent_tools", ["all"])))
         for risk in [None] + cfg.variants(key):
             note = f" For {risk}-risk jobs." if risk else ""

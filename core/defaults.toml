@@ -91,6 +91,7 @@ on = { APPROVE = "build", CHANGES = { to = "spec", max = 3 }, REJECT = "rejected
 [steps.build]
 type = "agent"
 port = true
+# The default AGENTS.md falls back to CLAUDE.md, and is skipped when neither exists.
 rules = ["AGENTS.md", "user:CLAUDE.md"]
 on = { READY = "gate", BLOCKED = "escalated" }
 

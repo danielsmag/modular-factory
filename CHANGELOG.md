@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- fix: `CLAUDE.md`-only repositories no longer fail sync after upgrading: the builder's default instruction file falls back to `CLAUDE.md`. A `rules = []` or `rules = ["CLAUDE.md", ...]` workaround in `[steps.build]` can stay or be removed.
+
 ## 0.26.0
 
 - feat: `[run] report_problems = true` opens a GitHub issue when a job escalates to a person. Off by default.

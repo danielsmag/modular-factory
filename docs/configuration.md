@@ -827,15 +827,16 @@ go in `rules`. `[rules].all` is read by every agent. A step's or reviewer's
 `instructions`.
 
 This is the default. Every agent reads every instruction file found. The builder
-also names `AGENTS.md` and `~/.claude/CLAUDE.md`, so a missing `AGENTS.md` fails
-sync and a missing user file is a doctor warning.
+also names `AGENTS.md` (or `CLAUDE.md` when `AGENTS.md` is missing) and
+`~/.claude/CLAUDE.md`. A project file you list yourself must exist or sync
+fails; a missing user file is a doctor warning.
 
 ```toml
 [rules]
 all = ["all"]
 
-[steps.build]
-rules = ["AGENTS.md", "user:CLAUDE.md"]
+# [steps.build]
+# rules = ["AGENTS.md", "user:CLAUDE.md"]
 ```
 
 | Entry | Where it comes from |
@@ -858,7 +859,7 @@ set to follow, so a repository with both `AGENTS.md` and `CLAUDE.md` follows
 both. When `rules` is empty, the agent still reads `AGENTS.md`, or `CLAUDE.md`
 when `AGENTS.md` is missing.
 
-A missing project file fails `mfactory sync`. A missing user file syncs, and
+A missing project file you list yourself fails `mfactory sync`. A missing user file syncs, and
 `mfactory doctor` warns. `SKILL.md` files and plugin caches are not rule files.
 
 ## Labels, paths and ports

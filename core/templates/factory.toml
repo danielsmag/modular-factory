@@ -180,15 +180,16 @@ commands = []
 #
 # AGENTS.md, CLAUDE.md, and rule files. Nothing here is read from `skills`.
 # `all` takes every one found in the repo and in your home directory.
-# The builder also names AGENTS.md and ~/.claude/CLAUDE.md, so a missing
-# AGENTS.md fails sync and a missing user file is a doctor warning.
+# The builder also names AGENTS.md (or CLAUDE.md when AGENTS.md is missing) and
+# ~/.claude/CLAUDE.md. A project file you list yourself must exist or sync
+# fails; a missing user file is a doctor warning.
 # https://danielsmag.github.io/modular-factory/docs/configuration.html#instruction-files
 
 [rules]
 all = ["all"]
 
-[steps.build]
-rules = ["AGENTS.md", "user:CLAUDE.md"]
+# [steps.build]
+# rules = ["AGENTS.md", "user:CLAUDE.md"]
 
 # ---- Reviewers and custom steps --------------------------------------------
 #
