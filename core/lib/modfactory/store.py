@@ -70,9 +70,19 @@ class Store:
             return None
 
     def new_id(self, title):
-        numbers = [int(i.split("-")[0]) for i in self.ids()]
+        """The next job number and id. Numbers only go up, so a removed job's id never comes back."""
+        self.dir.mkdir(parents=True, exist_ok=True)
+        counter = self.dir / "last_number"
+        with open(self.dir / ".number.lock", "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                last = int(counter.read_text().strip())
+            except (OSError, ValueError):
+                last = 0
+            numbers = [int(i.split("-")[0]) for i in self.ids()]
+            number = max(last, *numbers, 0) + 1
+            write_atomic(counter, f"{number}\n")
         words = re.findall(r"[a-z0-9]+", title.lower())[:4]
-        number = max(numbers, default=0) + 1
         return number, f"{number:03d}-{'-'.join(words) or 'issue'}"
 
     def save(self, job):
