@@ -266,7 +266,8 @@ class AcliJiraTracker(JiraTracker):
                  for name, step in self.steps.items()]
         rows += [row(state, "end", True, self.status_for(state)) for state in ("done", "rejected", "failed")]
         return {"tracker": self.kind, "via": self.via, "site": self.site, "board": self.board, "rows": rows,
-                "unused": [], "problems": [], "unchecked": [], "note": f"not checked against Jira: {LIMITS}"}
+                "unused": [], "problems": [], "unchecked": [], "warnings": [],
+                "note": f"not checked against Jira: {LIMITS}"}
 
     def doctor(self, ok, warn, fail) -> None:
         try:

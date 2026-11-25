@@ -372,8 +372,11 @@ class JiraTracker:
     def board_report(self) -> dict[str, Any]:
         """The mapping against the live board: a row per step, what is wrong, and what could not be checked."""
         layout: dict[str, Any] = self.api.get(f"/rest/agile/1.0/board/{self.board}/configuration")
-        names: dict[str, str] = {str(s.get("id")): str(s.get("name")) for s in self.api.get("/rest/api/3/status")
-                                 if isinstance(s, dict)}
+        statuses: list[Any] = [s for s in self.api.get("/rest/api/3/status") if isinstance(s, dict)]
+        names: dict[str, str] = {str(s.get("id")): str(s.get("name")) for s in statuses}
+        finished: set[str] = {str(s.get("name")).casefold() for s in statuses
+                              if (s.get("statusCategory") or {}).get("key") == "done"}
+        warnings: list[str] = []
         column_of: dict[str, str] = {}
         on_board: list[str] = []
         for column in (layout.get("columnConfig") or {}).get("columns") or []:
@@ -395,6 +398,12 @@ class JiraTracker:
                     problem = f"Jira has no status `{status}`"
                 elif column is None:
                     problem = f"`{status}` is on no column of board {self.board}, so the card leaves the board"
+                elif status.casefold() in finished and step == board.QUEUE:
+                    problem = (f"`{status}` is in Jira's Done category, so a card there counts as a closed issue "
+                               "and no job starts from it")
+                elif status.casefold() in finished and kind != "end":
+                    warnings.append(f"[tracker.jira.columns].{step}: `{status}` is in Jira's Done category, so Jira "
+                                    f"counts the issue as finished while the job is at {step}")
             return {"step": step, "type": kind, "enabled": enabled, "status": status, "column": column,
                     "problem": problem}
 
@@ -407,7 +416,7 @@ class JiraTracker:
         problems, unchecked = self._workflow_gaps(queue, sound)
         return {"tracker": self.kind, "via": self.via, "site": self.site, "board": self.board, "rows": rows,
                 "unused": [name for name in on_board if name.casefold() not in used],
-                "problems": problems, "unchecked": unchecked, "note": None}
+                "problems": problems, "unchecked": unchecked, "warnings": warnings, "note": None}
 
     def _workflow_gaps(self, queue: list[str], sound: set[str]) -> tuple[list[str], list[str]]:
         """Moves the pipeline needs and the workflow lacks, and the statuses no card could show them for.
@@ -454,6 +463,8 @@ class JiraTracker:
             ok(f"Jira board {self.board}: every mapped status is on the board")
         for problem in report["problems"]:
             fail(f"Jira: {problem}")
+        for warning in report["warnings"]:
+            warn(warning)
         if report["unchecked"]:
             warn(f"Jira: transitions not checked from {', '.join(report['unchecked'])}: "
                  "no card is in those statuses now")

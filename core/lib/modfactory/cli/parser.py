@@ -16,7 +16,7 @@ run jobs (the orchestrator skill uses these)
   file <title>              open an issue in the queue; its text is read from standard input
   close issue <job> | close job <job> [--merged <pr>] | move <job> <step> [note]
   delete <job> [--worktree] [--branch] [--remote] [--pr] [--force]
-  tracker show [--json] | tracker sync
+  tracker show [--json] | tracker sync | tracker suggest [--json]
 other
   checks | dashboard | start dashboard | stop | version
 several projects
@@ -122,11 +122,14 @@ def parser() -> argparse.ArgumentParser:
     tracker: argparse.ArgumentParser = sub.add_parser(
         "tracker", help="the steps against the tracker's board, and cards put back in place")
     tracker_sub: argparse._SubParsersAction[argparse.ArgumentParser] = tracker.add_subparsers(
-        dest="tracker_what", required=True, metavar="<show|sync>")
+        dest="tracker_what", required=True, metavar="<show|sync|suggest>")
     tracker_show: argparse.ArgumentParser = tracker_sub.add_parser(
         "show", help="each step's status and board column, and what is wrong with them")
     tracker_show.add_argument("--json", action="store_true", help="the report as one JSON object")
     tracker_sub.add_parser("sync", help="move every unfinished job's card to its step's status")
+    tracker_suggest: argparse.ArgumentParser = tracker_sub.add_parser(
+        "suggest", help="the Jira board that works well for this pipeline, and its [tracker.jira.columns]")
+    tracker_suggest.add_argument("--json", action="store_true", help="the suggestion as one JSON object")
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
     sub.add_parser("hook")  # no help text: argparse then leaves it out of the list

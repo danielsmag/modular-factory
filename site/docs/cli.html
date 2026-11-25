@@ -79,6 +79,10 @@
     <p>With a Jira board: each step, its status and its board column, and what is wrong with them. Exits 1 when the board has a problem.</p>
   </div>
   <div class="def">
+    <div class="def-h"><code>tracker suggest</code> <span class="chip">--json</span></div>
+    <p>The Jira board that works well for this pipeline, left to right, and the <code>[tracker.jira.columns]</code> to paste. Reads only <code>factory.toml</code>.</p>
+  </div>
+  <div class="def">
     <div class="def-h"><code>tracker sync</code></div>
     <p>With a Jira board: move every unfinished job's card to its step's status. Run it after the board or <code>[tracker.jira.columns]</code> changed.</p>
   </div>

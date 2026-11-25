@@ -137,3 +137,113 @@ def transitions(steps: dict[str, Any], status_of: Callable[[str], str | None], q
                 for landing in landings(escalate):
                     add(own, landing, f"{name} {outcome} reaches its max")
     return out
+
+
+# ---- The board that works well for a pipeline ------------------------------
+
+BACKLOG = "Backlog"
+READY = "Ready for factory"
+# Column names for the built-in steps. Any other step's column is named after the step.
+NAMES = {"intake": "Intake", "ask-author": "Needs info", "spec": "Spec", "spec-approval": "Spec approval",
+         "build": "Build", "review": "Review", "ready-to-merge": "Ready to merge", "merge": "Merging",
+         "ready-to-verify": "Ready to verify", "verify": "Verify", "escalated": "Escalated"}
+END_NAMES = {"done": "Done", "rejected": "Rejected", "failed": "Failed"}
+# Steps that start a column of their own. Any other step joins the column of the step before it.
+LEADING_ROLES = {"intake", "spec", "build"}
+LEADING_TYPES = {"human", "review", "merge", "verify"}
+
+
+def suggest(steps: dict[str, Any], start: str, escalate: str) -> dict[str, Any]:
+    """The board that works well for this pipeline, left to right, and the `[tracker.jira.columns]` for it.
+
+    A step a person answers gets a column of its own, and so does each step its outcomes lead to, so
+    moving the card says one outcome. The factory's other steps share the column of the step before
+    them. Steps that are switched off get no column.
+    """
+    live: dict[str, Any] = {n: s for n, s in steps.items() if graph.enabled(s)}
+    declared: dict[str, int] = {n: i for i, n in enumerate(steps)}
+    hand_merge: str | None = None
+    for step in steps.values():
+        if step.get("type") == "merge" and not graph.enabled(step) and "MERGED" in step.get("on", {}):
+            hand_merge = graph.resolve(steps, step["on"]["MERGED"]["to"])[0]
+            break
+
+    def targets(name: str) -> list[str]:
+        step: dict[str, Any] = live[name]
+        found: list[str] = [graph.resolve(steps, edge["to"])[0] for edge in step.get("on", {}).values()]
+        if hand_merge and step["type"] == "human" and step.get("pr_ready") and name != escalate:
+            found.append(hand_merge)  # a person merges the pull request while the job waits here
+        return found
+
+    # Steps in the order a job meets them, the escalation step last.
+    distance: dict[str, int] = {}
+    for seed in (start, escalate):
+        if seed not in live or seed in distance:
+            continue
+        distance[seed] = max(distance.values(), default=-1) + 1
+        todo: list[str] = [seed]
+        while todo:
+            name = todo.pop(0)
+            for target in targets(name):
+                if target in live and target not in distance:
+                    distance[target] = distance[name] + 1
+                    todo.append(target)
+    ordered: list[str] = sorted(distance, key=lambda n: (n == escalate, distance[n], declared[n]))
+
+    before: dict[str, list[str]] = {n: [] for n in ordered}
+    answers: set[str] = set()
+    for name in ordered:
+        for target in targets(name):
+            if target in before and name not in before[target]:
+                before[target].append(name)
+            if live[name]["type"] == "human":
+                answers.add(target)
+
+    def leads(name: str) -> bool:
+        step: dict[str, Any] = live[name]
+        return (name == start or name in answers or step["type"] in LEADING_TYPES
+                or (step["type"] == "agent" and graph.role(name, step) in LEADING_ROLES))
+
+    taken: set[str] = {BACKLOG, READY, *END_NAMES.values()}
+    columns: list[dict[str, Any]] = []
+    column_of: dict[str, dict[str, Any]] = {}
+    for name in ordered:
+        host: dict[str, Any] | None = None
+        if not leads(name):
+            for prior in before[name]:
+                if prior in column_of and live[prior]["type"] != "human":
+                    host = column_of[prior]
+                    break
+        if host is None:
+            title: str = NAMES.get(name) or name.replace("-", " ").replace("_", " ").capitalize()
+            if title in taken:
+                title = f"{title} ({name})"
+            taken.add(title)
+            host = {"name": title, "steps": [], "who": "you" if live[name]["type"] == "human" else "factory"}
+            columns.append(host)
+        host["steps"].append(name)
+        column_of[name] = host
+
+    ends: list[str] = [state for state in ("done", "rejected", "failed")
+                       if state == "done" or any(state in targets(n) for n in ordered)]
+    mapping: dict[str, str] = {QUEUE: READY}
+    for host in columns:
+        mapping.update({name: host["name"] for name in host["steps"]})
+    mapping.update({state: END_NAMES[state] for state in ends})
+
+    notes: list[str] = []
+    for name in ordered:
+        if live[name]["type"] != "human":
+            continue
+        for status, outcomes in drags(steps, mapping.get, name).items():
+            if len(outcomes) > 1:
+                notes.append(f"[steps.{name}]: {' and '.join(outcomes)} both lead to `{status}`, so moving the card "
+                             "there answers nothing: answer them by comment")
+
+    table: list[str] = ["[tracker.jira.columns]"] + [f'{key} = "{value}"' for key, value in mapping.items()]
+    return {
+        "columns": [{"name": BACKLOG, "steps": [], "who": "you"}, {"name": READY, "steps": [QUEUE], "who": "factory"},
+                    *columns, *({"name": END_NAMES[s], "steps": [s], "who": "-"} for s in ends)],
+        "mapping": mapping, "toml": "\n".join(table) + "\n", "notes": notes,
+        "done_category": [END_NAMES[s] for s in ends],
+    }

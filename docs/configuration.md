@@ -942,6 +942,29 @@ export JIRA_API_TOKEN="..."
 A card Jira will not move (the workflow has no such transition) is reported as a `note:` line and does not
 stop the job.
 
+### A board that works well
+
+Give each place where a person acts a column of its own, and let the factory's steps share a few:
+
+```
+Backlog | Ready for factory | Intake | Needs info* | Spec | Build | Review | Ready to merge* | Escalated* | Done | Rejected
+```
+
+`*` marks the columns where you act. The factory moves cards through the others.
+
+1. Keep `Backlog` apart from the queue column. Moving a card to `Ready for factory` is the decision to build it.
+   With REST the top card is built first, so rank the column.
+2. Give every step that waits for a person its own column, distinct from the columns its outcomes lead to.
+   Otherwise moving the card cannot say which outcome is meant, and the step is answered by comment only.
+3. Let the factory's steps share: `build`, `gate` and `debug` in `Build`; `review` and `approve` in `Review`.
+4. Put only the end columns (`Done`, `Rejected`, and `Failed` when verify is on) in Jira's Done category. A card
+   in a Done-category status counts as a closed issue, and no job starts from one.
+5. Let every status move to every other in the workflow.
+
+`mfactory tracker suggest` prints this board for your pipeline, steps you added and switched on included, with
+the `[tracker.jira.columns]` to paste. Run it again after changing the steps. Jira's API cannot set a board's
+columns, so create them in the board's settings, then check with `mfactory tracker show`.
+
 ### Answering by moving the card
 
 A person answers a human step with a Jira comment, as on GitHub: `/mfactory approve`, or plain words on a
@@ -970,8 +993,9 @@ belongs to, `maintainer` is anyone who can be assigned the issue (or `maintainer
 ### When the board changes
 
 ```bash
-.factory/bin/mfactory tracker show   # each step, its status and its column, and what is wrong
-.factory/bin/mfactory tracker sync   # put every unfinished job's card in its step's status
+.factory/bin/mfactory tracker show      # each step, its status and its column, and what is wrong
+.factory/bin/mfactory tracker sync      # put every unfinished job's card in its step's status
+.factory/bin/mfactory tracker suggest   # the board that works well for the steps you have now
 ```
 
 `tracker show` names a status Jira does not have, a status on no column of the board, statuses no step

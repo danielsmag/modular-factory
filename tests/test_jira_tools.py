@@ -260,3 +260,36 @@ def test_doctor_stops_at_credentials_jira_refuses(world, monkeypatch):
     trackers.make(cfg).doctor(lines["ok"].append, lines["warn"].append, lines["fail"].append)
     assert len(lines["fail"]) == 1
     assert "JIRA_API_TOKEN" in lines["fail"][0]
+
+
+# ---- Jira's Done category --------------------------------------------------------------------
+
+
+def test_a_queue_status_in_jiras_done_category_is_a_problem(world):
+    found = report(world, columns=JIRA_COLUMNS.replace('queue = "Ready for factory"', 'queue = "Failed"'))
+    assert row(found, "queue")["problem"] == ("`Failed` is in Jira's Done category, so a card there counts as a "
+                                              "closed issue and no job starts from it")
+
+
+def test_a_steps_status_in_jiras_done_category_is_a_warning(world):
+    found = report(world, columns=JIRA_COLUMNS.replace('build = "Build"', 'build = "Done"'))
+    assert row(found, "build")["problem"] is None
+    assert found["warnings"] == ["[tracker.jira.columns].build: `Done` is in Jira's Done category, so Jira counts "
+                                 "the issue as finished while the job is at build"]
+
+
+def test_end_states_belong_in_jiras_done_category(world):
+    found = report(world)
+    assert found["warnings"] == []
+    assert row(found, "done")["problem"] is None
+
+
+def test_show_and_doctor_pass_on_the_warnings(world):
+    columns = JIRA_COLUMNS.replace('build = "Build"', 'build = "Done"')
+    world.use_jira(columns=columns)
+    res = world.cli("tracker", "show")
+    assert res.returncode == 0
+    assert any(line.startswith("warning: [tracker.jira.columns].build") for line in printed(res))
+    lines = doctor(world, columns=columns)
+    assert any(line.startswith("[tracker.jira.columns].build: `Done` is in Jira's Done category")
+               for line in lines["warn"])

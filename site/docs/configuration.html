@@ -360,6 +360,18 @@ export JIRA_API_TOKEN="..."</code></pre>
     <li>The status is looked up each time it is used and is not stored on the job. Change one line and the next command uses it.</li>
   </ul>
   <p>A card Jira will not move, because the workflow has no such transition, is reported as a <code>note:</code> line and does not stop the job.</p>
+  <h3 id="tracker-a-board-that-works-well">A board that works well</h3>
+  <p>Give each place where a person acts a column of its own, and let the factory's steps share a few:</p>
+  <pre><code>Backlog | Ready for factory | Intake | Needs info* | Spec | Build | Review | Ready to merge* | Escalated* | Done | Rejected</code></pre>
+  <p><code>*</code> marks the columns where you act. The factory moves cards through the others.</p>
+  <ol>
+    <li>Keep <code>Backlog</code> apart from the queue column. Moving a card to <code>Ready for factory</code> is the decision to build it. With REST the top card is built first, so rank the column.</li>
+    <li>Give every step that waits for a person its own column, distinct from the columns its outcomes lead to. Otherwise moving the card cannot say which outcome is meant, and the step is answered by comment only.</li>
+    <li>Let the factory's steps share: <code>build</code>, <code>gate</code> and <code>debug</code> in <code>Build</code>; <code>review</code> and <code>approve</code> in <code>Review</code>.</li>
+    <li>Put only the end columns (<code>Done</code>, <code>Rejected</code>, and <code>Failed</code> when verify is on) in Jira's Done category. A card in a Done-category status counts as a closed issue, and no job starts from one.</li>
+    <li>Let every status move to every other in the workflow.</li>
+  </ol>
+  <p><code>mfactory tracker suggest</code> prints this board for your pipeline, steps you added and switched on included, with the <code>[tracker.jira.columns]</code> to paste. Run it again after changing the steps. Jira's API cannot set a board's columns, so create them in the board's settings, then check with <code>mfactory tracker show</code>.</p>
   <h3 id="tracker-moving-the-card">Answering by moving the card</h3>
   <p>A person answers a human step with a Jira comment, as on GitHub. They can also move the card: moving it to the status of one of the step's edge targets is that outcome.</p>
   <div class="scroll">
@@ -377,8 +389,9 @@ export JIRA_API_TOKEN="..."</code></pre>
   <p>Any other move by a person is moved back, with one comment that says why and names the statuses that are answers: a status two outcomes share, a status that is no edge target, a move by someone the step's <code>who</code> does not allow, or a move while an agent works on the job. To put a job at another step, use <code>mfactory move &lt;job&gt; &lt;step&gt;</code>.</p>
   <p><code>who</code> works as on GitHub, with Jira accounts: <code>author</code> is the reporter, <code>operator</code> is the account the token belongs to, <code>maintainer</code> is anyone who can be assigned the issue (or <code>maintainers</code>), and a list holds account ids.</p>
   <h3 id="tracker-when-the-board-changes">When the board changes</h3>
-  <pre data-lang="bash"><code>.factory/bin/mfactory tracker show   # each step, its status and its column, and what is wrong
-.factory/bin/mfactory tracker sync   # put every unfinished job's card in its step's status</code></pre>
+  <pre data-lang="bash"><code>.factory/bin/mfactory tracker show      # each step, its status and its column, and what is wrong
+.factory/bin/mfactory tracker sync      # put every unfinished job's card in its step's status
+.factory/bin/mfactory tracker suggest   # the board that works well for the steps you have now</code></pre>
   <p><code>tracker show</code> names a status Jira does not have, a status on no column of the board, statuses no step uses, and a move the pipeline needs that the workflow does not allow. Jira lists transitions for an issue, not for a workflow, so a status is checked through a card that is in it now; the rest are listed as not checked. <code>mfactory doctor</code> runs the same checks.</p>
   <p>After renaming a column or editing <code>[tracker.jira.columns]</code>, run <code>tracker sync</code>. <code>mfactory queue</code> also moves a card that is where the factory left it and no longer where the mapping says.</p>
   <h3 id="reaching-jira-rest-or-acli">Reaching Jira: REST or acli</h3>
