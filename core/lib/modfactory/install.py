@@ -173,21 +173,39 @@ def exclude_entries(repo: Path, patterns: list[str]) -> list[str]:
     return missing
 
 
+def _gh_failure(res) -> str:
+    why = (res.stderr or res.stdout).strip().splitlines()
+    return why[0] if why else "gh failed"
+
+
 def create_labels(cfg, say):
+    """Create the factory's labels that are missing. Existing labels are left as they are."""
+    later = "      Create the labels later with `.factory/bin/mfactory install`."
+    try:
+        res = run(["gh", "label", "list", "--limit", "300", "--json", "name"], cwd=cfg.repo, check=False)
+    except FileNotFoundError:
+        say("warn  the GitHub CLI `gh` isn't installed, so the labels were not created")
+        return
+    if res.returncode != 0:
+        say(f"warn  the labels could not be listed: {_gh_failure(res)}")
+        say(later)
+        return
+    have = {label["name"] for label in json.loads(res.stdout or "[]")}
+    created: list[str] = []
     for key, (colour, description) in LABELS.items():
         name = cfg["labels"][key]
-        try:
-            res = run(["gh", "label", "create", name, "--color", colour, "--description", description,
-                       "--force"], cwd=cfg.repo, check=False)
-        except FileNotFoundError:
-            say("warn  the GitHub CLI `gh` isn't installed, so the labels were not created")
-            return
+        if name in have:
+            say(f"ok    label {name} already exists")
+            continue
+        res = run(["gh", "label", "create", name, "--color", colour, "--description", description],
+                  cwd=cfg.repo, check=False)
         if res.returncode != 0:
-            why = (res.stderr or res.stdout).strip().splitlines()
-            say(f"warn  label `{name}` was not created: {why[0] if why else 'gh failed'}")
-            say("      Create the labels later with `.factory/bin/mfactory install`.")
+            say(f"warn  label `{name}` was not created: {_gh_failure(res)}")
+            say(later)
             return
-    say("ok    GitHub labels: " + ", ".join(cfg["labels"][k] for k in LABELS))
+        created.append(name)
+    if created:
+        say("ok    GitHub labels created: " + ", ".join(created))
 
 
 def init(repo: Path, tools: list[str] | None = None, say: Callable[[str], None] = print,
