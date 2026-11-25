@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- style: the dashboard uses the shell-command blue for running work (card border, pulse, "running" chip, the "now" rows), job and issue IDs, links, and code. Orange still means a human is needed.
+
 ## 0.25.0
 
 - feat: show Claude Code plan usage in cost by step.
