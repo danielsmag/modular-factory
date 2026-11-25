@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.23.0
+
 - feat: a built-in `post-debug` agent role for problems found after the merge, and follow-up pull requests from the same job. The agent works in a checkout of the current base branch and writes `round-N/post-debug.md` (`DIAGNOSIS: FOUND | UNKNOWN`) without changing code. Entering `build` after the job's pull request merged, through `post-debug`'s `FOUND` or `escalated`'s `FEEDBACK`, starts a follow-up. The follow-up uses a new branch `<prefix><job>-fix-N` from the base and a new pull request that refs the same issue. The merged pull request moves to the new `prs` list in `job.json`, and the dashboard shows every pull request of a job. The `max` on `FOUND` limits follow-ups. With `issue_link = "closes"`, `FOUND` is refused while the issue is closed. The README has a recipe for a post-merge "close / test / debug" human step.
 
 ## 0.22.0
