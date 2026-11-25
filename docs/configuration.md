@@ -93,6 +93,7 @@ concurrency = 3
 | `[run] start` | `"intake"` | The step a new job starts in. |
 | `[run] escalate_to` | `"escalated"` | The human step a job goes to when a loop limit is reached. |
 | `[run] pick` | `"all"` | Which labeled issues `queue` offers as new jobs. `"mine"` means the issues the operator (the `gh` user) opened or is assigned to. Issues it filters out are not listed. Jobs that already exist keep running, and `/mfactory run <n>` still runs any labeled issue. |
+| `[run] report_problems` | `false` | Open a GitHub issue when a job escalates (a step's `max` is reached, or build, approve or verify hands it to a person). One issue per job, without the queue label so the factory does not pick it up. |
 | `[run] authors` | `[]` | Also offer issues these logins opened. `"@me"` is the operator. Once `authors`, `assignees` or `pick = "mine"` names anyone, an issue is offered only if its author or one of its assignees is named. |
 | `[run] assignees` | `[]` | Also offer issues assigned to these logins. `"@me"` is the operator. |
 

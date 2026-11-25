@@ -343,3 +343,25 @@ def test_merge_runs_the_checks_again_after_syncing(world):
     j = world.job(job)
     assert j["step"] == "escalated" and j["reason"] == "The checks failed after syncing with main."
     assert (world.dir(job) / "round-1" / "merge-checks.md").read_text().startswith("GATE: FAIL")
+
+
+def _escalate_build(world: World, extra: str = "") -> str:
+    if extra:
+        world.configure(extra)
+    job: str = world.start(until="build")
+    world.next(job)
+    world.build(job, status="BLOCKED")
+    world.done(job)
+    return job
+
+
+def test_a_problem_issue_is_not_opened_by_default(world: World) -> None:
+    _escalate_build(world)
+    assert world.calls("issue create") == []
+
+
+def test_report_problems_opens_one_unqueued_issue_when_a_job_escalates(world: World) -> None:
+    job: str = _escalate_build(world, "[run]\nreport_problems = true\n")
+    created: list[list[str]] = world.calls("issue create")
+    assert len(created) == 1 and "--label" not in created[0]
+    assert world.job(job)["problem_issue"].startswith("https://github.test/")

@@ -6,6 +6,8 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- feat: `[run] report_problems = true` opens a GitHub issue when a job escalates to a person. Off by default.
+
 ## 0.25.2
 
 - fix: repair an incomplete .factory/ on upgrade.
