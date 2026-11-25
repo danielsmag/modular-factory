@@ -217,8 +217,10 @@ feedback or asking for something new, ask.
 - **What needs them**: run `queue` and explain each `wait` line.
 - **The pipeline or its settings**: `.factory/bin/mfactory graph`,
   `.factory/bin/mfactory models` and `.factory/bin/mfactory config show`.
-- **A new feature**: file it, then do `/mfactory run <n>` with the new number.
-  Use the label from `[labels].queue`:
+- **A new feature**: file it as an issue and stop. Don't create a job or run
+  it: report the issue number and that `/mfactory run <n>` (or the next
+  `/mfactory run`) builds it. Run it now only when the user asks for that in
+  the same request. Use the label from `[labels].queue`:
 
   ```bash
   gh issue create --label factory --title "<short imperative title>" --body-file - <<'FACTORY_REPLY'
