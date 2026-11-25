@@ -18,6 +18,7 @@ from .queue import Queue
 from .scripted import Scripted
 from .service import GitHub, Humans
 from .service import tracker as trackers
+from .service.cards import Cards
 from .store import Store
 from .util import Refused, body, first_line, header, now, quote, run, section
 
@@ -30,7 +31,7 @@ ROLE_FILES = {"intake": "intake.md", "spec": "spec.md", "build": "build.md",
               "post-debug": "round-{round}/post-debug.md"}
 
 
-class Factory(Humans, Scripted, Queue):
+class Factory(Humans, Cards, Scripted, Queue):
     def __init__(self, cfg, say=None):
         self.cfg = cfg
         self.gh = GitHub(cfg.repo)
@@ -139,6 +140,9 @@ class Factory(Humans, Scripted, Queue):
         state: dict[str, Any] = dict(job.get("board") or {})
         try:
             self.tracker.move(job["issue"], step)
+            status: str | None = self.tracker.status_for(step)
+            if status is not None:
+                state["status"] = status  # where the factory left the card
             state.pop("warning", None)
         except Refused as error:
             state["warning"] = str(error)
@@ -455,6 +459,14 @@ class Factory(Humans, Scripted, Queue):
                 if self._adopt_merge(job):
                     continue
                 reply = self._find_reply(job, step)
+                if reply is None:
+                    where: str | None = self.tracker.statuses([job["issue"]]).get(job["issue"]) \
+                        if self.tracker.status_for(name) is not None else None
+                    found, data = self._read_card(job, name, step, where)
+                    if found == "reply":
+                        reply = data
+                    else:
+                        self._settle_card(job, name, found, data)
                 if reply:
                     self.say(self._apply_reply(job, *reply))
                     continue

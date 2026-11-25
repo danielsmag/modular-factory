@@ -40,7 +40,8 @@ def plain(node):
     if not isinstance(node, dict):
         return ""
     if node.get("type") == "text":
-        return node["text"]
+        coded = any(mark.get("type") == "code" for mark in node.get("marks", []))
+        return f"`{node['text']}`" if coded else node["text"]
     if node.get("type") == "hardBreak":
         return "\n"
     inner = [plain(child) for child in node.get("content", [])]
@@ -204,6 +205,8 @@ class FakeJira:
             return self._matches(issue, clause[1:-1])
         if found := re.fullmatch(r"(?i)status in \((.*)\)", clause):
             return issue["status"] in re.findall(r'"([^"]*)"', found.group(1))
+        if found := re.fullmatch(r"(?i)(?:issue)?key in \((.*)\)", clause):
+            return issue["key"] in re.findall(r'"([^"]*)"', found.group(1))
         if found := re.fullmatch(r'(?i)(?:issue)?key = "?([A-Za-z0-9_]+-\d+)"?', clause):
             return issue["key"] == found.group(1).upper()
         if re.fullmatch(r"(?i)assignee = currentUser\(\)", clause):

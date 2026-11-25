@@ -4,6 +4,7 @@
 read from that table and the steps of factory.toml, so no step and no column is named in code.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from . import graph
@@ -52,3 +53,37 @@ def problems(steps: dict[str, Any], columns: object, label: str, needs_queue: bo
     if needs_queue and QUEUE not in columns:
         out.append(f"[{label}].{QUEUE} is missing: the status new jobs are picked from")
     return out
+
+
+# ---- Answering by moving the card ------------------------------------------
+
+
+def _same(a: str, b: str) -> bool:
+    return a.casefold() == b.casefold()
+
+
+def drags(steps: dict[str, Any], status_of: Callable[[str], str | None], name: str) -> dict[str, list[str]]:
+    """For a step a person answers: each status its card can be moved to, and the outcomes that would mean.
+
+    An outcome's status is the status of the step its edge leads to, after passing the steps that are
+    switched off. The step's own status answers nothing. A status with two outcomes is ambiguous.
+    """
+    own: str | None = status_of(name)
+    found: dict[str, list[str]] = {}
+    for outcome, edge in steps[name].get("on", {}).items():
+        target, _ = graph.resolve(steps, edge["to"])
+        status: str | None = status_of(target)
+        if status is None or (own is not None and _same(status, own)):
+            continue
+        shared: str = next((known for known in found if _same(known, status)), status)
+        found.setdefault(shared, []).append(outcome)
+    return found
+
+
+def drag_outcomes(steps: dict[str, Any], status_of: Callable[[str], str | None], name: str,
+                  status: str) -> list[str]:
+    """The outcomes that moving the card of a job at `name` to `status` could mean. One is an answer."""
+    for known, outcomes in drags(steps, status_of, name).items():
+        if _same(known, status):
+            return outcomes
+    return []

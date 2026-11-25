@@ -2,12 +2,18 @@
 
 import re
 from collections.abc import Callable
+from typing import Any
 
 from .. import graph
 from ..util import Refused, body, now
 
 COMMAND = re.compile(r"\s*/(?:m)?factory[ \t]+([a-z][a-z-]*)\b[ \t]*(.*)", re.S)
 NEEDS_TEXT = {"CHANGES", "FEEDBACK", "REJECT", "ANSWER"}
+
+
+def _is_note(comment: dict[str, Any]) -> bool:
+    """A factory comment about a card it moved back, which asks nobody anything. See `cards.py`."""
+    return str(comment.get("body") or "").lstrip().startswith("### Factory: the card was moved back")
 
 
 def _at(login: str, name: str | None = None) -> str:
@@ -94,6 +100,9 @@ class Humans:
             how += [f"- {c}" for c in self._commands(job, step, slash=False)]
             if "ANSWER" in step["on"]:
                 how.append("- or answer in plain words")
+            columns: str = self._drag_choices(name, step)
+            if columns:
+                how.append(f"- or move this card: {columns}")
         # Asked on the issue of a tracker that is not GitHub, the pull request is named by its address.
         this_pr: str = "this pull request" if kind == "pr" else f"the pull request {job['pr_url']}"
         if open_pr and name == self.cfg["run"]["escalate_to"]:
@@ -145,12 +154,13 @@ class Humans:
             threads.append(("pr", job["pr"]))
         for kind, number in threads:
             comments = self.gh.comments(number) if kind == "pr" else self.tracker.comments(number)
-            asked = [i for i, c in enumerate(comments) if c["factory"]]
+            # The question is the factory's last comment that is not a note about a card it moved back.
+            asked = [i for i, c in enumerate(comments) if c["factory"] and not _is_note(c)]
             if not asked:
                 continue
             for c in comments[asked[-1] + 1:]:
                 login = c["author"]["login"]
-                if c["id"] in job["consumed"] or not self._may_reply(job, step, login):
+                if c["factory"] or c["id"] in job["consumed"] or not self._may_reply(job, step, login):
                     continue
                 m = COMMAND.fullmatch(c["body"])
                 if m:

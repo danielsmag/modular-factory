@@ -163,6 +163,15 @@ class GitHubTracker:
     def move(self, key: Key, step: str) -> None:
         return None
 
+    def status_for(self, step: str) -> str | None:
+        return None
+
+    def statuses(self, keys: list[Key]) -> dict[Key, str]:
+        return {}
+
+    def last_move(self, key: Key, status: str) -> dict[str, Any] | None:
+        return None
+
     # -- the pull request's link to the issue
 
     def branch_tag(self, key: Key) -> str:

@@ -21,6 +21,8 @@ FIELDS = "summary,description,status,reporter,assignee,labels,created,updated"
 LIST_FIELDS = "summary,status,reporter,assignee,labels,created,updated"
 # Comment ids one `comment/list` call may ask for.
 IDS_PER_CALL = 1000
+# Issue keys in one JQL `key in (...)`.
+KEYS_PER_CALL = 50
 
 
 def _same(a: str, b: str) -> bool:
@@ -256,6 +258,38 @@ class JiraTracker:
         status: str | None = board.status_for(self.columns, step)
         if status is not None:
             self._to_status(key, status, f"[tracker.jira.columns].{step}")
+
+    def status_for(self, step: str) -> str | None:
+        return board.status_for(self.columns, step)
+
+    def statuses(self, keys: list[Key]) -> dict[Key, str]:
+        """Where each card is. Several cards are read from the board in one call; one is read on its own."""
+        wanted: list[Key] = list(dict.fromkeys(keys))
+        found: dict[Key, str] = {}
+        for start in range(0, len(wanted) if len(wanted) > 1 else 0, KEYS_PER_CALL):
+            quoted: str = ", ".join(f'"{key}"' for key in wanted[start:start + KEYS_PER_CALL])
+            for row in self.api.pages("GET", f"/rest/agile/1.0/board/{self.board}/issue", "issues",
+                                      jql=f"key in ({quoted})", fields="status"):
+                found[row["key"]] = ((row.get("fields") or {}).get("status") or {}).get("name") or ""
+        for key in wanted:
+            if key in found:
+                continue
+            try:  # a card in a status that is on no column of the board, or the only card asked for
+                raw: dict[str, Any] = self.api.get(f"/rest/api/3/issue/{key}", fields="status")
+            except Refused:
+                continue  # deleted, or hidden from this account: unknown
+            found[key] = ((raw.get("fields") or {}).get("status") or {}).get("name") or ""
+        return {key: status for key, status in found.items() if status}
+
+    def last_move(self, key: Key, status: str) -> dict[str, Any] | None:
+        """The newest status change into `status`, from the issue's history."""
+        entries: list[Any] = self.api.pages("GET", f"/rest/api/3/issue/{key}/changelog", "values")
+        for entry in reversed(entries):
+            for item in entry.get("items") or []:
+                if item.get("field") == "status" and _same(item.get("toString") or "", status):
+                    return {"id": str(entry.get("id")), "by": self._person(entry.get("author")),
+                            "from": item.get("fromString") or "", "to": item.get("toString") or status}
+        return None
 
     def _to_status(self, key: Key, status: str, setting: str) -> bool:
         """Transition the issue to `status`. False when it is already there."""

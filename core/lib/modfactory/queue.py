@@ -29,6 +29,8 @@ class _QueueHost(Protocol):
 
     def _audience(self, job: dict[str, Any], who: str | list[str]) -> str: ...
 
+    def _settle_cards(self) -> set[str]: ...
+
     def queue_and_issues(self) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]: ...
 
     def _picks(self) -> Callable[[dict[str, Any]], bool]: ...
@@ -127,6 +129,7 @@ class Queue:
                 job = self.store.try_open(stale["id"])
                 if job:
                     self._adopt_merge(job)
+        answered: set[str] = self._settle_cards()
         jobs = {j["issue"]: j for j in self.store.all()}
         issues = self.tracker.queue()
         open_numbers = {i["number"] for i in issues}
@@ -143,7 +146,7 @@ class Queue:
             elif step is None:
                 other.append(("skip", n, j["id"], name, "factory.toml no longer has this step"))
             elif step["type"] == "human":
-                if self._find_reply(j, step):
+                if j["id"] in answered or self._find_reply(j, step):
                     replied.append(("resume", n, j["id"], name, "a reply is waiting"))
                 else:
                     who_phrase: str = self._audience(j, step.get("who", "maintainer"))

@@ -112,6 +112,18 @@ class Tracker(Protocol):
         """Show on the board that the issue's job is at `step`. Refuses when the card will not move."""
         ...
 
+    def status_for(self, step: str) -> str | None:
+        """The board status of a job at `step`. None when the step has none, or the tracker has no board."""
+        ...
+
+    def statuses(self, keys: list[Key]) -> dict[Key, str]:
+        """Where each card is now. A key that is left out is unknown."""
+        ...
+
+    def last_move(self, key: Key, status: str) -> dict[str, Any] | None:
+        """The newest move of the card into `status`: `by` (a person), `from` and `to`. None when unknown."""
+        ...
+
     # -- the pull request's link to the issue
 
     def branch_tag(self, key: Key) -> str:
