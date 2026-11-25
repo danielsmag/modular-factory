@@ -6,6 +6,10 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+## 0.25.0
+
+- feat: show Claude Code plan usage in cost by step.
+
 ## 0.24.0
 
 - feat: the dashboard shows Claude Code plan usage (#45). With the `claude` tool on a Pro or Max plan, Overview has Session (5hr) and Weekly (7 day) cards with the percent used and the reset time. **Cost by step** gets a PLAN / API $ toggle. Plan shows the weekly and 5-hour points each step used, measured at the step's start and end, and the step's share of this machine's Claude Code usage over 7 days, like the "% of usage" rows in `/usage`. The figures come from the `rate_limits` Claude Code gives a status line: **`sync` now sets `statusLine` in `.claude/settings.local.json`** to `mfactory statusline`, which records them to `~/.mfactory/plan-usage.json` and then runs your existing status line. `[tools.claude] plan_usage = false` turns it off and puts your status line back. `job.json` gains `plan_by_step` and `usage_share_by_step`. Run `mfactory sync`.
