@@ -95,20 +95,21 @@ fi
 if [ "$GLOBAL" = 1 ]; then
   HOME_DIR="${FACTORY_HOME:-$HOME/.mfactory}"
   BIN_DIR="${FACTORY_BIN_DIR:-$HOME/.local/bin}"
-  saved=""
-  for list in workspace.toml fleet.toml; do
-    if [ -z "$saved" ] && [ -f "$HOME_DIR/$list" ]; then
-      saved="$(mktemp)"
-      cp "$HOME_DIR/$list" "$saved"
+  # The user's files in the home; keep the list in step with KEPT_GLOBAL in cli/maintain.py.
+  saved="$(mktemp -d)"
+  for name in workspace.toml dashboard.json dashboard.log plan-usage.json; do
+    if [ -f "$HOME_DIR/$name" ]; then
+      cp -p "$HOME_DIR/$name" "$saved/$name"
     fi
   done
+  if [ ! -f "$saved/workspace.toml" ] && [ -f "$HOME_DIR/fleet.toml" ]; then
+    cp -p "$HOME_DIR/fleet.toml" "$saved/workspace.toml"
+  fi
   rm -rf "$HOME_DIR"
   mkdir -p "$HOME_DIR" "$BIN_DIR"
   cp -a "$SOURCE"/. "$HOME_DIR"/
-  if [ -n "$saved" ]; then
-    cp "$saved" "$HOME_DIR/workspace.toml"
-    rm -f "$saved"
-  fi
+  cp -pR "$saved"/. "$HOME_DIR"/
+  rm -rf "$saved"
   printf '%s\n' "$HOME_DIR" > "$HOME_DIR/.global"
   ln -sfn "$HOME_DIR/core/bin/mfactory" "$BIN_DIR/mfactory"
   echo "ok    ~/.mfactory is $HOME_DIR"

@@ -545,6 +545,103 @@ def test_upgrade_dry_run_writes_nothing(world):
     assert "ok    global install" not in result.stdout
 
 
+RESTART_NOTE: str = "still runs the old version"
+
+
+def _user_files(home: Path, pid: int, url: str = "http://127.0.0.1:5999/") -> dict[str, str]:
+    files: dict[str, str] = {
+        "workspace.toml": "schema = 1\nprojects = []\n",
+        "dashboard.json": json.dumps({"pid": pid, "port": 5999, "url": url}) + "\n",
+        "dashboard.log": "serving\n",
+        "plan-usage.json": '{"limit": 1}\n',
+    }
+    for name, text in files.items():
+        (home / name).write_text(text)
+    return files
+
+
+def _sleeper() -> subprocess.Popen:
+    """A live pid for dashboard.json. A thread reaps it, so it does not linger as a zombie once stopped."""
+    child: subprocess.Popen = subprocess.Popen(["sleep", "60"], start_new_session=True)
+    threading.Thread(target=child.wait, daemon=True).start()
+    return child
+
+
+def test_upgrade_self_keeps_the_user_files_and_replaces_the_release(world):
+    home: Path = _global_home()
+    child: subprocess.Popen = _sleeper()
+    try:
+        files: dict[str, str] = _user_files(home, child.pid)
+        (home / "old-layout").mkdir()
+        (home / "old-layout" / "x").write_text("old\n")
+        (home / "core" / "stale.py").write_text("old\n")
+        result = world.cli("upgrade", "--self", "--source", str(ROOT), cwd=world.tmp)
+        assert result.returncode == 0, result.stderr + result.stdout
+        for name, text in files.items():
+            assert (home / name).read_text() == text, name
+        assert (home / "core" / "VERSION").read_text() == (ROOT / "core" / "VERSION").read_text()
+        assert not home.with_name(home.name + ".previous").exists()
+        assert not (home / "old-layout").exists()
+        assert not (home / "core" / "stale.py").exists()
+    finally:
+        child.kill()
+
+
+def test_upgrade_says_a_running_dashboard_is_on_the_old_version_and_stop_still_works(world):
+    home: Path = _global_home()
+    child: subprocess.Popen = _sleeper()
+    url: str = "http://127.0.0.1:5999/"
+    try:
+        _user_files(home, child.pid, url)
+        result = world.cli("upgrade", "--self", "--source", str(ROOT), cwd=world.tmp)
+        assert result.returncode == 0, result.stderr + result.stdout
+        lines: list[str] = [line for line in result.stdout.splitlines() if line.strip()]
+        assert lines[-1] == (
+            f"note  dashboard at {url} still runs the old version. "
+            "Restart it: mfactory stop dashboard && mfactory start dashboard"
+        )
+        assert child.poll() is None
+        stopped = world.cli("stop", cwd=world.tmp)
+        assert stopped.returncode == 0, stopped.stderr + stopped.stdout
+        assert f"stopped {url}" in stopped.stdout
+        child.wait(timeout=5)
+    finally:
+        if child.poll() is None:
+            child.kill()
+
+
+def test_upgrade_prints_no_restart_note_without_a_live_dashboard(world):
+    home: Path = _global_home()
+    missing = world.cli("upgrade", "--self", "--source", str(ROOT), cwd=world.tmp)
+    assert missing.returncode == 0, missing.stderr + missing.stdout
+    assert "ok    global install" in missing.stdout
+    assert RESTART_NOTE not in missing.stdout
+    (home / "core" / "VERSION").write_text("0.0.0\n")
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    _user_files(home, dead.pid)
+    stale = world.cli("upgrade", "--self", "--source", str(ROOT), cwd=world.tmp)
+    assert stale.returncode == 0, stale.stderr + stale.stdout
+    assert "ok    global install" in stale.stdout
+    assert RESTART_NOTE not in stale.stdout
+
+
+def test_upgrade_dry_run_keeps_the_dashboard_files_and_prints_no_note(world):
+    home: Path = _global_home()
+    child: subprocess.Popen = _sleeper()
+    try:
+        files: dict[str, str] = _user_files(home, child.pid)
+        result = world.cli("upgrade", "--dry-run", "--source", str(ROOT), cwd=world.tmp)
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert (home / "core" / "VERSION").read_text() == "0.0.0\n"
+        assert (home / "dashboard.json").read_text() == files["dashboard.json"]
+        assert (home / "plan-usage.json").read_text() == files["plan-usage.json"]
+        assert not home.with_name(home.name + ".previous").exists()
+        assert RESTART_NOTE not in result.stdout
+    finally:
+        child.kill()
+
+
 def test_upgrade_skips_a_project_whose_schema_differs(world):
     installed = world.cli("install", "--tool", "cursor")
     assert installed.returncode == 0, installed.stderr
@@ -661,6 +758,22 @@ def test_install_sh_global_links_a_command_that_can_install(bare, tmp_path):
     refused = subprocess.run(["bash", str(ROOT / "install.sh"), "--global", "--tool", "claude", "--source", str(ROOT)],
                              cwd=tmp_path, capture_output=True, text=True, env=env)
     assert refused.returncode == 1 and "--global" in refused.stderr
+    kept: dict[str, str] = {
+        "dashboard.json": '{"pid": 1, "port": 5999, "url": "http://127.0.0.1:5999/"}\n',
+        "dashboard.log": "serving\n",
+        "plan-usage.json": '{"limit": 1}\n',
+    }
+    for name, text in kept.items():
+        (data / name).write_text(text)
+    (data / "fleet.toml").write_text("schema = 1\nprojects = []\n")
+    again = subprocess.run(["bash", str(ROOT / "install.sh"), "--global", "--source", str(ROOT)],
+                           cwd=tmp_path, capture_output=True, text=True, env=env)
+    assert again.returncode == 0, again.stderr
+    for name, text in kept.items():
+        assert (data / name).read_text() == text, name
+    assert (data / "workspace.toml").read_text() == "schema = 1\nprojects = []\n"
+    assert (data / ".global").is_file()
+    assert (data / "core/bin/mfactory").is_file()
     installed = subprocess.run([sys.executable, str(data / "core/bin/mfactory"), "install", "--tool", "cursor"],
                                cwd=bare.repo, capture_output=True, text=True)
     assert installed.returncode == 0, installed.stderr

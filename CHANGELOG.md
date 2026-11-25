@@ -6,9 +6,7 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
-## 0.26.1
-
-- fix: asking `/mfactory` to file a new feature now only opens the issue; it starts the job only when you ask it to run in the same request.
+- fix: a global upgrade (and `install.sh --global`) keeps `dashboard.json`, `dashboard.log` and `plan-usage.json`, so `mfactory stop` still finds a running dashboard, and the upgrade tells you when a running dashboard is still on the old version.
 
 ## 0.26.0
 

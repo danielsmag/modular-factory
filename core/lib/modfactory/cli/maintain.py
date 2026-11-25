@@ -31,6 +31,7 @@ from ..util import (
     user_dir,
     version,
 )
+from ..workspace import service as workspace_http
 
 
 def global_home() -> Path | None:
@@ -449,8 +450,12 @@ def _project_followup(target: Target) -> str:
     )
 
 
+KEPT_GLOBAL: tuple[str, ...] = ("workspace.toml", "dashboard.json", "dashboard.log", "plan-usage.json")
+"""The user's files in the global home. A global upgrade carries these over; the release replaces the rest."""
+
+
 def _replace_global(home: Path, root: Path, before: str, after: str, say: Callable[[str], None]) -> None:
-    """Replace the global CLI tree with root, keeping workspace.toml."""
+    """Replace the global CLI tree with root, keeping the files in KEPT_GLOBAL."""
     located: tuple[Path, Path, Path, Path] = layout(root)
     core: Path = located[0]
     adapters: Path = located[1]
@@ -468,11 +473,13 @@ def _replace_global(home: Path, root: Path, before: str, after: str, say: Callab
             if src.is_file():
                 shutil.copy2(src, tree / name)
         (tree / ".global").write_text(f"{home}\n")
-        for name in ("workspace.toml", "fleet.toml"):
-            workspace_list: Path = home / name
-            if workspace_list.is_file():
-                shutil.copy2(workspace_list, tree / "workspace.toml")
-                break
+        for name in KEPT_GLOBAL:
+            kept: Path = home / name
+            if kept.is_file():
+                shutil.copy2(kept, tree / name)
+        legacy: Path = home / "fleet.toml"
+        if not (tree / "workspace.toml").exists() and legacy.is_file():
+            shutil.copy2(legacy, tree / "workspace.toml")
         previous: Path = home.with_name(home.name + ".previous")
         if previous.exists():
             shutil.rmtree(previous)
@@ -535,12 +542,15 @@ def _run_upgrade(targets: list[Target], root: Path, dry_run: bool, say: Callable
     failed: int = 0
     upgraded_projects: list[Target] = []
     schema_targets: list[Target] = []
+    dashboard: workspace_http.RunningDashboard | None = None
     for target in targets:
         outcome: Literal["upgraded", "repaired", "current", "schema", "failed"] = _apply(target, root, say)
         if outcome == "upgraded":
             upgraded += 1
             if target.kind == "project":
                 upgraded_projects.append(target)
+            else:
+                dashboard = workspace_http.running(target.path / workspace_http.STATE_NAME)
         elif outcome == "repaired":
             repaired += 1
             upgraded_projects.append(target)
@@ -563,6 +573,11 @@ def _run_upgrade(targets: list[Target], root: Path, dry_run: bool, say: Callable
             if note:
                 say(note)
             noted = True
+    if dashboard is not None:
+        say(
+            f"note  dashboard at {dashboard.url} still runs the old version. "
+            "Restart it: mfactory stop dashboard && mfactory start dashboard"
+        )
     return 1 if failed or skipped else 0
 
 
