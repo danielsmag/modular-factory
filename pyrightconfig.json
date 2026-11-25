@@ -1,0 +1,5 @@
+{
+  "extraPaths": ["core/lib"],
+  "venvPath": ".",
+  "venv": ".venv"
+}

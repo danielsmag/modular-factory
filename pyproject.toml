@@ -2,13 +2,10 @@
 testpaths = ["tests"]
 addopts = "-q -n auto"
 
-[tool.pyright]
-extraPaths = ["core/lib"]
-pythonVersion = "3.11"
-
 [tool.basedpyright]
 extraPaths = ["core/lib"]
-pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
 
 [tool.ruff]
 line-length = 120
