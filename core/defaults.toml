@@ -20,6 +20,7 @@ enabled = ["claude"]      # claude, cursor, codex
 [tools.claude]
 stop_hook = false         # run the checks when the build agent stops, as a nudge
 cost = true               # per-job cost, read from Claude Code's transcripts
+plan_usage = true         # record /usage plan limits with a status line in .claude/settings.local.json
 resume_builder = false    # wake the job's builder with SendMessage in later rounds instead of starting a new one
 agent_tools = ["all"]     # tools every agent may use: "all", or names such as ["default", "WebFetch", "mcp__github__*"]
 

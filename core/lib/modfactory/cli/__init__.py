@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any, TextIO
 
-from .. import checks, config, graph, install
+from .. import checks, config, graph, install, plan_usage
 from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
@@ -103,6 +103,8 @@ def run(args: argparse.Namespace) -> int:
         return workspace_http.stop_dashboard()
     if command == "workspace":
         return workspace_command(args)
+    if command == "statusline":
+        return plan_usage.main(args.then)
     if command == "hook":
         repo = find_repo(os.environ.get("CLAUDE_PROJECT_DIR"))
         cfg = config.load(repo)

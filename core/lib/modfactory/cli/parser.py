@@ -98,6 +98,8 @@ def parser() -> argparse.ArgumentParser:
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
     sub.add_parser("hook")  # no help text: argparse then leaves it out of the list
+    line: argparse.ArgumentParser = sub.add_parser("statusline")  # Claude Code's status line runs this
+    line.add_argument("--then", help="the status line command to run after recording")
     def dashboard_flags(target: argparse.ArgumentParser) -> None:
         target.add_argument("--port", type=int, default=4747)
         target.add_argument("--no-open", action="store_true", help="don't open a browser")

@@ -412,7 +412,9 @@ def doctor(repo, run_checks=True, say=print):
     if actions:
         for action, rel in actions:
             what = {"create": "is missing", "remove": "is left over from an earlier config",
-                    "update": "differs from what factory.toml generates (edited by hand, or not synced)"}[action]
+                    "update": "differs from what factory.toml generates (edited by hand, or not synced)",
+                    "status line": "does not match [tools.claude].plan_usage: the status line that records "
+                                   "Claude Code plan usage is missing, or left over"}[action]
             fail(f"{rel} {what}")
         say("      Run `.factory/bin/mfactory sync`. It overwrites hand edits: put changes in factory.toml.")
     elif actions is not None:
