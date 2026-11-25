@@ -6,6 +6,9 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- feat: Claude Code agents may use every tool by default, so a plugin's MCP tools and `WebFetch` work. **Intake now has a shell in Claude Code too.** `[tools.claude] agent_tools` (default `["all"]`) and a `tools` key on agent steps, verify steps and reviewers set the allowlist; `"default"` stands for the agent's built-in list, so `[steps.intake] tools = ["default"]` restores the old read-and-write-only intake. Run `mfactory sync` to rewrite the agent files.
+- fix: a Claude plugin turned off in `~/.claude/settings.json` `enabledPlugins` is no longer written into agents. The note and `doctor` warning now say "not installed or enabled".
+
 ## 0.23.0
 
 - feat: a built-in `post-debug` agent role for problems found after the merge, and follow-up pull requests from the same job. The agent works in a checkout of the current base branch and writes `round-N/post-debug.md` (`DIAGNOSIS: FOUND | UNKNOWN`) without changing code. Entering `build` after the job's pull request merged, through `post-debug`'s `FOUND` or `escalated`'s `FEEDBACK`, starts a follow-up. The follow-up uses a new branch `<prefix><job>-fix-N` from the base and a new pull request that refs the same issue. The merged pull request moves to the new `prs` list in `job.json`, and the dashboard shows every pull request of a job. The `max` on `FOUND` limits follow-ups. With `issue_link = "closes"`, `FOUND` is refused while the issue is closed. The README has a recipe for a post-merge "close / test / debug" human step.

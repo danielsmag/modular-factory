@@ -319,10 +319,11 @@ def test_doctor_warns_when_a_listed_skill_is_not_installed(world, monkeypatch):
     synced = world.cli("sync")
     assert synced.returncode == 0, synced.stderr
     assert 'note: skill "user:missing" is not installed on this machine' in synced.stdout
-    assert 'note: skill "superpowers:test-driven-development" is not installed for Claude Code' in synced.stdout
+    gap = 'skill "superpowers:test-driven-development" is not installed or enabled for Claude Code'
+    assert f"note: {gap}" in synced.stdout
     res = doctor(world, "--skip-checks")
     assert 'warn  skill "user:missing" is not installed on this machine' in res.stdout
-    assert 'warn  skill "superpowers:test-driven-development" is not installed for Claude Code' in res.stdout
+    assert 'warn  skill "superpowers:test-driven-development" is not installed or enabled for Claude Code' in res.stdout
 
 
 def test_doctor_warns_when_a_listed_rule_is_not_installed(world, monkeypatch):

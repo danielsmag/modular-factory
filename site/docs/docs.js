@@ -22,7 +22,7 @@ const PAGES = [
     heads: [["The default graph", "the-default-graph"], ["Steps and edges", "steps-and-edges"], ["Loop limits", "loop-limits"], ["Who merges", "who-merges"], ["Optional steps", "optional-steps"], ["Adding a step", "adding-a-step"], ["Human steps", "human-steps"], ["Validation after merge", "validation-after-merge"]] },
   { id: "guards", group: "Concepts", file: "guards.html", title: "Guards",
     blurb: "The label, quoted issue text, checks, protected paths, and what is untested.",
-    heads: [["The label", "the-label"], ["Issue text is data", "issue-text-is-data"], ["Intake has no shell", "intake-has-no-shell"], ["Checks are a script", "checks-are-a-script"], ["Protected paths", "protected-paths"], ["Merge and replies", "merge-and-replies"], ["The dashboard", "the-dashboard"], ["What is untested", "what-is-untested"]] },
+    heads: [["The label", "the-label"], ["Issue text is data", "issue-text-is-data"], ["Limiting intake", "intake-has-no-shell"], ["Checks are a script", "checks-are-a-script"], ["Protected paths", "protected-paths"], ["Merge and replies", "merge-and-replies"], ["The dashboard", "the-dashboard"], ["What is untested", "what-is-untested"]] },
   { id: "tools", group: "Concepts", file: "tools.html", title: "Tools",
     blurb: "Claude Code, Cursor, and Codex. Same prompts, different agent files.",
     heads: [["Where each tool writes", "where-each-tool-writes"], ["Intake", "intake"], ["Models and effort", "models-and-effort"], ["One skill, or two", "one-skill-or-two"]] },

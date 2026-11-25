@@ -168,6 +168,14 @@ commands = []
 # [steps.spec]
 # skills = ["all"]
 
+# Claude Code agents may use every tool, plugin and MCP tools included. Narrow one with a list;
+# "default" is its built-in list.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#tools
+# [steps.intake]
+# tools = ["default"]
+# [steps.build]
+# tools = ["default", "WebFetch", "mcp__github__*"]
+
 # ---- Instruction files -----------------------------------------------------
 #
 # AGENTS.md, CLAUDE.md, and rule files. Nothing here is read from `skills`.

@@ -131,8 +131,8 @@ def follow(job, step, outcome):
 - **Issue text is data.** It reaches agents only inside `issue.md`, which every
   prompt calls quoted data. The orchestrator never pastes it into a prompt.
   This lowers the risk of an issue steering an agent; it does not remove it.
-- **Intake has no shell.** The step that reads an unreviewed issue first
-  cannot run commands. See below.
+- **Intake can be kept from running commands.** The step that reads an unreviewed issue first
+  can be limited so it cannot run commands. In Claude Code this is opt-in. See below.
 - **The checks are a script.** No agent's opinion can pass a build whose checks
   fail.
 - **Protected paths.** The checks fail any branch that touches `factory.toml`,
@@ -175,12 +175,14 @@ The prompts themselves are the same for every tool. A generated agent file
 holds only the tool's own settings, a pointer to the role file, and the
 sections that come from `factory.toml`.
 
-### Intake has no shell
+### Limiting intake
 
-Intake reads an issue nobody has reviewed, so it gets the fewest abilities
-each tool allows.
+Intake reads an issue nobody has reviewed. Each tool can limit what it may do.
 
-- In Claude Code, intake has the read and write tools and no shell.
+- In Claude Code, every agent, intake included, gets every tool by default
+  (`[tools.claude] agent_tools = ["all"]`), so plugin and MCP tools work. To give
+  intake only the read and write tools and no shell, set
+  `[steps.intake] tools = ["default"]`.
 - In Cursor, the only restriction an agent file offers is `readonly`, which
   also stops intake writing `intake.md`. So intake replies with the file's
   contents, and the orchestrator passes the reply to

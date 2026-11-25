@@ -160,6 +160,21 @@ def _codex_enabled_plugins(home: Path) -> set[str]:
     return names
 
 
+def _claude_disabled_plugins(home: Path) -> set[str]:
+    """Plugins `~/.claude/settings.json` turns off in `enabledPlugins`. Only an explicit false counts."""
+    path = home / ".claude" / "settings.json"
+    if not path.is_file():
+        return set()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return set()
+    plugins = data.get("enabledPlugins", {}) if isinstance(data, dict) else {}
+    if not isinstance(plugins, dict):
+        return set()
+    return {str(key).split("@", 1)[0] for key, value in plugins.items() if value is False}
+
+
 def _claude_installs(home: Path) -> list[tuple[str, Path]]:
     """`(plugin, install path)` from Claude's `installed_plugins.json`, when that file exists."""
     record = home / ".claude" / "plugins" / "installed_plugins.json"
@@ -209,10 +224,11 @@ def _cache_plugin_skills(cache: Path) -> list[tuple[str, str, Path]]:
 def found_plugin_skills(home: Path, tool: str) -> list[tuple[str, Path]]:
     """`(plugin:skill, SKILL.md)` this tool can see. Claude's install record wins over the cache."""
     enabled: set[str] | None = _codex_enabled_plugins(home) if tool == "codex" else None
+    disabled: set[str] = _claude_disabled_plugins(home) if tool == "claude" else set()
     chosen: dict[str, Path] = {}
     cache = home / PLUGIN_DIRS[tool] / "cache"
     for plugin, skill, path in _cache_plugin_skills(cache):
-        if enabled is not None and plugin not in enabled:
+        if (enabled is not None and plugin not in enabled) or plugin in disabled:
             continue
         listed = f"{plugin}:{skill}"
         previous = chosen.get(listed)
@@ -220,7 +236,7 @@ def found_plugin_skills(home: Path, tool: str) -> list[tuple[str, Path]]:
             chosen[listed] = path
     if tool == "claude":
         for plugin, root in _claude_installs(home):
-            if not root.is_dir():
+            if plugin in disabled or not root.is_dir():
                 continue
             for path in sorted(root.glob("skills/*/SKILL.md")):
                 if path.is_file():
@@ -439,6 +455,7 @@ class Agent:
     skills: list[SkillRef] = field(default_factory=list)
     rules: list[RuleRef] = field(default_factory=list)
     prompt: str | None = None   # repo-relative file listed after the role files
+    tools: list[str] = field(default_factory=lambda: ["all"])   # Claude Code tools; `all` drops the allowlist
 
 
 def _everything(cfg: Config, home: Path) -> list[SkillRef]:
@@ -595,10 +612,11 @@ def agents(cfg: Config) -> list[Agent]:
             sections.append(("Project context", settings["context"].strip()))
         skills = _skills(cfg, settings.get("skills", []), where, problems, home)
         rules = _rules(cfg, settings.get("rules", []), where, problems, home)
+        tools = list(settings.get("tools", cfg["tools"].get("claude", {}).get("agent_tools", ["all"])))
         for risk in [None] + cfg.variants(key):
             note = f" For {risk}-risk jobs." if risk else ""
             out.append(Agent(key, cfg.agent_name(key, risk), risk, kind, description + note, roles,
-                             sections, skills, rules, prompt_file))
+                             sections, skills, rules, prompt_file, tools))
     if problems:
         raise ConfigError(problems)
     return out
@@ -674,18 +692,27 @@ def body(cfg: Config, tool: str, agent: Agent, index: SkillIndex | None = None) 
 # ---- One renderer per tool -------------------------------------------------
 
 
-def _claude_tools(agent: Agent, index: SkillIndex) -> str:
-    tools = CLAUDE_TOOLS.get(agent.kind, CLAUDE_TOOLS_DEFAULT)
-    if _plugins_for("claude", agent, index) and "Skill" not in [part.strip() for part in tools.split(",")]:
-        tools = f"{tools}, Skill"
-    return tools
+def _claude_tools(agent: Agent, index: SkillIndex) -> str | None:
+    """The `tools:` allowlist, or None to leave it out so the agent gets every tool, MCP included."""
+    if "all" in agent.tools:
+        return None
+    names: list[str] = []
+    for item in agent.tools:
+        parts = CLAUDE_TOOLS.get(agent.kind, CLAUDE_TOOLS_DEFAULT).split(", ") if item == "default" else [item]
+        names += [part for part in parts if part not in names]
+    if _plugins_for("claude", agent, index) and "Skill" not in names:
+        names.append("Skill")
+    return ", ".join(names)
 
 
 def _claude(cfg, agent, model, text, index: SkillIndex | None = None):
     index = index or SkillIndex(skill_home())
     adapter = cfg.adapters["claude"]
-    front = [f"name: {agent.name}", f"description: {json.dumps(agent.description)}",
-             f"tools: {_claude_tools(agent, index)}", f"model: {model['model']}"]
+    front = [f"name: {agent.name}", f"description: {json.dumps(agent.description)}"]
+    tools = _claude_tools(agent, index)
+    if tools is not None:
+        front.append(f"tools: {tools}")
+    front.append(f"model: {model['model']}")
     if model.get("effort"):
         front.append(f"effort: {model['effort']}")
     preload_root = adapter["paths"]["skills_preload"] + "/"
@@ -767,7 +794,7 @@ def skill_gap_notes(cfg: Config, listed: list[Agent] | None = None) -> list[str]
                 for tool in cfg.tools:
                     if index.plugin_path(tool, skill.name) is not None:
                         continue
-                    line = f'skill "{skill.listed}" is not installed for {cfg.adapters[tool]["label"]}'
+                    line = f'skill "{skill.listed}" is not installed or enabled for {cfg.adapters[tool]["label"]}'
                     if line not in seen:
                         seen.add(line)
                         notes.append(line)
@@ -804,6 +831,9 @@ def plan(cfg: Config) -> tuple[dict[str, str], list[str]]:
                 name, text = renderer(cfg, agent, model, rendered)
             files[f"{adapter['paths']['agents']}/{name}"] = text
     notes.extend(skill_gap_notes(cfg, listed))
+    others = [cfg.adapters[tool]["label"] for tool in cfg.tools if tool != "claude"]
+    if others and any(agent.tools != ["all"] for agent in listed):
+        notes.append(f"tools only limits Claude Code agents. {' and '.join(others)} agents have every tool.")
     dirs = skill_dirs(cfg)
     for folder in dirs:
         files[f"{folder}/SKILL.md"] = skill_text()
