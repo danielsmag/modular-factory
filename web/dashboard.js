@@ -542,7 +542,7 @@ function fileLabel(path) {
 }
 function tone(first) {
   const line = String(first || "");
-  if (/^(VERDICT:\s*PASS|GATE:\s*PASS|APPROVE|STATUS:\s*READY|DECISION:\s*ACCEPT|STATUS:\s*ok)/.test(line)) return "good";
+  if (/^(VERDICT:\s*PASS|GATE:\s*PASS|APPROVE|STATUS:\s*READY|STATUS:\s*DONE|DECISION:\s*ACCEPT|STATUS:\s*ok)/.test(line)) return "good";
   if (/^(VERDICT:\s*CHANGES|DECISION:\s*NEEDS-INFO)/.test(line)) return "warn";
   if (/^(ESCALATE|REJECTED|STATUS:\s*BLOCKED|GATE:\s*FAIL|DECISION:\s*REJECT|VERDICT:\s*FAIL)/.test(line)) return "stop";
   return "";
@@ -562,6 +562,7 @@ function openDrawer(job) {
   if (sameDrawer(job)) return;
   const files = sortedFiles(job.files || []);
   const path = files.length ? files[0].path : null;
+  state.raw = false;
   state.drawer = {
     project: job.project || null, id: job.id, path, text: path ? "Loading..." : "No files yet.", focus: true,
     tab: "files", run: 0, runPicked: false, activity: null, activitySeq: 0,
@@ -571,6 +572,7 @@ function openDrawer(job) {
 }
 function pickFile(job, path) {
   if (!sameDrawer(job)) return;
+  if (state.drawer.path !== path) state.raw = false;
   state.drawer.path = path;
   state.drawer.text = "Loading...";
   state.drawer.focus = false;
@@ -1711,6 +1713,7 @@ function sameFile(job) {
   return !!(state.file && state.file.job === job.id && (state.file.project || null) === (job.project || null));
 }
 async function showFile(job, path) {
+  if (!sameFile(job) || state.file.path !== path) state.raw = false;
   state.file = { job: job.id, project: job.project || null, path, text: "Loading..." };
   render();
   let text;
