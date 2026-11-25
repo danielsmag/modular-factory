@@ -68,6 +68,7 @@ class Queue:
             "intake": None, "agents": None, "gate": None, "reviews": {},
             "waiting": None, "consumed": [], "reason": None, "escalated_from": None, "last_file": None,
             "entry_files": {}, "verify": None, "history": [], "cost_usd": None, "cost_by_step": {},
+            "plan_by_step": {}, "usage_share_by_step": {},
             "created_at": now(), "finished_at": None,
         }
         self.store.path(job_id).mkdir(parents=True)

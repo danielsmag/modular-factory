@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from .. import config, graph
+from .. import config, graph, plan_usage
 from ..store import SCHEMA as DATA_SCHEMA
 from ..util import FactoryError, first_line
 from .paths import SERVED
@@ -244,4 +244,4 @@ def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) 
         if pipeline is not None:
             item["graph"] = pipeline
         items.append(item)
-    return {"projects": items}
+    return {"projects": items, "plan_usage": plan_usage.read()}

@@ -11,6 +11,8 @@ yields no cost rather than a failed command.
 import json
 import os
 import re
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -68,3 +70,66 @@ def job_cost(cfg, job, job_dir):
     except (OSError, ValueError, KeyError, TypeError):
         return None
     return round(sum(by_step.values()), 2), {k: round(v, 2) for k, v in by_step.items()}, sorted(unpriced)
+
+
+SHARE_DAYS = 7
+
+
+def usage_share(cfg, job_dir, days=SHARE_DAYS):
+    """Each step's share, in percent, of all Claude Code usage on this machine in the last `days` days.
+
+    Like the "% of usage" rows in Claude Code's `/usage`: usage is weighted by API
+    price, every project's transcripts count, and usage from other machines or
+    claude.ai does not. None when cost isn't available or nothing was used.
+    """
+    if "claude" not in cfg.tools or not cfg["tools"].get("claude", {}).get("cost", True):
+        return None
+    home = transcripts_dir(cfg.repo).parent
+    if not home.is_dir():
+        return None
+    prices = cfg.adapters["claude"].get("prices", {})
+    since = time.time() - days * 86400
+    cutoff = datetime.fromtimestamp(since, UTC).strftime("%Y-%m-%dT%H:%M:%S")
+    needle = f"Job folder: {job_dir}/"
+    seen, total, by_step = set(), 0.0, {}
+    try:
+        for path in home.rglob("*.jsonl"):
+            try:
+                if path.stat().st_mtime < since:
+                    continue
+            except OSError:
+                continue
+            step = None
+            with path.open(errors="replace") as f:
+                for number, line in enumerate(f):
+                    if number == 0 and path.parent.name == "subagents" and needle in line:
+                        try:
+                            m = re.search(r"Step: ([a-z0-9-]+)\.", _prompt(line))
+                        except (ValueError, KeyError, TypeError):
+                            m = None
+                        step = m.group(1) if m else "other"
+                    if '"usage"' not in line or '"assistant"' not in line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except ValueError:
+                        continue
+                    msg = entry.get("message")
+                    stamp = entry.get("timestamp")
+                    if entry.get("type") != "assistant" or not isinstance(msg, dict) or not msg.get("usage"):
+                        continue
+                    if not isinstance(stamp, str) or stamp[:19] < cutoff or msg.get("id") in seen:
+                        continue
+                    seen.add(msg.get("id"))
+                    price = prices.get(msg.get("model"))
+                    if price is None:
+                        continue
+                    spent = _price(msg["usage"], price)
+                    total += spent
+                    if step:
+                        by_step[step] = by_step.get(step, 0.0) + spent
+    except (OSError, KeyError, TypeError):
+        return None
+    if total <= 0:
+        return None
+    return {k: round(100 * v / total, 2) for k, v in by_step.items()}
