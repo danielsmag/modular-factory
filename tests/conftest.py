@@ -1,5 +1,6 @@
 """A project with a bare `origin`, a stub `gh`, and stand-ins for the agents."""
 
+import base64
 import json
 import os
 import shutil
@@ -13,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "core" / "lib"))
 os.environ["FACTORY_VERIFY_POLL"] = "0.05"
 
+import stub_jira  # noqa: E402
 from modfactory import config, sync  # noqa: E402
 from modfactory.engine import Factory  # noqa: E402
 
@@ -52,6 +54,30 @@ skip = "REJECT"
 
 [steps.merge]
 enabled = true
+"""
+
+
+# One Jira status per default step, as in the fake board of tests/stub_jira.py.
+JIRA_COLUMNS = """
+[tracker.jira.columns]
+queue = "Ready for factory"
+intake = "Intake"
+ask-author = "Needs info"
+spec = "Spec"
+spec-approval = "Spec approval"
+build = "Build"
+gate = "Checks"
+debug = "Debug"
+review = "Review"
+approve = "Approve"
+ready-to-merge = "Ready to merge"
+merge = "Merging"
+ready-to-verify = "Ready to verify"
+verify = "Verify"
+escalated = "Escalated"
+done = "Done"
+rejected = "Rejected"
+failed = "Failed"
 """
 
 
@@ -99,6 +125,40 @@ class World:
         self.origin = tmp / "origin.git"
         self.state_file = tmp / "gh.json"
         self._factory = None
+        self.jira = None
+        self.acli_log = tmp / "acli.log"
+        self.bin = tmp / "bin"
+        self.monkeypatch = None
+
+    # ---- Jira --------------------------------------------------------------
+
+    def use_jira(self, extra="", columns=JIRA_COLUMNS, settings=""):
+        """Make this project take its jobs from a fake Jira board. `world.jira` is that board."""
+        if self.jira is None:
+            self.jira = stub_jira.FakeJira()
+        self.configure(f'[tracker]\nkind = "jira"\n\n[tracker.jira]\nsite = "{self.jira.url}"\nboard = 7\n'
+                       f"{settings}\n{columns}\n{extra}")
+        return self.jira
+
+    def use_acli(self, extra="", columns=JIRA_COLUMNS, settings='project = "PROJ"'):
+        """As `use_jira`, but with no REST credentials and a stub `acli` on PATH, so the factory falls back to it."""
+        jira = self.use_jira(extra=extra, columns=columns, settings=settings)
+        shutil.copy(ROOT / "tests" / "stub_acli.py", self.bin / "acli")
+        (self.bin / "acli").chmod(0o755)
+        self.monkeypatch.delenv("JIRA_EMAIL", raising=False)
+        self.monkeypatch.delenv("JIRA_API_TOKEN", raising=False)
+        basic = base64.b64encode(f"{stub_jira.EMAIL}:{stub_jira.TOKEN}".encode()).decode()
+        for name, value in {"ACLI_STUB_SITE": jira.url, "ACLI_STUB_AUTH": f"Basic {basic}",
+                            "ACLI_STUB_LOG": str(self.acli_log)}.items():
+            self.monkeypatch.setenv(name, value)
+        return jira
+
+    def acli_calls(self, *start):
+        """The `acli` commands run so far whose words start with `start`."""
+        if not self.acli_log.exists():
+            return []
+        calls = [json.loads(line) for line in self.acli_log.read_text().splitlines()]
+        return [call for call in calls if call[:len(start)] == list(start)]
 
     # ---- GitHub ------------------------------------------------------------
 
@@ -113,6 +173,9 @@ class World:
 
     def issue(self, title="Add a thing", body="Please add it.", labels=("factory",), author="alice",
               assignees=()):
+        if self.jira:
+            return self.jira.ticket(title, body, reporter=author, assignee=next(iter(assignees), None),
+                                    labels=[n for n in labels if n != "factory"])
         number = self.gh["next_number"] + 1
 
         def add(state):
@@ -215,8 +278,12 @@ class World:
         if push:
             git("push", "-q", "-u", "origin", j["branch"], cwd=tree)
             if not self.gh["prs"] or all(p["headRefName"] != j["branch"] for p in self.gh["prs"].values()):
+                # A Jira key goes in the title too, so Jira links the pull request.
+                named = isinstance(j["issue"], str)
+                title = f"{j['title']} [{j['issue']}]" if named else j["title"]
+                link = f"Refs {j['issue']}" if named else f"Refs #{j['issue']}"
                 subprocess.run(["gh", "pr", "create", "--draft", "--base", "main", "--head", j["branch"],
-                                "--title", j["title"], "--body", f"Refs #{j['issue']}"], cwd=tree, check=True,
+                                "--title", title, "--body", link], cwd=tree, check=True,
                                capture_output=True)
         self.write(job, "build.md", f"STATUS: {status}\n\n## Summary\n- built\n\n## Blocked\nNeeds a decision.\n")
 
@@ -270,7 +337,8 @@ class World:
 @pytest.fixture
 def world(tmp_path, monkeypatch, repo_template):
     w = World(tmp_path)
-    stubs = tmp_path / "bin"
+    w.monkeypatch = monkeypatch
+    stubs = w.bin
     stubs.mkdir()
     shutil.copy(ROOT / "tests" / "stub_gh.py", stubs / "gh")
     (stubs / "gh").chmod(0o755)
@@ -280,6 +348,7 @@ def world(tmp_path, monkeypatch, repo_template):
         "GIT_COMMITTER_EMAIL": "test@example.com", "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_CONFIG_NOSYSTEM": "1",
         "CLAUDE_CONFIG_DIR": str(tmp_path / "claude"),
+        "JIRA_EMAIL": stub_jira.EMAIL, "JIRA_API_TOKEN": stub_jira.TOKEN,
     }.items():
         monkeypatch.setenv(key, value)
     w.state_file.write_text(json.dumps({
@@ -295,3 +364,5 @@ def world(tmp_path, monkeypatch, repo_template):
     yield w
     if w._factory:
         w._factory.store.release()
+    if w.jira:
+        w.jira.stop()

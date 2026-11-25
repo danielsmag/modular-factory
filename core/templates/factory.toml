@@ -222,3 +222,31 @@ all = ["all"]
 # type = "agent"
 # instructions_file = "docs/docs-step.md"
 # on = { DONE = "gate", SKIP = "gate" }
+#
+# Jobs come from GitHub issues with the `factory` label. To take them from a
+# Jira kanban board instead, map each step to a status of the board. The
+# account and its API token come from JIRA_EMAIL and JIRA_API_TOKEN. Without
+# them the factory uses the Atlassian CLI, acli, and then needs `project`.
+# `mfactory tracker suggest` prints the board and the columns for your steps.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#tracker-a-jira-board
+#
+# [tracker]
+# kind = "jira"
+#
+# [tracker.jira]
+# site = "https://acme.atlassian.net"
+# board = 1234
+#
+# [tracker.jira.columns]
+# queue = "Ready for factory"
+# intake = "Intake"
+# ask-author = "Needs info"
+# spec = "Spec"
+# build = "Build"
+# gate = "Build"
+# review = "Review"
+# approve = "Review"
+# ready-to-merge = "Ready to merge"
+# escalated = "Escalated"
+# done = "Done"
+# rejected = "Rejected"

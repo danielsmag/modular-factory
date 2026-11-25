@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any, TextIO
 
-from .. import checks, config, graph, install, plan_usage
+from .. import board, checks, config, graph, install, plan_usage
 from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
@@ -41,6 +41,67 @@ def _index_note(factory: Factory, out: TextIO) -> None:
     if not dropped:
         return
     print(f"note: index.json dropped {', '.join(dropped)} (job folder gone)", file=out, flush=True)
+
+
+def _tracker_suggest(cfg: Any, as_json: bool) -> None:
+    """`mfactory tracker suggest`: the board for this pipeline. Read from factory.toml only; Jira is not asked."""
+    found: dict[str, Any] = board.suggest(cfg.steps, cfg["run"]["start"], cfg["run"]["escalate_to"])
+    if as_json:
+        print(json.dumps(found))
+        return
+    print("A Jira board for this pipeline, left to right. Name each column's status the same.")
+    print()
+    notes: dict[str, str] = {board.BACKLOG: f"not the factory's: move a card to `{board.READY}` to build it",
+                             board.READY: "the queue: the top card is built first"}
+    rows: list[tuple[str, str, str]] = [("column", "who", "steps")]
+    rows += [(c["name"], c["who"], notes.get(c["name"]) or ", ".join(c["steps"])) for c in found["columns"]]
+    widths: list[int] = [max(len(row[i]) for row in rows) for i in (0, 1)]
+    for name, who, steps in rows:
+        print(f"  {name.ljust(widths[0])}  {who.ljust(widths[1])}  {steps}")
+    print()
+    print(f"Put {', '.join(f'`{n}`' for n in found['done_category'])} in Jira's Done category, and every other "
+          "status in To Do or In Progress.")
+    print("Let every status move to every other in the workflow. Steps that are switched off get no column. "
+          "Run this again after turning a step on.")
+    for note in found["notes"]:
+        print(f"note: {note}")
+    print()
+    print("Paste this into factory.toml, then run `mfactory tracker show`:")
+    print()
+    print(found["toml"], end="")
+
+
+def _tracker_show(factory: Factory, as_json: bool) -> int:
+    """`mfactory tracker show`: each step, its status and its board column. 1 when the board has a problem."""
+    report: dict[str, Any] | None = factory.tracker.board_report()
+    if report is None:
+        print(f"{factory.tracker.label} issues have no board: {factory.tracker.queue_note()}")
+        return 0
+    wrong: bool = bool(report["problems"]) or any(row["problem"] for row in report["rows"])
+    if as_json:
+        print(json.dumps(report))
+        return 1 if wrong else 0
+    print(f"{factory.tracker.label} board {report['board']} at {report['site']}")
+    table: list[tuple[str, str, str, str, str]] = [("step", "type", "status", "column", "")]
+    for row in report["rows"]:
+        note: str = row["problem"] or ("switched off" if not row["enabled"] else
+                                       "" if row["status"] else "no status: the card stays where it is")
+        table.append((row["step"], row["type"], row["status"] or "-", row["column"] or "-", note))
+    widths: list[int] = [max(len(line[i]) for line in table) for i in range(4)]
+    for line in table:
+        print("  ".join(cell.ljust(width) for cell, width in zip(line, widths, strict=False)) + (
+            f"  {line[4]}" if line[4] else ""))
+    if report["unused"]:
+        print(f"statuses no step uses: {', '.join(report['unused'])}")
+    for problem in report["problems"]:
+        print(f"problem: {problem}")
+    for warning in report.get("warnings") or []:
+        print(f"warning: {warning}")
+    if report["unchecked"]:
+        print(f"transitions not checked from: {', '.join(report['unchecked'])} (no card is in those statuses now)")
+    if report.get("note"):
+        print(report["note"])
+    return 1 if wrong else 0
 
 
 def _stdin_text() -> str:
@@ -187,10 +248,15 @@ def run(args: argparse.Namespace) -> int:
             for row in rows:
                 print("  ".join(str(cell) for cell in row))
             if not rows:
-                print(f"nothing to do: no open issue is labeled `{cfg['labels']['queue']}` and no job is unfinished")
+                print(f"nothing to do: {factory.tracker.empty_note()} and no job is unfinished")
         elif command == "create":
             job = factory.create(args.issue)
-            print(f"created {job['id']} for #{job['issue']} at {job['step']}")
+            print(f"created {job['id']} for {factory.tracker.ref(job['issue'])} at {job['step']}")
+        elif command == "file":
+            text: str = _stdin_text()
+            if not text.strip():
+                raise Refused("the issue's text goes on stdin")
+            print(factory.tracker.create_issue(" ".join(args.title), text, queue=True))
         elif command == "next":
             factory.next(args.job)
         elif command == "done":
@@ -209,6 +275,15 @@ def run(args: argparse.Namespace) -> int:
         elif command == "route":
             job = factory.store.read(factory.store.find(args.job))
             print(json.dumps(job["agents"] or factory.route(dict(job)), indent=1))
+        elif command == "tracker" and args.tracker_what == "suggest":
+            _tracker_suggest(cfg, args.json)
+        elif command == "tracker" and args.tracker_what == "show":
+            return _tracker_show(factory, args.json)
+        elif command == "tracker":
+            if factory.tracker.board_report() is None:
+                print(f"{factory.tracker.label} issues have no board: nothing to move")
+                return 0
+            return 0 if factory.sync_cards() else 1
     return 0
 
 

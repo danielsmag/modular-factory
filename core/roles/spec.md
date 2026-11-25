@@ -24,7 +24,7 @@ STATUS: DONE
 
 # <short title>
 
-> Issue #<n>: <issue title>
+> Issue <the issue from `Issue:` in your prompt>: <issue title>
 
 ## Summary
 - 3 to 5 short bullets: what will be built and the main decisions you made

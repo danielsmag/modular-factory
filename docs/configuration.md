@@ -51,6 +51,7 @@ mfactory: factory.toml has 2 problem(s):
 - [Reviewers and surfaces](#reviewers-and-surfaces)
 - [Models and effort](#models-and-effort)
 - [Project skills](#project-skills)
+- [Tracker: a Jira board](#tracker-a-jira-board)
 - [Labels, paths and ports](#labels-paths-and-ports)
 
 ## Project, tools and run
@@ -873,9 +874,187 @@ when `AGENTS.md` is missing.
 A missing project file you list yourself fails `mfactory sync`. A missing user file syncs, and
 `mfactory doctor` warns. `SKILL.md` files and plugin caches are not rule files.
 
+## Tracker: a Jira board
+
+By default the tracker is GitHub issues: jobs come from open issues with the queue label, and people reply in
+issue and pull request comments. With `kind = "jira"`, a Jira kanban board is the tracker. New jobs are the cards
+in its queue column, each step's card sits in a column of the board, and people reply in Jira comments or by
+moving the card. Code, branches and pull requests stay on GitHub. A project uses one tracker; a workspace can
+hold projects of both kinds.
+
+```toml
+[tracker]
+kind = "jira"
+
+[tracker.jira]
+site = "https://acme.atlassian.net"
+board = 1234
+jql = "assignee = currentUser()"
+
+[tracker.jira.columns]
+queue = "Ready for factory"
+intake = "Intake"
+ask-author = "Needs info"
+spec = "Spec"
+build = "Build"
+gate = "Build"
+review = "Review"
+approve = "Review"
+ready-to-merge = "Ready to merge"
+escalated = "Escalated"
+done = "Done"
+rejected = "Rejected"
+failed = "Failed"
+```
+
+The account and its API token come from the environment, never from `factory.toml`:
+
+```bash
+export JIRA_EMAIL="you@example.com"
+export JIRA_API_TOKEN="..."
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `[tracker] kind` | `github` | `github` or `jira`. |
+| `[tracker.jira] site` | | The Jira Cloud site. `https://` only. |
+| `[tracker.jira] board` | | The kanban board's id: the number in its address. Its saved filter scopes the queue. |
+| `[tracker.jira] jql` | `""` | Narrows the queue further, ANDed with the board's filter. A filter only: no `ORDER BY`. `assignee = currentUser()` keeps the queue to cards assigned to the operator. |
+| `[tracker.jira] email_env`, `token_env` | `JIRA_EMAIL`, `JIRA_API_TOKEN` | Names of the environment variables that hold the account and its API token. They are sent only to `site`. |
+| `[tracker.jira] issue_type` | `Task` | The type of an issue the factory files itself (`mfactory file`, `report_problems`, a failed verify). |
+| `[tracker.jira] maintainers` | `[]` | Jira account ids that may answer a `maintainer` step. Empty: anyone who can be assigned the issue. |
+| `[tracker.jira] via` | `auto` | `rest`, `acli`, or `auto`. See [Reaching Jira](#reaching-jira-rest-or-acli). |
+| `[tracker.jira] project` | `""` | The project's key. Required with acli; with REST the board says it. |
+
+### Columns
+
+`[tracker.jira.columns]` maps a step, an end state (`done`, `rejected`, `failed`) or `queue` to a Jira
+**status**. The factory moves the card when the job enters the step.
+
+- `queue` is required. It is the status new jobs are picked from, and it may be a list.
+- A key is a step's name in `factory.toml`, so a step you add, rename or switch off needs no other change.
+  A key that is not a step fails `mfactory sync`, with the steps listed.
+- Steps may share a status, for a smaller board.
+- A step with no status leaves the card where it is.
+- The status is looked up each time it is used and is not stored on the job. Change one line and the next
+  command uses it.
+
+A card Jira will not move (the workflow has no such transition) is reported as a `note:` line and does not
+stop the job.
+
+### A board that works well
+
+Give each place where a person acts a column of its own, and let the factory's steps share a few:
+
+```
+Backlog | Ready for factory | Intake | Needs info* | Spec | Build | Review | Ready to merge* | Escalated* | Done | Rejected
+```
+
+`*` marks the columns where you act. The factory moves cards through the others.
+
+1. Keep `Backlog` apart from the queue column. Moving a card to `Ready for factory` is the decision to build it.
+   With REST the top card is built first, so rank the column.
+2. Give every step that waits for a person its own column, distinct from the columns its outcomes lead to.
+   Otherwise moving the card cannot say which outcome is meant, and the step is answered by comment only.
+3. Let the factory's steps share: `build`, `gate` and `debug` in `Build`; `review` and `approve` in `Review`.
+4. Put only the end columns (`Done`, `Rejected`, and `Failed` when verify is on) in Jira's Done category. A card
+   in a Done-category status counts as a closed issue, and no job starts from one.
+5. Let every status move to every other in the workflow.
+
+`mfactory tracker suggest` prints this board for your pipeline, steps you added and switched on included, with
+the `[tracker.jira.columns]` to paste. Run it again after changing the steps. Jira's API cannot set a board's
+columns, so create them in the board's settings, then check with `mfactory tracker show`.
+
+### Answering by moving the card
+
+A person answers a human step with a Jira comment, as on GitHub: `/mfactory approve`, or plain words on a
+step with an `ANSWER` outcome. They can also move the card. Moving it to the status of one of the step's
+edge targets is that outcome:
+
+| Step | Move the card to | Outcome |
+| --- | --- | --- |
+| `spec-approval` | the status of `build` | `APPROVE` |
+| `spec-approval` | the status of `spec`, after a comment saying what to change | `CHANGES` |
+| any human step | the status of `rejected` | `REJECT` |
+| `escalated` | the status of `build` | `FEEDBACK` |
+
+These come from the graph, not from a list: an edge through a step that is switched off counts as the step
+the job lands in. Words for the move are the mover's newest comment. `REJECT` needs none, and neither does
+`FEEDBACK` at `[run].escalate_to`.
+
+Any other move by a person is moved back, with one comment that says why and names the statuses that are
+answers: a status two outcomes share, a status that is no edge target, a move by someone the step's `who`
+does not allow, or a move while an agent works on the job. To put a job at another step, use
+`mfactory move <job> <step>`.
+
+`who` works as on GitHub, with Jira accounts: `author` is the reporter, `operator` is the account the token
+belongs to, `maintainer` is anyone who can be assigned the issue (or `maintainers`), and a list holds account ids.
+
+### When the board changes
+
+```bash
+.factory/bin/mfactory tracker show      # each step, its status and its column, and what is wrong
+.factory/bin/mfactory tracker sync      # put every unfinished job's card in its step's status
+.factory/bin/mfactory tracker suggest   # the board that works well for the steps you have now
+```
+
+`tracker show` names a status Jira does not have, a status on no column of the board, statuses no step
+uses, and a move the pipeline needs that the workflow does not allow. Jira lists transitions for an issue,
+not for a workflow, so a status is checked through a card that is in it now; the rest are listed as not
+checked. `mfactory doctor` runs the same checks.
+
+After renaming a column or editing `[tracker.jira.columns]`, run `tracker sync`. `mfactory queue` also moves
+a card that is where the factory left it and no longer where the mapping says.
+
+### Reaching Jira: REST or acli
+
+The factory reaches Jira through its REST API, with the account and token from the environment. When they
+are not there, it falls back to the Atlassian CLI, [`acli`](https://developer.atlassian.com/cloud/acli/),
+which signs in on its own:
+
+```bash
+acli jira auth login --web
+```
+
+| `via` | Meaning |
+| --- | --- |
+| `auto` (default) | REST while both `JIRA_EMAIL` and `JIRA_API_TOKEN` are set. Otherwise acli, when it is installed. |
+| `rest` | REST only. Missing credentials are an error. |
+| `acli` | acli only, also when the credentials are set. |
+
+acli reaches less of Jira than REST does, so with it:
+
+- `[tracker.jira] project` is required. acli cannot read a board, so the project's key scopes the queue, which
+  is then every card of the project in the queue status (and `jql`), oldest first.
+- A moved card is not an answer: acli shows no issue history, so nobody can be named for the move. The card
+  is moved back with a comment, and people reply in comments.
+- A `maintainer` step is answered by the operator or an account in `maintainers`. acli cannot say who can be
+  assigned an issue.
+- `tracker show` and `doctor` list the mapping without comparing it to the board or the workflow.
+- The operator's account is read from an issue assigned to it or reported by it, so the account needs one.
+
+`mfactory doctor` says which of the two is in use.
+
+Every comment the factory writes ends with the line `— mfactory`. The factory posts from the operator's own
+account, and that line is how it tells its comments from ones the operator typed, whichever way Jira is reached.
+
+### What else differs from GitHub issues
+
+- A job's issue is its Jira key, such as `PROJ-123`: `/mfactory run PROJ-123`, `mfactory answer PROJ-123 approve`.
+- The branch is `<branch_prefix>PROJ-123-<job id>`, the pull request title must contain the key, and its body
+  starts with `Refs PROJ-123`, so Jira's development panel links them. `branch_pattern` must accept that branch.
+- `[project] issue_link = "closes"` is refused: a pull request cannot close a Jira issue.
+- `[labels]` is not used. The queue column and the step columns say what the labels said.
+- Asks are posted on the Jira issue only, and comments on the pull request are not read as replies. A pull
+  request merged by hand still continues the job.
+- `mfactory close issue` moves the card to the status of `done`, or of `rejected` with `--not-planned`.
+
 ## Labels, paths and ports
 
 ```toml
+[tracker]
+kind = "github"
+
 [labels]
 queue = "factory"
 needs_info = "factory:needs-info"
@@ -892,7 +1071,8 @@ step = 10
 
 | Key | Meaning |
 | --- | --- |
-| `[labels] queue` | Issues with this label are built. |
+| `[tracker] kind` | Where jobs come from and where people reply to the factory: `github` (GitHub issues) or `jira`. See [Tracker: a Jira board](#tracker-a-jira-board). Pull requests are always on GitHub. |
+| `[labels] queue` | Issues with this label are built. `[labels]` is for GitHub issues; a Jira board uses its columns. |
 | `[labels] needs_info` | Put on an issue while its author is being asked. |
 | `[labels] needs_human` | Put on an issue while a maintainer, the operator, or a named login is being asked. |
 | `[paths] worktrees` | Where each job's worktree goes, relative to the repository. Keep it ignored by git. |

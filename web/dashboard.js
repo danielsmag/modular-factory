@@ -82,6 +82,11 @@ function svg(tag, attrs, ...kids) {
   for (const kid of kids.flat(Infinity)) if (kid) node.append(kid);
   return node;
 }
+// An issue as people write it: a GitHub number gets "#", a named key such as PROJ-123 is shown as it is.
+function issueRef(key) {
+  const text = key == null ? "" : String(key);
+  return /^\d+$/.test(text) ? "#" + text : text;
+}
 function link(url, text) {
   // Only real web addresses become links; anything else is shown as plain text.
   return /^https:\/\//.test(url || "") ? el("a", { class: "ext", href: url, target: "_blank", rel: "noopener noreferrer", text }) : el("span", { class: "mono", text });
@@ -144,7 +149,7 @@ function chip(job) {
 function matches(job) {
   const q = state.query.trim().toLowerCase();
   if (!q) return true;
-  return [job.project, job.projectName, job.id, job.title, "#" + job.issue, job.step, job.author, ...jobPrs(job).map((p) => "#" + p.number)].some((v) => String(v || "").toLowerCase().includes(q));
+  return [job.project, job.projectName, job.id, job.title, issueRef(job.issue), job.step, job.author, ...jobPrs(job).map((p) => "#" + p.number)].some((v) => String(v || "").toLowerCase().includes(q));
 }
 function visibleProjects() {
   if (!state.workspace) return [];
@@ -181,7 +186,7 @@ function queueMatches(row) {
   const q = state.query.trim().toLowerCase();
   if (!q) return true;
   const labels = Array.isArray(row.labels) ? row.labels : [];
-  return [row.project, row.projectName, row.title, row.note, "#" + row.issue, row.action, row.job, row.step, row.author, ...labels].some((value) => String(value || "").toLowerCase().includes(q));
+  return [row.project, row.projectName, row.title, row.note, issueRef(row.issue), row.action, row.job, row.step, row.author, ...labels].some((value) => String(value || "").toLowerCase().includes(q));
 }
 function queueCards(rows, jobList) {
   const ids = new Set(jobList.map((job) => job.id));
@@ -390,10 +395,10 @@ function paintAges() {
 }
 function waitingAudience(job) {
   const who = job.waiting && job.waiting.who;
-  if (who === "author") return "the author (@" + job.author + ")";
-  if (who === "operator") return job.waiting.operator ? "the operator (@" + job.waiting.operator + ")" : "the operator";
+  if (who === "author") return "the author (" + person(job.author, job.author_name, job.project) + ")";
+  if (who === "operator") return job.waiting.operator ? "the operator (" + person(job.waiting.operator, null, job.project) + ")" : "the operator";
   if (Array.isArray(who)) {
-    const names = who.map((login) => "@" + login);
+    const names = who.map((login) => person(login, null, job.project));
     if (names.length <= 1) return names[0] || "a maintainer";
     if (names.length === 2) return names[0] + " or " + names[1];
     return names.slice(0, -1).join(", ") + ", or " + names[names.length - 1];
@@ -499,7 +504,7 @@ function jobCard(job) {
       flag ? el("span", { class: "flag", text: flag }) : null),
     el("p", { class: "feature", text: job.title || job.id }),
     el("div", { class: "links" },
-      link(job.issue_url, "issue #" + (job.issue == null ? "" : job.issue)),
+      link(job.issue_url, "issue " + issueRef(job.issue)),
       prLinks(job, "PR #")),
     rounds.map((row) => roundLine(job, row)),
     el("div", { class: "meta" },
@@ -1131,7 +1136,7 @@ function drawer() {
         el("div", { class: "num", text: (state.workspace && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id + " · " + (job.step || "") + (job.round ? " · round " + job.round : "") }),
         el("h3", { id: "d-title", text: job.title || job.id }),
         el("div", { class: "links" },
-          link(job.issue_url, "issue #" + (job.issue == null ? "" : job.issue)),
+          link(job.issue_url, "issue " + issueRef(job.issue)),
           prLinks(job, "PR #")),
         el("div", { class: "tabs d-tabs", role: "tablist", "aria-label": "Job view" },
           drawerTab("files", "Files"), drawerTab("activity", "Agent activity")),
@@ -1163,7 +1168,7 @@ function openIssue(row) {
   fetchIssue(state.drawer);
 }
 async function fetchIssue(drawer) {
-  const fallback = "Could not load issue #" + drawer.issue + ".";
+  const fallback = "Could not load issue " + issueRef(drawer.issue) + ".";
   let data = null;
   let error = null;
   try {
@@ -1181,7 +1186,7 @@ async function fetchIssue(drawer) {
 }
 function queueCard(row) {
   const who = state.workspace && state.selected === "all" && row.projectName ? row.projectName + " · " : "";
-  const label = (row.title || row.note || "issue #" + (row.issue || "")) + (state.workspace && state.selected === "all" && row.projectName ? ", " + row.projectName : "");
+  const label = (row.title || row.note || "issue " + issueRef(row.issue)) + (state.workspace && state.selected === "all" && row.projectName ? ", " + row.projectName : "");
   const opened = day(row.created_at);
   return el("article", {
     class: "kcard" + (sameIssue(row) ? " on" : ""), tabindex: 0, role: "button", "aria-label": label,
@@ -1194,13 +1199,13 @@ function queueCard(row) {
   },
     el("div", { class: "card-top" },
       el("span", { class: "num", text: who + (row.action || "new") }),
-      el("span", { class: "flag", text: "#" + (row.issue || "") })),
-    el("p", { class: "feature", text: row.title || row.note || ("issue #" + (row.issue || "")) }),
-    el("div", { class: "links" }, link(row.issue_url, "issue #" + (row.issue || ""))),
+      el("span", { class: "flag", text: issueRef(row.issue) })),
+    el("p", { class: "feature", text: row.title || row.note || ("issue " + issueRef(row.issue)) }),
+    el("div", { class: "links" }, link(row.issue_url, "issue " + issueRef(row.issue))),
     opened || row.author || (row.labels || []).length ? el("div", { class: "meta" },
       opened ? el("span", { text: opened }) : null,
       opened ? ageNode(row.created_at, "ago") : null,
-      row.author ? el("span", { text: "@" + row.author }) : null,
+      row.author ? el("span", { text: person(row.author, null, row.project) }) : null,
       labelChips(row.labels)) : null,
     row.action === "hold" && row.title && row.note ? el("p", { class: "hint", text: row.note }) : null);
 }
@@ -1218,7 +1223,7 @@ function issueBody(drawer) {
     el("h4", { class: "block-title", text: "Comments" }),
     comments.length
       ? comments.map((comment) => el("section", { class: "d-comment" },
-        el("div", { class: "step-meta", text: [comment.author ? "@" + comment.author : "", day(comment.created_at)].filter(Boolean).join(" · ") }),
+        el("div", { class: "step-meta", text: [comment.author ? person(comment.author, null, drawer.project) : "", day(comment.created_at)].filter(Boolean).join(" · ") }),
         el("pre", { class: "file", text: comment.body || "" })))
       : el("p", { class: "kempty", text: "No comments." }));
 }
@@ -1228,7 +1233,7 @@ function issueDrawer() {
   const data = drawer.data || {};
   const project = state.projects.find((item) => item.id === drawer.project);
   const close = el("button", { type: "button", class: "close", "data-close": "true", "data-focus": "drawer-close", text: "close", onclick: closeDrawer });
-  const issueLink = link(data.url || row.issue_url, "issue #" + drawer.issue);
+  const issueLink = link(data.url || row.issue_url, "issue " + issueRef(drawer.issue));
   issueLink.setAttribute("data-focus", "drawer-issue-link");
   const author = data.author || row.author;
   const labels = drawer.data ? data.labels : row.labels;
@@ -1239,11 +1244,11 @@ function issueDrawer() {
     el("div", { class: "scrim", onclick: closeDrawer }),
     el("aside", { class: "drawer", role: "dialog", "aria-modal": "true", "aria-labelledby": "d-title" },
       el("div", { class: "d-head" },
-        el("div", { class: "num", text: (project ? projectLabel(project) : drawer.project) + " · issue #" + drawer.issue + (row.action ? " · " + row.action : "") }),
-        el("h3", { id: "d-title", text: data.title || row.title || row.note || "issue #" + drawer.issue }),
+        el("div", { class: "num", text: (project ? projectLabel(project) : drawer.project) + " · issue " + issueRef(drawer.issue) + (row.action ? " · " + row.action : "") }),
+        el("h3", { id: "d-title", text: data.title || row.title || row.note || "issue " + issueRef(drawer.issue) }),
         el("div", { class: "links" }, issueLink),
         el("div", { class: "facts" },
-          author ? el("span", { text: "@" + author }) : null,
+          author ? el("span", { text: person(author, null, drawer.project) }) : null,
           labelChips(labels),
           dated("opened", created),
           dated("updated", updated),
@@ -1544,7 +1549,7 @@ function byStep(all) {
   return { priced, rows, sum };
 }
 function jobTable(list) {
-  if (!list.length) return el("div", { class: "empty", text: state.query ? "No job matches the search." : "No jobs yet. Label an issue and run /mfactory run." });
+  if (!list.length) return el("div", { class: "empty", text: state.query ? "No job matches the search." : "No jobs yet. " + String(trackerInfo().enqueue || "Label an issue").replace(/`/g, "") + " and run /mfactory run." });
   const body = el("tbody", {}, list.map((job) => el("tr", {
     class: "link", tabindex: 0,
     onclick: () => { location.hash = jobHref(job); },
@@ -1841,9 +1846,9 @@ function jobDetail(job) {
   parts.push(el("div", { class: "panel" },
     el("div", { class: "head" }, el("div", { style: "min-width:0" }, el("h2", { class: "job-title", text: job.title }), el("div", { class: "mono dim", style: "margin-top:3px", text: (state.workspace && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id })), chip(job)),
     el("div", { class: "facts" },
-      el("span", {}, "Issue ", link(job.issue_url, "#" + job.issue)),
+      el("span", {}, "Issue ", link(job.issue_url, issueRef(job.issue))),
       jobPrs(job).length ? el("span", {}, jobPrs(job).length > 1 ? "PRs " : "PR ", prLinks(job, "#")) : null,
-      el("span", {}, "By ", el("b", { text: "@" + job.author })),
+      el("span", {}, "By ", el("b", { text: person(job.author, job.author_name, job.project) })),
       job.intake ? el("span", {}, "Risk ", el("b", { text: job.intake.risk })) : null,
       job.intake ? el("span", {}, "Surfaces ", el("b", { text: (job.intake.surfaces || []).join(", ") || "none" })) : null,
       el("span", {}, "Round ", el("b", { text: `${job.round || 0}` + (job.attempt > 1 ? `, attempt ${job.attempt}` : "") })),
@@ -1908,17 +1913,39 @@ function queueLabel() {
   }
   return "factory";
 }
+// A project's tracker, as index.json describes it. Empty for a project whose core is older than trackers.
+function trackerInfo(projectId) {
+  const own = projectId && state.workspace ? state.projects.find((item) => item.id === projectId) : null;
+  if (own && own.tracker && own.tracker.kind) return own.tracker;
+  if (state.index && state.index.tracker) return state.index.tracker;
+  for (const project of visibleProjects()) {
+    if (project.tracker && project.tracker.kind) return project.tracker;
+  }
+  return {};
+}
+// A person as the page shows them: a GitHub login gets "@"; Jira knows people by name, or by an account id.
+function person(login, name, projectId) {
+  if (name) return String(name);
+  const text = String(login || "");
+  return trackerInfo(projectId).kind === "jira" ? text : "@" + text;
+}
+// "Label an issue `factory`" as text and code nodes, from the tracker's own words.
+function enqueueNodes() {
+  const hint = trackerInfo().enqueue;
+  if (!hint) return ["Label an issue ", el("code", { text: queueLabel() })];
+  return String(hint).split("`").map((part, index) => (index % 2 ? el("code", { text: part }) : part));
+}
 function jobsView(id, projectId) {
   const all = jobs(), shown = all.filter(matches);
   const current = all.find((job) => sameJob(job, projectId, id)) || shown[0] || null;
-  if (!all.length) return [el("h1", { text: "Jobs" }), el("p", { class: "sub", text: "One job per labeled issue" }), el("div", { class: "notice" }, "No jobs yet. Label an issue ", el("code", { text: queueLabel() }), " and run ", el("code", { text: "/mfactory run" }), " in your coding tool.")];
+  if (!all.length) return [el("h1", { text: "Jobs" }), el("p", { class: "sub", text: trackerInfo().kind === "jira" ? "One job per card from the queue column" : "One job per labeled issue" }), el("div", { class: "notice" }, "No jobs yet. ", ...enqueueNodes(), " and run ", el("code", { text: "/mfactory run" }), " in your coding tool.")];
   return [
     el("h1", { text: "Jobs" }),
     el("p", { class: "sub", text: `${shown.length} of ${all.length}` + (state.query ? " match the search" : "") }),
     el("div", { class: "jobview" },
       el("nav", { class: "panel joblist", "aria-label": "Jobs" }, shown.length ? shown.map((job) => el("a", { href: jobHref(job), "aria-current": !!current && sameJob(job, current.project || null, current.id) ? "true" : null },
         el("div", { class: "id", text: state.workspace && state.selected === "all" ? (job.projectName || job.project) + " · " + job.id : job.id }),
-        el("div", { class: "meta" }, el("span", {}, "#" + job.issue + " · ", ageNode(job.updated_at, "ago")), chip(job)))) : el("div", { class: "empty", text: "No job matches." })),
+        el("div", { class: "meta" }, el("span", {}, issueRef(job.issue) + " · ", ageNode(job.updated_at, "ago")), chip(job)))) : el("div", { class: "empty", text: "No job matches." })),
       current ? jobDetail(current) : el("div", { class: "notice", text: "Pick a job." })),
   ];
 }

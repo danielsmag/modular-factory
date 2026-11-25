@@ -169,11 +169,11 @@ class Scripted:
         follow_up = ""
         try:
             if step["on_failure"] == "issue":
-                url = self.gh.create_issue(
+                url = self.tracker.create_issue(
                     f"Fix: verification failed after #{job['pr']} ({job['title']})",
-                    f"The factory merged #{job['pr']} for #{job['issue']} as {sha}, and the check after "
-                    f"{step['after']} failed. Find the cause and fix it.\n\n{detail}",
-                    self.cfg["labels"]["queue"])
+                    f"The factory merged #{job['pr']} for {self.tracker.ref(job['issue'])} as {sha}, and the "
+                    f"check after {step['after']} failed. Find the cause and fix it.\n\n{detail}",
+                    queue=True)
                 follow_up = f"\n\nA new issue asks the factory to fix it: {url}"
             elif step["on_failure"] == "revert-pr":
                 url = self._revert_pr(job)
@@ -182,14 +182,14 @@ class Scripted:
             follow_up = f"\n\nThe factory could not open the follow-up ({step['on_failure']}): {e}"
         job["verify"]["follow_up"] = follow_up.strip()
         if job["pr"]:
-            self.gh.comment("pr", job["pr"], text + follow_up)
+            self.gh.comment(job["pr"], text + follow_up)
         return "FAIL"
 
     def _revert_pr(self, job):
         repo, base, sha = self.cfg.repo, self.cfg.base, job["merge_sha"]
         if not sha:
             raise Refused("the merge commit is unknown")
-        branch: str = self.cfg.job_branch(job["id"], revert=True)
+        branch: str = self.cfg.job_branch(job["id"], revert=True, tag=self.tracker.branch_tag(job["issue"]))
         path = Path(self._verify_path(job)).with_name(f"{job['id']}-revert")
         self._remove_worktree(path, branch)
         run(["git", "fetch", "origin", base], cwd=repo)

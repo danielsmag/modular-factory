@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from . import config, graph, plan_usage
+from .service import tracker as trackers
 from .util import Refused, first_line, now, version, write_atomic
 
 RUNNING_TYPES = {"agent", "checks", "review", "merge"}
@@ -34,12 +35,13 @@ class Store:
         return [self.read(job_id) for job_id in self.ids()]
 
     def find(self, ref):
-        """A job id (`004-dark-mode`), its number as in the id (`004`), or its issue (`12` or `#12`)."""
+        """A job id (`004-dark-mode`), its number as in the id (`004`), or its issue's key (`12` or `#12`)."""
         ref = str(ref)
         jobs = self.all()
         matches = [j for j in jobs if j["id"] == ref or j["id"].startswith(ref + "-")]
-        if not matches and ref.lstrip("#").isdigit():
-            matches = [j for j in jobs if j["issue"] == int(ref.lstrip("#"))]
+        if not matches:
+            key = ref.lstrip("#").lower()
+            matches = [j for j in jobs if str(j["issue"]).lower() == key]
         if not matches:
             raise Refused(f"no job matches {ref!r}. Jobs: {', '.join(self.ids()) or 'none'}")
         return matches[0]["id"]
@@ -117,6 +119,7 @@ class Store:
 
     def index(self):
         cfg = self.cfg
+        tracker = trackers.make(cfg)
         return {
             "schema": SCHEMA,
             "generated_at": now(),
@@ -126,6 +129,8 @@ class Store:
             "tools": cfg.tools,
             "concurrency": cfg["run"]["concurrency"],
             "labels": cfg["labels"],
+            # Where jobs come from, for the page's wording. Read from factory.toml; the tracker is not asked.
+            "tracker": {"kind": tracker.kind, "label": tracker.label, "enqueue": tracker.enqueue_hint()},
             "plan_usage": plan_usage.read(),
             "jobs": [dict(job, files=self.files(job["id"])) for job in self.all()],
         }
