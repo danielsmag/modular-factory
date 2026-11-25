@@ -146,6 +146,13 @@ def main(argv):
                     sys.exit("stub gh: label not on issue")
                 names.remove(named["remove-label"])
             issue["labels"] = [{"name": n} for n in names]
+        elif action == "close":
+            issue = state["issues"][pos[0]]
+            if issue["state"] != "OPEN":
+                save(state)
+                sys.exit(f"stub gh: issue {pos[0]} is already closed")
+            issue["state"] = "CLOSED"
+            issue["stateReason"] = str(named.get("reason", "completed")).upper().replace(" ", "_")
         else:
             sys.exit(f"stub gh: unknown issue action {action}")
     elif group == "pr":

@@ -77,6 +77,7 @@ concurrency = 3
 | `[project] merge_method` | `"squash"` | `merge`, `squash` or `rebase`. With `squash`, the pull request title becomes the commit on the base branch. |
 | `[project] pr_title` | `""` | Example pull request title, such as `feat: add CSV export [ABC-123]`. The builder uses this shape instead of the spec title. Empty means the spec title. The script does not fill placeholders. |
 | `[project] pr_title_pattern` | `""` | Regular expression the whole title must match (`fullmatch`). Empty means no check. `done` refuses a `READY` build whose title does not match. |
+| `[project] issue_link` | `"refs"` | How the pull request body links the issue. `"refs"`: the first line is `Refs #<issue>`, and the issue stays open after the merge until someone runs `mfactory close issue`. `"closes"`: the first line is `Closes #<issue>`, and GitHub closes the issue when the pull request merges. |
 | `[project] branch_prefix` | `"factory/"` | Concatenated with the job id. Include the slash: `feature/` names the branch `feature/001-add-dark-mode`. A revert branch is the prefix plus `revert-` and the job id. |
 | `[project] branch_pattern` | `""` | Regular expression the whole branch name must match (`fullmatch`). Empty means no check. The factory checks the name when it chooses the branch, before creating it. A job already on disk keeps the branch stored in its `job.json`. |
 | `[tools] enabled` | `["claude"]` | The tools to write agent files for: `claude`, `cursor`, `codex`. |
@@ -103,6 +104,17 @@ the issue lacks a value the title needs, such as a ticket key, intake returns
 pr_title = "feat: add CSV export [ABC-123]"
 pr_title_pattern = '^(feat|fix|perf|refactor|chore|docs|test|ci|build|revert)(\(.+\))?!?: .+ \[[A-Z]+-\d+\]$'
 ```
+
+`issue_link` decides who closes the issue. The factory never closes an issue
+on its own. With `"refs"`, the issue stays open through every step after the
+merge (verify, or a human step on the merge step's `MERGED` edge), and a person
+closes it with `mfactory close issue <job>` (add `--not-planned` for a job that
+will not ship). `done` refuses a `READY` build whose body does not start with
+`Refs #<issue>`, or that puts a closing keyword (close, fix, resolve) next to the
+issue number. With `"closes"`, GitHub closes the issue on merge, and `doctor`
+warns when a step runs after the merge, because that step would see a closed
+issue. `mfactory close job <job>` is separate: it ends the job as `done` from any
+step and leaves the issue alone. After changing `issue_link`, run `mfactory sync`.
 
 `branch_prefix` is concatenated with the job id, so the slash belongs in the
 prefix. `branch_pattern` is checked when the factory chooses the name, before

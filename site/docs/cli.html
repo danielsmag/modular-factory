@@ -83,6 +83,14 @@
     <p>Reply to a step that waits for a person. The outcome is one the step allows, such as <code>approve</code>, <code>changes</code>, <code>feedback</code>, <code>answer</code>, or <code>reject</code>. Words can follow, or come on standard input.</p>
   </div>
   <div class="def">
+    <div class="def-h"><code>close issue &lt;job&gt;</code> <span class="chip">--not-planned</span></div>
+    <p>Close the job's issue on GitHub, as completed or, with <code>--not-planned</code>, as not planned. The job is not touched. The factory never closes an issue on its own.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>close job &lt;job&gt;</code></div>
+    <p>End the job as <code>done</code> from any step, and remove its worktree. The issue and any open pull request stay as they are.</p>
+  </div>
+  <div class="def">
     <div class="def-h"><code>route &lt;job&gt;</code></div>
     <p>Which agents a job uses.</p>
   </div>

@@ -13,6 +13,7 @@ see the configuration
   config show | graph | models | skills
 run jobs (the orchestrator skill uses these)
   queue | create <issue> | next <job> | done <job> | answer <job> <outcome>
+  close issue <job> | close job <job>
 other
   checks | dashboard | start dashboard | stop | version
 several projects
@@ -82,6 +83,16 @@ def parser() -> argparse.ArgumentParser:
     answer.add_argument("job")
     answer.add_argument("outcome", help="approve, changes, feedback, answer or reject, as the step allows")
     answer.add_argument("text", nargs="*", help="your words; or pass them on standard input")
+    close: argparse.ArgumentParser = sub.add_parser("close", help="close a job's issue, or end a job, by hand")
+    close_sub: argparse._SubParsersAction[argparse.ArgumentParser] = close.add_subparsers(
+        dest="close_what", required=True, metavar="<issue|job>")
+    close_issue: argparse.ArgumentParser = close_sub.add_parser(
+        "issue", help="close the job's issue on GitHub; the job is not touched")
+    close_issue.add_argument("job")
+    close_issue.add_argument("--not-planned", action="store_true", help="close as not planned, not completed")
+    close_job: argparse.ArgumentParser = close_sub.add_parser(
+        "job", help="end the job as done from any step; the issue stays open")
+    close_job.add_argument("job")
     route: argparse.ArgumentParser = sub.add_parser("route", help="show which agents a job uses")
     route.add_argument("job")
 

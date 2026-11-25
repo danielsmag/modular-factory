@@ -26,6 +26,10 @@ base_branch = "__BASE_BRANCH__"
 # Regular expression the whole title must match (fullmatch). Unset means no check.
 # `done` refuses a READY build whose title does not match.
 # pr_title_pattern = '^(feat|fix|perf|refactor|chore|docs|test|ci|build|revert)(\(.+\))?!?: .+ \[[A-Z]+-\d+\]$'
+# How the pull request body links the issue. "refs" (the default) keeps the issue
+# open after the merge, so steps after the merge still see it; close it with
+# `mfactory close issue <job>`. "closes" lets GitHub close it when the pull request merges.
+# issue_link = "closes"
 # Prefix concatenated with the job id. Include the slash: feature/001-add-dark-mode.
 # A revert branch is this prefix plus revert- and the job id.
 # branch_prefix = "feature/"

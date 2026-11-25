@@ -360,7 +360,7 @@ def a_login_list(value: object) -> str | None:
 TABLES = {
     "project": {"description": a_string, "base_branch": a_filled_string,
                 "merge_method": one_of("merge", "squash", "rebase"),
-                "pr_title": a_string, "pr_title_pattern": a_regex,
+                "pr_title": a_string, "pr_title_pattern": a_regex, "issue_link": one_of("refs", "closes"),
                 "branch_prefix": a_branch_prefix, "branch_pattern": a_regex},
     "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string,
             "pick": one_of("all", "mine"), "authors": a_login_list, "assignees": a_login_list},

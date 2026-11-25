@@ -181,6 +181,27 @@ def hand_merge_warning(steps: dict[str, dict]) -> str | None:
     return None
 
 
+def closed_issue_warning(steps: dict[str, dict], issue_link: str) -> str | None:
+    """A step that runs after the merge while GitHub closes the issue on merge.
+
+    A hand merge follows the merge step's MERGED edge whether that step is on or off.
+    """
+    if issue_link != "closes":
+        return None
+    merges: list[str] = [name for name, step in steps.items()
+                         if isinstance(step, dict) and step.get("type") == "merge"]
+    if not merges:
+        return None
+    edge: object = steps[merges[0]].get("on", {}).get("MERGED")
+    if not isinstance(edge, dict) or not edge.get("to"):
+        return None
+    target, _ = resolve(steps, edge["to"])
+    if target in END_STATES:
+        return None
+    return (f'[steps.{target}] runs after the merge, but [project].issue_link = "closes" lets GitHub close '
+            f'the issue when the pull request merges, so {target} sees a closed issue. Use issue_link = "refs".')
+
+
 def describe(cfg):
     """`factory graph`: one line per step."""
     rows = []

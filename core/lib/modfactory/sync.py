@@ -514,6 +514,14 @@ def _pull_request_title(cfg: Config, kind: str) -> str | None:
     return "\n".join(lines)
 
 
+def _pull_request_body(cfg: Config) -> str:
+    """How build links the issue on the first line of the pull request body, from `[project].issue_link`."""
+    if cfg["project"].get("issue_link") == "closes":
+        return "The first line is `Closes #<issue>`. GitHub closes the issue when the pull request merges."
+    return ("The first line is `Refs #<issue>`. Do not put a closing keyword (close, fix, resolve) "
+            "next to the issue number: the issue stays open after the merge.")
+
+
 def _prompt_file(settings: dict[str, Any], key: str) -> str | None:
     """The repo-relative prompt path on `settings`, or None when that key is unset."""
     raw: object = settings.get(key)
@@ -579,6 +587,8 @@ def agents(cfg: Config) -> list[Agent]:
                 title_text: str | None = _pull_request_title(cfg, kind)
                 if title_text:
                     sections.append(("Pull request title", title_text))
+            if kind == "build":
+                sections.append(("Pull request body", _pull_request_body(cfg)))
         if settings.get("context", "").strip():
             sections.append(("Project context", settings["context"].strip()))
         skills = _skills(cfg, settings.get("skills", []), where, problems, home)

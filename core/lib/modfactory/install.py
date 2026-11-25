@@ -387,6 +387,9 @@ def doctor(repo, run_checks=True, say=print):
     gap: str | None = graph.hand_merge_warning(cfg.steps)
     if gap:
         warn(gap)
+    closed: str | None = graph.closed_issue_warning(cfg.steps, cfg["project"].get("issue_link", "refs"))
+    if closed:
+        warn(closed)
 
     # tools
     for tool in cfg.tools:

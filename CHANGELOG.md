@@ -6,6 +6,9 @@ changes when it does, and this file says what to change.
 
 ## Unreleased
 
+- feat: `[project] issue_link = "refs" | "closes"` sets how the pull request body links the issue. **The default is now `"refs"`**: new pull requests start with `Refs #<issue>`, so merging no longer closes the issue, and steps after the merge (verify, or a human step on the merge step's `MERGED` edge) still see it open. The factory never closes an issue on its own. Close it with `mfactory close issue <job>` (`--not-planned` for a job that won't ship). `done` refuses a `READY` build whose body doesn't start with `Refs #<issue>` or that has a closing keyword next to the issue number. To keep the old behaviour, set `issue_link = "closes"` and run `mfactory sync`. With `"closes"`, `doctor` warns when a step runs after the merge.
+- feat: `mfactory close job <job>` ends a job as `done` from any step. It leaves the issue and any open pull request alone.
+
 ## 0.21.2
 
 - The dashboard lists job files in the order the job wrote them. An archived intake such as `intake-1.md` (from a NEEDS-INFO answer) now comes right before `intake.md`, labeled "intake (try 1)", instead of last. `progress.md`, `verify-checks.*`, archived round checks (`checks-1.*`) and `merge-checks.*` have set places, and `debug-N` sorts by number. Only unknown files go last.

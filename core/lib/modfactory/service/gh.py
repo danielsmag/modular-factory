@@ -63,6 +63,14 @@ class GitHub:
         return self.call("issue", "create", "--title", title, "--label", label, "--body-file", "-",
                          input=body).stdout.strip()
 
+    def close_issue(self, number: int, reason: str = "completed") -> bool:
+        """Close the issue as `completed` or `not planned`. False when it was already closed."""
+        found: object = self.json("issue", "view", number, "--json", "state")
+        if isinstance(found, dict) and found.get("state") != "OPEN":
+            return False
+        self.call("issue", "close", number, "--reason", reason)
+        return True
+
     def comments(self, kind, number):
         return self.json(kind, "view", number, "--json", "comments")["comments"]
 

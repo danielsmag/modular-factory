@@ -216,7 +216,7 @@ class World:
             git("push", "-q", "-u", "origin", j["branch"], cwd=tree)
             if not self.gh["prs"] or all(p["headRefName"] != j["branch"] for p in self.gh["prs"].values()):
                 subprocess.run(["gh", "pr", "create", "--draft", "--base", "main", "--head", j["branch"],
-                                "--title", j["title"], "--body", f"Closes #{j['issue']}"], cwd=tree, check=True,
+                                "--title", j["title"], "--body", f"Refs #{j['issue']}"], cwd=tree, check=True,
                                capture_output=True)
         self.write(job, "build.md", f"STATUS: {status}\n\n## Summary\n- built\n\n## Blocked\nNeeds a decision.\n")
 
