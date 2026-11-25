@@ -80,8 +80,9 @@ the command you ran and its result, or what the page showed.
 - Push with `git push -u origin <branch>`. Push only the job branch.
 - If the branch has no pull request yet (`gh pr view <branch>` fails), open it
   as a draft. Use the spec's title, unless your instructions name a pull
-  request title format: then follow that format. `Closes #<issue>` is the
-  first line of the body, and your Summary follows it:
+  request title format: then follow that format. The first line of the body
+  links the issue as your instructions say under Pull request body, and your
+  Summary follows it:
 
   ```bash
   gh pr create --draft --base <base> --head <branch> --title "<title>" --body-file <file>

@@ -554,6 +554,7 @@ class Factory(Humans, Scripted, Queue):
                 raise Refused(f"expected one open PR from {job['branch']}, found {len(prs)}")
             job["pr"], job["pr_url"] = prs[0]["number"], prs[0]["url"]
         self._require_pr_title(job)
+        self._require_issue_link(job)
         return None
 
     def _require_pr_title(self, job: dict[str, Any]) -> None:
@@ -571,6 +572,61 @@ class Factory(Humans, Scripted, Queue):
             f"pull request #{job['pr']} title {title!r} does not match "
             f"[project].pr_title_pattern {pattern!r}. "
             f'Change it with `gh pr edit {job["pr"]} --title "..."`.')
+
+    def _require_issue_link(self, job: dict[str, Any]) -> None:
+        """With `[project].issue_link = "refs"`, refuse a READY build whose body would close the issue on merge."""
+        if self.cfg["project"].get("issue_link") == "closes":
+            return
+        found: object = self.gh.pr(job["pr"], "body")
+        if not isinstance(found, dict) or not isinstance(found.get("body"), str):
+            raise Refused(f"could not read the body of pull request #{job['pr']}")
+        text: str = found["body"]
+        issue: int = job["issue"]
+        lines: list[str] = text.strip().splitlines()
+        fix: str = f"Change it with `gh pr edit {job['pr']} --body-file <file>`."
+        if not lines or lines[0].strip() != f"Refs #{issue}":
+            raise Refused(f"pull request #{job['pr']} body must start with `Refs #{issue}` "
+                          f"([project].issue_link = \"refs\"). {fix}")
+        if re.search(rf"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#{issue}\b", text):
+            raise Refused(f"pull request #{job['pr']} body has a closing keyword next to #{issue}, so GitHub "
+                          f"would close the issue on merge ([project].issue_link = \"refs\"). {fix}")
+
+    # ---- closing by hand ---------------------------------------------------
+
+    def close_issue(self, ref: str, not_planned: bool = False) -> None:
+        """`mfactory close issue`: close the job's issue on GitHub. The job itself is not touched."""
+        job: dict[str, Any] = self.store.open(ref)
+        reason: str = "not planned" if not_planned else "completed"
+        if not self.gh.close_issue(job["issue"], reason):
+            self.say(f"#{job['issue']} was already closed")
+            return
+        self.gh.comment("issue", job["issue"],
+                        f"### Factory: issue closed by @{self.gh.operator()} ({reason})")
+        self.say(f"closed #{job['issue']} ({reason})")
+        if job["step"] not in graph.END_STATES:
+            self.say(f"note: job {job['id']} is still at {job['step']}; "
+                     f"`{CLI} close job {job['id']}` ends it")
+
+    def close_job(self, ref: str) -> None:
+        """`mfactory close job`: end the job as done from any step. The issue and any pull request stay as they are."""
+        job: dict[str, Any] = self.store.open(ref)
+        old: str = job["step"]
+        if old in graph.END_STATES:
+            raise Refused(f"{job['id']} is already finished ({old})")
+        step: dict[str, Any] | None = self.cfg.steps.get(old)
+        if step is not None:
+            self._leave(job, old, step)
+        entry: dict[str, Any] = {"step": old, "outcome": "CLOSED-BY-HAND", "entered_at": job["entered_at"],
+                                 "at": now(), "reason": f"Closed by @{self.gh.operator()}"}
+        job["reason"] = entry["reason"]
+        landed, skipped = self._enter(job, "done")
+        job["history"].append(entry | {"to": landed, "skipped": skipped})
+        self._update_cost(job)
+        self.store.save(job)
+        self.say(f"{self.tag(job)}: {old} CLOSED-BY-HAND -> {landed}")
+        if job["pr"] and not job["merge_sha"]:
+            self.say(f"note: pull request #{job['pr']} is still open")
+        self.say(f"note: issue #{job['issue']} is not closed; `{CLI} close issue {job['id']}` closes it")
 
     # ---- review ------------------------------------------------------------
 

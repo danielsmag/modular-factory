@@ -10,6 +10,7 @@ base_branch = "master"
 merge_method = "squash"   # merge, squash or rebase
 pr_title = ""             # example pull request title; empty means the spec title
 pr_title_pattern = ""     # when set, done refuses a READY build whose title does not match
+issue_link = "refs"       # "refs": the issue stays open until someone closes it; "closes": GitHub closes it on merge
 branch_prefix = "factory/" # concatenated with the job id; the slash is part of the prefix
 branch_pattern = ""        # when set, the branch name must fullmatch before the branch is created
 

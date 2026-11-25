@@ -137,6 +137,20 @@ counts. Merging a job's pull request by hand also counts as approving it.
 A rejected job is over. To run its issue again, delete `.factory/jobs/<job>`
 and put the factory's label back on the issue.
 
+## Closing issues and jobs
+
+The factory never closes an issue on its own. With `[project] issue_link =
+"refs"` (the default), the issue stays open after the merge and after the job
+is done. When a job finishes, tell the user its issue is still open and offer
+the command. Closing the issue and ending the job are separate commands; run
+them only when the user asks:
+
+```bash
+.factory/bin/mfactory close issue 12                # close the issue as completed; the job is not touched
+.factory/bin/mfactory close issue 12 --not-planned  # close it as not planned
+.factory/bin/mfactory close job 12                  # end the job as done from any step; the issue stays open
+```
+
 ## /mfactory setup
 
 Run once after installing, and again when the project's commands change.

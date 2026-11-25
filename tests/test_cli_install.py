@@ -311,6 +311,17 @@ def test_doctor_warns_when_an_edge_skips_a_disabled_merge(bare):
     assert "FAIL  [steps.merge]" not in res.stdout
 
 
+def test_doctor_warns_when_a_step_after_the_merge_sees_a_closed_issue(bare):
+    bare.cli("init")
+    base = 'schema = 1\n[project]\nbase_branch = "main"\n{link}[checks]\ncommands = ["true"]\n' \
+           '[steps.verify]\nenabled = true\ncommands = ["true"]\n'
+    (bare.repo / "factory.toml").write_text(base.format(link='issue_link = "closes"\n'))
+    warning = '[steps.verify] runs after the merge, but [project].issue_link = "closes"'
+    assert f"warn  {warning}" in doctor(bare, "--skip-checks").stdout
+    (bare.repo / "factory.toml").write_text(base.format(link=""))
+    assert warning not in doctor(bare, "--skip-checks").stdout
+
+
 def test_doctor_warns_when_a_listed_skill_is_not_installed(world, monkeypatch):
     ready(world)
     monkeypatch.setenv("HOME", str(world.tmp / "empty-home"))

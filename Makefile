@@ -24,7 +24,7 @@ TOOL ?= claude
 	cli version \
 	install init upgrade uninstall doctor status sync sync-check \
 	config graph models skills \
-	queue create next done answer summary route checks \
+	queue create next done answer close-issue close-job summary route checks \
 	dashboard start-dashboard stop hook \
 	workspace workspace-init workspace-add workspace-remove workspace-list workspace-queue
 
@@ -151,6 +151,14 @@ answer: ## mfactory answer JOB=004 OUTCOME=approve TEXT="..."
 	$(call need,JOB,answer JOB=004 OUTCOME=approve)
 	$(call need,OUTCOME,answer JOB=004 OUTCOME=approve)
 	$(MFACTORY) answer "$(JOB)" "$(OUTCOME)" $(if $(TEXT),"$(TEXT)") $(ARGS)
+
+close-issue: ## mfactory close issue JOB=004 (ARGS=--not-planned)
+	$(call need,JOB,close-issue JOB=004)
+	$(MFACTORY) close issue "$(JOB)" $(ARGS)
+
+close-job: ## mfactory close job JOB=004
+	$(call need,JOB,close-job JOB=004)
+	$(MFACTORY) close job "$(JOB)" $(ARGS)
 
 summary: ## mfactory summary. JOBS="004 005"
 	$(MFACTORY) summary $(JOBS) $(ARGS)
