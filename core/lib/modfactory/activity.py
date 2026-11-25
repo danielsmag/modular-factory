@@ -189,7 +189,6 @@ class ActivityLog:
         found: list[tuple[dict[str, Any], bool]] = []
         errors: int = 0
         prices: dict[str, dict[str, float]] = _prices_of(self._cfg)
-        created: datetime | None = _created(job)
         roots: list[tuple[Path, str]] = []
         if claude:
             roots.append((transcripts_dir(self._cfg.repo), "*/subagents/agent-*.jsonl"))
@@ -212,8 +211,6 @@ class ActivityLog:
                 if not cached.runs or cached.folder is None or not _same_dir(cached.folder, job_dir):
                     continue
                 for run in cached.runs:
-                    if _before(run, created):
-                        continue
                     found.append((run, cached.growing and run is cached.runs[-1]))
         return found, errors
 
@@ -385,27 +382,6 @@ def _cursor_slug(path: Path) -> str:
     except OSError:
         text = str(path)
     return re.sub(r"[^A-Za-z0-9]", "-", text).strip("-")
-
-
-def _created(job: dict[str, Any]) -> datetime | None:
-    stamp: object = job.get("created_at")
-    if not isinstance(stamp, str):
-        return None
-    try:
-        return parse_time(stamp)
-    except ValueError:
-        return None
-
-
-def _before(run: dict[str, Any], created: datetime | None) -> bool:
-    """A run from an earlier job that had the same folder. `created_at` has whole seconds, so compare on those."""
-    started: object = run.get("started_at")
-    if created is None or not isinstance(started, str):
-        return False
-    try:
-        return parse_time(started).replace(microsecond=0) < created
-    except (ValueError, TypeError):
-        return False
 
 
 def _same_dir(folder: str, job_dir: Path) -> bool:
