@@ -115,6 +115,11 @@ def follow(job, step, outcome):
   outcome; several in a row are passed through at once.
 - A job whose limit is reached goes to `[run].escalate_to`. A person's reply
   there clears every count.
+- Entering a `build` step after the job's pull request merged starts a
+  follow-up. The merged pull request moves to `prs`, and the job continues on
+  a new branch `<prefix><job>-fix-N` from the base, with a new pull request.
+  `pr`, `pr_url`, `merge_sha` and `branch` always describe the current pull
+  request.
 - Whether an agent's file is new is decided by comparing the file's size and
   modification time with what was recorded when the job entered the step, not
   by comparing clocks.

@@ -88,6 +88,10 @@ the command you ran and its result, or what the page showed.
   gh pr create --draft --base <base> --head <branch> --title "<title>" --body-file <file>
   ```
 
+- A follow-up round (your prompt says `Follow-up N`) is on a new branch after
+  the job's earlier pull request merged. That branch has no pull request:
+  open a new one as above, even though the job had one before. Change only
+  what `round-<N>/post-debug.md` asks for.
 - If a pull request already exists, push updates it. When your instructions
   name a title format and the current title does not follow it, change the
   title:

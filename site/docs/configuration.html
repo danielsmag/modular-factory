@@ -202,6 +202,32 @@ commands = ["test \"$(curl -fsS \"$FACTORY_DEPLOY_URL/health\")\" = ok"]</code><
   <p>Commands and <code>wait</code> get <code>FACTORY_CHECKOUT</code> (the main checkout), <code>FACTORY_JOB</code>, <code>FACTORY_MERGE_SHA</code>, <code>FACTORY_PR</code>, and <code>FACTORY_DEPLOY_URL</code>. The working directory is a clean checkout of the merge commit. A job file that the worktree does not contain is <code>test -s "$FACTORY_CHECKOUT/.factory/jobs/$FACTORY_JOB/spec.md"</code>.</p>
   <p>When verify is on, <code>spec.md</code> must include <code>## Verify after deploy</code>. <code>VERIFY: PASS</code> ends at <code>done</code>. <code>VERIFY: FAIL</code> ends as <code>failed</code> after <code>retries</code>. <code>VERIFY: BLOCKED</code> means the environment could not be reached: the job returns to <code>ready-to-verify</code>. The fourth <code>BLOCKED</code> in a row goes to <code>escalated</code>. It does not comment as a failure, open an issue, or open a revert pull request. If <code>ready-to-verify</code> is off, <code>BLOCKED</code> fails the job through <code>on_failure</code>. A project that replaces <code>[steps.verify].on</code> must keep a <code>BLOCKED</code> edge. The default is <code>{ to = "ready-to-verify", max = 3 }</code>.</p>
 
+  <h2 id="fixing-after-the-merge">Fixing after the merge</h2>
+  <p>The built-in <code>debug</code> step sends a job back to <code>build</code> on its branch, which is gone after the merge. A <code>post-debug</code> step handles problems found after the merge, such as a failed smoke test or slower CI, and keeps the fix in the same job. This recipe asks a maintainer after each merge, who answers <code>/mfactory close</code>, <code>/mfactory test</code> or <code>/mfactory debug &lt;what you saw&gt;</code>:</p>
+  <pre data-lang="toml"><code>[project]
+issue_link = "refs"
+
+[steps.merge]
+on = { MERGED = "after-merge", FAILED = "escalated" }
+
+[steps.after-merge]
+type = "human"
+who = "maintainer"
+ask = "merged: close the job, run the post-merge tests, or debug"
+on = { CLOSE = "done", TEST = "verify", DEBUG = "post-debug" }
+
+[steps.verify]
+enabled = true
+after = "merge"
+commands = ["pytest -q"]
+on = { PASS = "after-merge", FAIL = "post-debug", BLOCKED = { to = "after-merge", max = 3 } }
+
+[steps.post-debug]
+type = "agent"
+on = { FOUND = { to = "build", max = 2 }, UNKNOWN = "after-merge" }</code></pre>
+  <p><code>post-debug</code> is a built-in role with outcomes <code>FOUND</code> and <code>UNKNOWN</code>. A step with another name sets <code>role = "post-debug"</code>. The agent gets the merged pull request, its merge commit and a detached checkout of the current base branch. It reads CI and the merged diff and writes <code>round-N/post-debug.md</code>. It changes no code: <code>done</code> refuses its file if the checkout changed.</p>
+  <p>Any entry to <code>build</code> after the job's pull request merged starts a follow-up. That includes <code>FOUND</code>, and <code>FEEDBACK</code> from <code>escalated</code>. The merged pull request moves to <code>prs</code> in <code>job.json</code>, and the job builds on a new branch <code>&lt;branch_prefix&gt;&lt;job&gt;-fix-N</code> from the base, in a new round. The builder opens a new pull request that starts with <code>Refs #&lt;issue&gt;</code>, and the fix goes through the gate, review, approval and merge again. The dashboard lists every pull request of the job. The <code>max</code> on <code>FOUND</code> limits follow-ups. With <code>issue_link = "closes"</code> the issue is closed by then, so <code>FOUND</code> is refused until someone reopens it. Unlike <code>on_failure = "issue"</code>, which opens a new job, a follow-up keeps one issue and one history.</p>
+
   <h2 id="reviewers-and-surfaces">Reviewers and surfaces</h2>
   <p>The <code>review</code> step runs every reviewer the job needs, in parallel. <code>code</code> runs on every job. <code>security</code> runs on the <code>security</code> surface. <code>ux</code> and <code>ui</code> run on the <code>ui</code> surface, but they and the surface ship switched off. A project with a user interface switches them on, as below. A new reviewer is a table with a <code>focus</code>. No prompt file is needed.</p>
   <pre data-lang="toml"><code>[reviewers.migrations]

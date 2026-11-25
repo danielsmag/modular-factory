@@ -152,6 +152,45 @@ round again.
 on = { CHANGES = { max = 2 } }    # review may ask for changes twice
 ```
 
+### After the merge: close, test or debug
+
+A merged pull request can still turn out wrong: a smoke test fails, or CI
+gets twice as slow. This recipe asks a maintainer what to do once the pull
+request merges. They answer on the issue with `/mfactory close`,
+`/mfactory test` or `/mfactory debug <what you saw>`:
+
+```toml
+[project]
+issue_link = "refs"   # the default: the issue stays open, so the follow-up PR links it
+
+[steps.merge]
+on = { MERGED = "after-merge", FAILED = "escalated" }
+
+[steps.after-merge]
+type = "human"
+who = "maintainer"
+ask = "merged: close the job, run the post-merge tests, or debug"
+on = { CLOSE = "done", TEST = "verify", DEBUG = "post-debug" }
+
+[steps.verify]
+enabled = true
+after = "merge"
+commands = ["pytest -q"]
+on = { PASS = "after-merge", FAIL = "post-debug", BLOCKED = { to = "after-merge", max = 3 } }
+
+[steps.post-debug]
+type = "agent"
+on = { FOUND = { to = "build", max = 2 }, UNKNOWN = "after-merge" }
+```
+
+`post-debug` is a built-in role. Its agent works in a fresh checkout of the
+base branch, reads CI and the merged change, and writes
+`round-N/post-debug.md` without changing any code. On `FOUND` the same job
+builds a fix on a new branch, `factory/<job>-fix-1`. That branch has a new
+pull request that refs the same issue, and the fix goes through the checks,
+review and approval again. The dashboard shows both pull requests. The `max`
+on `FOUND` limits how many follow-ups one job may open.
+
 ## Models and effort per step
 
 ```toml

@@ -86,6 +86,14 @@ function link(url, text) {
   // Only real web addresses become links; anything else is shown as plain text.
   return /^https:\/\//.test(url || "") ? el("a", { class: "ext", href: url, target: "_blank", rel: "noopener noreferrer", text }) : el("span", { class: "mono", text });
 }
+// The job's pull requests, oldest first: those merged before a follow-up, then the current one.
+function jobPrs(job) {
+  const earlier = (job.prs || []).filter((p) => p && p.number).map((p) => ({ number: p.number, url: p.url, earlier: true }));
+  return job.pr ? earlier.concat([{ number: job.pr, url: job.pr_url, earlier: false }]) : earlier;
+}
+function prLinks(job, prefix) {
+  return jobPrs(job).map((p) => link(p.url, prefix + p.number + (p.earlier ? " (merged)" : "")));
+}
 function icon(path) {
   const node = svg("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2, "aria-hidden": "true" });
   node.append(svg("path", { d: path }));
@@ -136,7 +144,7 @@ function chip(job) {
 function matches(job) {
   const q = state.query.trim().toLowerCase();
   if (!q) return true;
-  return [job.project, job.projectName, job.id, job.title, "#" + job.issue, job.step, job.author, job.pr ? "#" + job.pr : ""].some((v) => String(v || "").toLowerCase().includes(q));
+  return [job.project, job.projectName, job.id, job.title, "#" + job.issue, job.step, job.author, ...jobPrs(job).map((p) => "#" + p.number)].some((v) => String(v || "").toLowerCase().includes(q));
 }
 function visibleProjects() {
   if (!state.workspace) return [];
@@ -492,7 +500,7 @@ function jobCard(job) {
     el("p", { class: "feature", text: job.title || job.id }),
     el("div", { class: "links" },
       link(job.issue_url, "issue #" + (job.issue == null ? "" : job.issue)),
-      job.pr ? link(job.pr_url, "PR #" + job.pr) : null),
+      prLinks(job, "PR #")),
     rounds.map((row) => roundLine(job, row)),
     el("div", { class: "meta" },
       job.intake && job.intake.risk ? el("span", { class: riskClass(job.intake.risk), text: job.intake.risk }) : null,
@@ -1124,7 +1132,7 @@ function drawer() {
         el("h3", { id: "d-title", text: job.title || job.id }),
         el("div", { class: "links" },
           link(job.issue_url, "issue #" + (job.issue == null ? "" : job.issue)),
-          job.pr ? link(job.pr_url, "PR #" + job.pr) : null),
+          prLinks(job, "PR #")),
         el("div", { class: "tabs d-tabs", role: "tablist", "aria-label": "Job view" },
           drawerTab("files", "Files"), drawerTab("activity", "Agent activity")),
         close),
@@ -1491,7 +1499,7 @@ function jobTable(list) {
     el("td", { class: "wrap", text: job.title || "" }),
     el("td", {}, chip(job)),
     el("td", { class: "mono dim", text: job.round || "-" }),
-    el("td", { class: "mono dim", text: job.pr ? "#" + job.pr : "-" }),
+    el("td", { class: "mono dim", text: jobPrs(job).map((p) => "#" + p.number).join(" ") || "-" }),
     el("td", { class: "mono dim", text: job.cost_usd !== null && job.cost_usd !== undefined ? money(job.cost_usd) : "-" }),
     el("td", { class: "mono dim" }, elapsedNode(job)))));
   return el("div", { class: "scroll" }, el("table", {},
@@ -1751,7 +1759,7 @@ function jobDetail(job) {
     el("div", { class: "head" }, el("div", { style: "min-width:0" }, el("h2", { class: "job-title", text: job.title }), el("div", { class: "mono dim", style: "margin-top:3px", text: (state.workspace && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id })), chip(job)),
     el("div", { class: "facts" },
       el("span", {}, "Issue ", link(job.issue_url, "#" + job.issue)),
-      job.pr ? el("span", {}, "PR ", link(job.pr_url, "#" + job.pr)) : null,
+      jobPrs(job).length ? el("span", {}, jobPrs(job).length > 1 ? "PRs " : "PR ", prLinks(job, "#")) : null,
       el("span", {}, "By ", el("b", { text: "@" + job.author })),
       job.intake ? el("span", {}, "Risk ", el("b", { text: job.intake.risk })) : null,
       job.intake ? el("span", {}, "Surfaces ", el("b", { text: (job.intake.surfaces || []).join(", ") || "none" })) : null,

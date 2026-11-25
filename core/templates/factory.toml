@@ -111,6 +111,22 @@ commands = []
 # after = "merge"
 # commands = []
 
+# After the merge, ask a maintainer to close the job, test, or debug. A post-debug
+# agent investigates; on FOUND the same job opens a follow-up fix PR on <job>-fix-N.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#fixing-after-the-merge
+# [steps.merge]
+# on = { MERGED = "after-merge", FAILED = "escalated" }
+#
+# [steps.after-merge]
+# type = "human"
+# who = "maintainer"
+# ask = "merged: close the job, or debug"
+# on = { CLOSE = "done", DEBUG = "post-debug" }
+#
+# [steps.post-debug]
+# type = "agent"
+# on = { FOUND = { to = "build", max = 2 }, UNKNOWN = "after-merge" }
+
 # ---- Loop limits: how often a step may send a job back ---------------------
 #
 # A `max` on an edge is how many times in a row a step may send a job that way.

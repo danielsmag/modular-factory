@@ -64,7 +64,7 @@ class Queue:
             "round": 0, "attempt": 0, "gate_failed": False, "taken": {}, "handoff": [],
             "branch": branch,
             "worktree": str(self.cfg.repo / self.cfg["paths"]["worktrees"] / job_id),
-            "pr": None, "pr_url": None, "merge_sha": None,
+            "pr": None, "pr_url": None, "merge_sha": None, "prs": [], "follow_ups": 0,
             "intake": None, "agents": None, "gate": None, "reviews": {},
             "waiting": None, "consumed": [], "reason": None, "escalated_from": None, "last_file": None,
             "entry_files": {}, "verify": None, "history": [], "cost_usd": None, "cost_by_step": {},
@@ -143,7 +143,7 @@ class Queue:
                     waiting.append(("wait", n, j["id"], name, f"waiting for {who_phrase}"))
             elif step["type"] == "verify":
                 rows.append(("resume", n, j["id"], name, "validating after " + step["after"]))
-            elif n not in open_numbers and not j["pr"]:
+            elif n not in open_numbers and not (j["pr"] or j.get("prs")):
                 other.append(("skip", n, j["id"], name, f"issue is closed or no longer labeled {labels['queue']}"))
             else:
                 turn = running.index(j["id"]) < limit
