@@ -110,7 +110,8 @@ lists unfinished jobs as `resume`, and `next` says what each needs.
 ## /mfactory run <n>
 
 The same for one issue. If `queue` shows a job for it, resume that job;
-otherwise `create <n>`. Finish by naming the job's step, from `queue` or from
+otherwise `create <n>`, even if `[run].pick`, `authors` or `assignees` keeps
+the issue off `queue`. Finish by naming the job's step, from `queue` or from
 `.factory/jobs/<job>/job.json`.
 
 ## Answering a job that waits for a person

@@ -28,6 +28,9 @@ intake_shell = false      # true lets intake run commands, if your Codex can't r
 concurrency = 3           # jobs this project works on at once
 start = "intake"          # the step a new job starts in
 escalate_to = "escalated" # the human step a job goes to when an edge's max is reached
+pick = "all"              # "mine": only issues the operator opened or is assigned to
+authors = []              # also pick issues these logins opened; "@me" is the operator
+assignees = []            # also pick issues assigned to these logins; "@me" is the operator
 
 [workspace]
 concurrency = 3           # new and resume rows across every project; workspace.toml or --concurrency overrides

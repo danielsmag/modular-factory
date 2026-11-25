@@ -1,5 +1,6 @@
 """What to run: new jobs and the queue of labeled issues."""
 
+from collections.abc import Callable
 from typing import Any, Protocol
 
 from . import graph
@@ -26,6 +27,8 @@ class _QueueHost(Protocol):
     def _find_reply(self, job: dict[str, Any], step: dict[str, Any]) -> tuple[str, str, str, Any] | None: ...
 
     def queue_and_issues(self) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]: ...
+
+    def _picks(self) -> Callable[[dict[str, Any]], bool]: ...
 
 
 class Queue:
@@ -75,6 +78,30 @@ class Queue:
         self.store.save(job)
         return job
 
+    def _picks(self: _QueueHost) -> Callable[[dict[str, Any]], bool]:
+        """Which labeled issues `queue` offers as new jobs: `[run].pick`, `authors` and `assignees`.
+
+        An issue passes when its author or any assignee is named. With nothing named, every issue passes.
+        """
+        run: dict[str, Any] = self.cfg["run"]
+        mine: list[str] = ["@me"] if run.get("pick") == "mine" else []
+        authors: list[str] = mine + list(run.get("authors") or [])
+        assignees: list[str] = mine + list(run.get("assignees") or [])
+        if not authors and not assignees:
+            return lambda issue: True
+        operator: str = self.gh.operator() if "@me" in authors + assignees else ""
+
+        def logins(names: list[str]) -> set[str]:
+            return {operator if name == "@me" else name for name in names}
+
+        by: set[str] = logins(authors)
+        to: set[str] = logins(assignees)
+
+        def picks(issue: dict[str, Any]) -> bool:
+            assigned: set[str] = {a["login"] for a in issue.get("assignees") or []}
+            return issue["author"]["login"] in by or bool(assigned & to)
+        return picks
+
     def queue(self: _QueueHost) -> list[tuple[Any, ...]]:
         """Rows of `action issue job step note`, in the order to act on them.
 
@@ -123,8 +150,9 @@ class Queue:
                 rows.append(("resume" if turn else "hold", n, j["id"], name,
                              f"round {j['round']}" if turn else f"concurrency {limit} reached"))
         free = limit - len(running)
+        picks: Callable[[dict[str, Any]], bool] = self._picks()
         fresh = [("new", i["number"], "-", "-", i["title"])
-                 for i in sorted(issues, key=lambda i: i["number"]) if i["number"] not in jobs]
+                 for i in sorted(issues, key=lambda i: i["number"]) if i["number"] not in jobs and picks(i)]
         for row in replied + fresh:
             if free > 0:
                 rows.append(row)

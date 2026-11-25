@@ -43,7 +43,7 @@ BARE = {"--draft", "--squash", "--merge", "--rebase", "--force"}
 
 
 def pick(record, fields):
-    return {f: record[f] for f in fields.split(",")}
+    return {f: record.get(f, []) if f == "assignees" else record[f] for f in fields.split(",")}
 
 
 def body_of(named):
@@ -129,7 +129,7 @@ def main(argv):
             n = state["next_number"]
             state["issues"][str(n)] = {
                 "number": n, "title": named["title"], "body": body_of(named), "state": "OPEN",
-                "author": {"login": state["user"]}, "labels": [{"name": named["label"]}],
+                "author": {"login": state["user"]}, "assignees": [], "labels": [{"name": named["label"]}],
                 "url": f"https://github.test/acme/app/issues/{n}", "comments": [],
                 "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z"}
             out = state["issues"][str(n)]["url"]
