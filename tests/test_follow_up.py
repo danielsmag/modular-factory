@@ -1,12 +1,6 @@
 """After the merge: a post-debug step finds a problem, and the same job opens a follow-up fix pull request."""
 
 import subprocess
-from pathlib import Path
-
-import pytest
-from conftest import BASE_CHECKS, BASE_CONFIG
-from modfactory import config
-from modfactory.util import ConfigError, Refused
 
 FOLLOW_UP = """
 [steps.approve]
@@ -30,12 +24,6 @@ on = { CLOSE = "done", DEBUG = "post-debug", ESCALATE = "escalated" }
 type = "agent"
 on = { FOUND = { to = "build", max = 1 }, UNKNOWN = "after-merge" }
 """
-
-
-def post_debug(world, job, outcome="FOUND"):
-    j = world.job(job)
-    world.write(job, f"round-{j['round']}/post-debug.md",
-                f"DIAGNOSIS: {outcome}\n\n## Cause\nTests run with -n 4.\n\n## Fix\nRun them serially.\n")
 
 
 def merged_job(world):
