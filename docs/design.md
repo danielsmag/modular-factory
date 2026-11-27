@@ -173,10 +173,39 @@ def follow(job, step, outcome):
   and takes the reply from the coding tool.
 - **The dashboard changes nothing.** It answers only on `127.0.0.1`, refuses
   requests with another `Host` header, serves only `.md` and `.log` files from
-  `.factory/jobs/`, loads nothing from the network, and builds its page
-  without ever turning text into markup, because job text comes from GitHub
-  issues. Agent activity sends the tool name and a short label only, not tool
-  output, file contents, or assistant replies.
+  `.factory/jobs/`, and has no route that writes. Its page loads nothing from
+  elsewhere and builds itself without ever turning text into markup, because
+  job and issue text comes from GitHub and Jira. The server reads Jira boards
+  and GitHub issues only when the page asks, through a short cache, with each
+  project's own settings; the Jira token stays in the server's environment and
+  never reaches the page or an error. Agent activity sends the tool name and a
+  short label only, not tool output, file contents, or assistant replies.
+
+## Dashboard API
+
+The page talks only to its own server, through these GET routes. A server for
+a team could serve the same routes, with each viewer's own access, and the same
+page would work. Every string is redacted like agent activity, and a link is
+kept only when it is an `https://` address or a server on this machine. The
+readers behind the Jira and GitHub routes are in `workspace/feeds.py`; they take
+their Jira and GitHub clients as arguments and know nothing about HTTP.
+
+| Route | Answer |
+| --- | --- |
+| `/projects.json` | Every project: its jobs, pipeline, config, and `trackers` (`kind`, `label`, `enqueue`). |
+| `/queue.json` | `rows` (`project`, `action`, `issue`, `job`, `step`, `note`, `title`, `issue_url`, `created_at`, `updated_at`, `author`, `labels`) and `errors`. |
+| `/projects/<p>/issues/<key>` | One issue for the drawer: `number`, `title`, `url`, `state`, `author`, `labels`, `created_at`, `updated_at`, `body`, `comment_count`, `comments`. |
+| `/projects/<p>/jobs/<job>/activity` | `runs`: what each agent did. |
+| `/projects/<p>/jira/boards` | `site`, `configured` (the project's board), `boards` (`id`, `name`, `type`, `project`, `url`) and `note`. `{off}` when the project has no Jira. |
+| `/projects/<p>/jira/boards/<id>` | `board` (`id`, `name`, `type`, `url`), `columns` (`name`, `cards`: `key`, `title`, `url`, `status`, `type`, `priority`, `assignee`, `labels`, `updated_at`), `shown`, `total`, `hidden`, `truncated`. |
+| `/projects/<p>/github/issues` | `repo_url`, `me` (the GitHub login running the factory), `issues` (`number`, `title`, `url`, `author`, `assignees`, `labels`, `created_at`, `updated_at`), `truncated`. |
+
+A Jira or GitHub failure is `502 {"error": "..."}` with the tracker's last line,
+never a token. Answers are reused for 60 seconds (the board list and `me` for
+10 minutes, a failure for 15), and `?fresh=1` reads again when the answer is
+more than 5 seconds old. A kanban board leaves out Done cards untouched for 14
+days and a scrum board shows its open sprints, as Jira draws them; a board shows
+at most 300 cards and a repository at most 200 open issues.
 
 ## Differences between the tools
 

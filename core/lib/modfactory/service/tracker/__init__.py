@@ -20,7 +20,7 @@ from .routing import Trackers
 TRACKERS = {"github": GitHubTracker.from_config, "jira": from_config}
 
 __all__ = ["TRACKERS", "AcliJiraTracker", "GitHubTracker", "JiraTracker", "Key", "Tracker", "Trackers", "Who",
-           "for_repo", "make"]
+           "for_repo", "github_reader", "make"]
 
 
 def make(cfg, gh: GitHub | None = None) -> Tracker | Trackers:
@@ -41,5 +41,10 @@ def for_repo(repo: Path) -> Tracker | Trackers:
     try:
         return make(config.load(repo))
     except FactoryError:
-        defaults = config.read_toml(CORE / "defaults.toml")
-        return GitHubTracker(GitHub(repo), defaults["labels"], defaults["project"]["issue_link"])
+        return github_reader(repo)
+
+
+def github_reader(repo: Path) -> GitHubTracker:
+    """GitHub issues with the default labels: for reading an issue of a checkout whatever its tracker."""
+    defaults = config.read_toml(CORE / "defaults.toml")
+    return GitHubTracker(GitHub(repo), defaults["labels"], defaults["project"]["issue_link"])

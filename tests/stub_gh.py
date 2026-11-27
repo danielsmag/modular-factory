@@ -107,6 +107,8 @@ def main(argv):
             out = json.dumps({"permission": state["permissions"].get(login, "read")})
         else:
             sys.exit(f"stub gh: unknown api call {action}")
+    elif group == "repo" and action == "view":
+        out = json.dumps(pick({"url": "https://github.test/acme/app", "nameWithOwner": "acme/app"}, named["json"]))
     elif group == "label":
         if action == "create":
             state["labels"] = sorted(set(state["labels"]) | {pos[0]})
@@ -121,8 +123,13 @@ def main(argv):
                 sys.exit(f"stub gh: no issue {pos[0]}")
             out = json.dumps(pick(issue, named["json"]))
         elif action == "list":
+            wanted = named.get("label")
             rows = [i for i in state["issues"].values()
-                    if i["state"] == "OPEN" and named["label"] in [label["name"] for label in i["labels"]]]
+                    if i["state"] == "OPEN" and (wanted is None or wanted in [label["name"] for label in i["labels"]])]
+            if "sort:updated-desc" in str(named.get("search", "")):
+                rows.sort(key=lambda i: i.get("updatedAt") or "", reverse=True)
+            if "limit" in named:
+                rows = rows[:int(named["limit"])]
             out = json.dumps([pick(i, named["json"]) for i in rows])
         elif action == "create":
             state["next_number"] += 1
