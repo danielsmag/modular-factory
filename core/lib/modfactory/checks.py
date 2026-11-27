@@ -22,6 +22,12 @@ OWNED = ["factory.toml", ".factory/*",
          ".claude/skills/factory/*", ".cursor/skills/factory/*", ".agents/skills/factory/*"]
 
 
+def owned_patterns(cfg) -> list[str]:
+    """OWNED, and the project's pipelines folder: a job may not rewrite the pipeline it runs on."""
+    folder: str = str(cfg["paths"].get("pipelines") or "pipelines").strip("/")
+    return OWNED + [f"{folder}/*"]
+
+
 def protected_changes(cfg, worktree):
     """Protected files this branch touched. `*` in a pattern also matches `/`."""
     diff = run(["git", "diff", "--name-status", f"origin/{cfg.base}...HEAD"], cwd=worktree).stdout
@@ -29,7 +35,7 @@ def protected_changes(cfg, worktree):
     for line in diff.splitlines():
         status, *paths = line.split("\t")
         for path in paths:
-            owned = any(fnmatch.fnmatch(path, p) for p in OWNED)
+            owned = any(fnmatch.fnmatch(path, p) for p in owned_patterns(cfg))
             extra = any(fnmatch.fnmatch(path, p) for p in cfg["paths"]["protected"])
             # Projects may add files under their own protected paths, but not change existing ones.
             if owned or (extra and not status.startswith("A")):

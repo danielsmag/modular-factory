@@ -3,18 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>factory.toml · factory</title>
+<title>Configuration · factory</title>
 <link rel="stylesheet" href="docs.css">
 </head>
 <body data-page="configuration">
 <article class="doc" id="doc">
-  <h1>factory.toml</h1>
-  <p class="lede"><code>factory.toml</code>, at the root of the repository, is the only file you edit. It holds what your project changes. Everything else comes from <code>.factory/defaults.toml</code> and from each tool's adapter in <code>.factory/adapters/</code>.</p>
+  <h1>Configuration</h1>
+  <p class="lede">You edit two things at the root of the repository: the pipelines, YAML files in <code>pipelines/</code> checked against <code>.factory/schema/pipeline.schema.json</code> (see <a href="pipeline.html#yaml-files">Pipeline</a>), and <code>factory.toml</code>, which holds the rest of what your project changes. Everything else comes from <code>.factory/defaults.toml</code> and from each tool's adapter in <code>.factory/adapters/</code>. Pipeline examples show only the keys that change: edit them in place in <code>pipelines/default.yaml</code>.</p>
 
   <h2 id="how-values-merge">How values merge</h2>
   <p>The files merge key by key. To change one value you write only that value:</p>
-  <pre data-lang="toml"><code>[steps.review]
-on = { CHANGES = { max = 3 } }   # the other edge, and its target, stay as they are</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      review:
+        on: { CHANGES: { max: 3 } }   # the other edge, and its target, stay as they are</code></pre>
   <p>After a change, <code>mfactory sync</code> rewrites the generated agent files and <code>mfactory doctor</code> checks the result. To see what is in effect:</p>
   <pre data-lang="bash"><code>.factory/bin/mfactory config show   # every setting and which file set it
 .factory/bin/mfactory graph         # the pipeline
@@ -22,7 +25,7 @@ on = { CHANGES = { max = 3 } }   # the other edge, and its target, stay as they 
 .factory/bin/mfactory skills        # the project's skills and who reads them</code></pre>
   <p>A mistake is reported with the key to fix, and nothing runs until it is fixed:</p>
   <pre data-lang="text"><code>mfactory: factory.toml has 2 problem(s):
-  - [steps.review].on.CHANGES points at unknown step "biuld". Steps: intake, ask-author, spec, ...; end states: done, failed, rejected
+  - pipelines/default.yaml (pipeline "default"): steps.review.on.CHANGES points at unknown step "biuld". Steps: intake, ask-author, spec, ...; end states: done, failed, rejected
   - [models.claude].build.effort = "extreme" is not an effort level claude documents. Known: low, medium, high, xhigh, max</code></pre>
   <p><code>schema</code> is the version of this file's format. <code>mfactory upgrade</code> refuses a release that needs another. It is <code>1</code> today. Behavior of who merges changed in 0.2.0 without a schema change. See <a href="pipeline.html#who-merges">who merges</a>.</p>
 
@@ -83,7 +86,7 @@ timeout_minutes = 30</code></pre>
   <p>The commands run in order in the job's worktree with <code>bash -c</code>. The first one that exits non-zero stops the run and fails the step. They run at <code>gate</code>, and again in <code>merge</code> after the base branch is merged in, when that step is on. The working directory stays that worktree. Each command gets <code>FACTORY_CHECKOUT</code>, the main checkout, and <code>FACTORY_JOB</code>, the job id. <code>mfactory checks</code> runs in the current directory and still sets <code>FACTORY_CHECKOUT</code>; it has no job, so <code>FACTORY_JOB</code> is unset. A command must not rewrite files. Protected paths fail the branch even when every command exits 0. See <a href="#labels-paths-and-ports">paths</a>.</p>
 
   <h2 id="steps">Steps</h2>
-  <p>Each step is a <code>[steps.&lt;name&gt;]</code> table with a <code>type</code> and an <code>on</code> table. An edge is a step name, or <code>{ to = "&lt;step&gt;", max = &lt;n&gt; }</code>. End states: <code>done</code>, <code>rejected</code>, <code>failed</code>. How each type behaves is on the <a href="pipeline.html#steps-and-edges">pipeline</a> page.</p>
+  <p>Each step is a mapping under <code>steps:</code> in a pipeline file, with a <code>type</code> and an <code>on</code> mapping. An edge is a step name, or <code>{ to: &lt;step&gt;, max: &lt;n&gt; }</code>. End states: <code>done</code>, <code>rejected</code>, <code>failed</code>. How each type behaves is on the <a href="pipeline.html#steps-and-edges">pipeline</a> page.</p>
   <div class="scroll">
     <table>
       <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
@@ -98,46 +101,52 @@ timeout_minutes = 30</code></pre>
 
   <h2 id="loop-limits">Loop limits</h2>
   <p>A <code>max</code> on an edge is how many times in a row a step may send a job that way. The count starts again on a different outcome. When it is used up, the job goes to <code>[run].escalate_to</code>. A bare step name keeps the default <code>max</code> and changes only the target. The rules are on <a href="pipeline.html#loop-limits">loop limits</a>.</p>
-  <pre data-lang="toml"><code>[steps.review]
-on = { CHANGES = { max = 2 } }</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      review:
+        on: { CHANGES: { max: 2 } }</code></pre>
 
   <h2 id="who-merges">Who merges</h2>
   <p>By default <code>merge</code> is off and <code>approve</code> leads to <code>ready-to-merge</code>. A hand merge continues from the merge step's <code>MERGED</code> edge and does not sync the base branch or run the checks again. To let the factory merge, set all three:</p>
-  <pre data-lang="toml"><code>[steps.approve]
-on = { APPROVE = "merge" }
-
-[steps.ready-to-merge]
-enabled = false
-skip = "REJECT"
-
-[steps.merge]
-enabled = true</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      approve:
+        on: { APPROVE: merge }
+      ready-to-merge:
+        enabled: false
+        skip: REJECT
+      merge:
+        enabled: true</code></pre>
   <p>Do that only when a merge to the base branch does not publish a release. Enabling <code>merge</code> alone leaves it unreachable.</p>
 
   <h2 id="optional-steps">Optional steps</h2>
-  <pre data-lang="toml"><code>[steps.spec-approval]
-enabled = true
-
-[steps.debug]
-enabled = true
-
-[steps.ready-to-verify]
-enabled = true
-who = "operator"
-
-[steps.verify]
-enabled = true
-commands = ["npm run test:smoke"]</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      spec-approval:
+        enabled: true
+      debug:
+        enabled: true
+      ready-to-verify:
+        enabled: true
+        who: operator
+      verify:
+        enabled: true
+        commands: ["npm run test:smoke"]</code></pre>
   <p><code>spec-approval</code>, <code>debug</code>, <code>ready-to-verify</code>, and <code>verify</code> ship off. The debugger writes a diagnosis and changes no code. With it off, failing checks go straight back to the builder. <code>ready-to-verify</code> waits until a person says the deploy is live.</p>
 
   <h2 id="adding-a-step">Adding a step</h2>
-  <pre data-lang="toml"><code>[steps.docs]
-type = "agent"
-instructions = "Update docs/ for the change on this branch."
-on = { DONE = "gate" }
-
-[steps.build]
-on = { READY = "docs" }</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      docs:
+        type: agent
+        instructions: Update docs/ for the change on this branch.
+        on: { DONE: gate }
+      build:
+        on: { READY: docs }</code></pre>
   <div class="scroll">
     <table>
       <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
@@ -153,12 +162,15 @@ on = { READY = "docs" }</code></pre>
   </div>
 
   <h2 id="human-steps">Human steps</h2>
-  <pre data-lang="toml"><code>[steps.release-approval]
-type = "human"
-who = "maintainer"
-ask = "approve the release"
-shows = "decision.md"
-on = { APPROVE = "merge", CHANGES = { to = "build", max = 2 }, REJECT = "rejected" }</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      release-approval:
+        type: human
+        who: maintainer
+        ask: approve the release
+        shows: decision.md
+        on: { APPROVE: merge, CHANGES: { to: build, max: 2 }, REJECT: rejected }</code></pre>
   <div class="scroll">
     <table>
       <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
@@ -175,16 +187,18 @@ on = { APPROVE = "merge", CHANGES = { to = "build", max = 2 }, REJECT = "rejecte
 
   <h2 id="validation">Validation</h2>
   <p><code>ready-to-verify</code> sits between merge and verify. It ships off, so a merge still lands on verify. Turn it on when a person has to say the deploy is live. <code>/mfactory verify</code> then runs verify. <code>/mfactory reject</code> ends the job. <code>who</code> is the same key as any human step.</p>
-  <pre data-lang="toml"><code>[steps.ready-to-verify]
-enabled = true
-who = "operator"
-
-[steps.verify]
-enabled = true
-after = "merge"
-agent = true
-url = "https://app.example.com"
-commands = ["test \"$(curl -fsS \"$FACTORY_DEPLOY_URL/health\")\" = ok"]</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      ready-to-verify:
+        enabled: true
+        who: operator
+      verify:
+        enabled: true
+        after: merge
+        agent: true
+        url: "https://app.example.com"
+        commands: ["test \"$(curl -fsS \"$FACTORY_DEPLOY_URL/health\")\" = ok"]</code></pre>
   <p>A script that can see the deploy leaves <code>ready-to-verify</code> off and uses <code>wait</code>. Keys of the <code>verify</code> step. The factory never deploys. A job being validated holds no slot.</p>
   <div class="scroll">
     <table>
@@ -202,31 +216,30 @@ commands = ["test \"$(curl -fsS \"$FACTORY_DEPLOY_URL/health\")\" = ok"]</code><
     </table>
   </div>
   <p>Commands and <code>wait</code> get <code>FACTORY_CHECKOUT</code> (the main checkout), <code>FACTORY_JOB</code>, <code>FACTORY_MERGE_SHA</code>, <code>FACTORY_PR</code>, and <code>FACTORY_DEPLOY_URL</code>. The working directory is a clean checkout of the merge commit. A job file that the worktree does not contain is <code>test -s "$FACTORY_CHECKOUT/.factory/jobs/$FACTORY_JOB/spec.md"</code>.</p>
-  <p>When verify is on, <code>spec.md</code> must include <code>## Verify after deploy</code>. <code>VERIFY: PASS</code> ends at <code>done</code>. <code>VERIFY: FAIL</code> ends as <code>failed</code> after <code>retries</code>. <code>VERIFY: BLOCKED</code> means the environment could not be reached: the job returns to <code>ready-to-verify</code>. The fourth <code>BLOCKED</code> in a row goes to <code>escalated</code>. It does not comment as a failure, open an issue, or open a revert pull request. If <code>ready-to-verify</code> is off, <code>BLOCKED</code> fails the job through <code>on_failure</code>. A project that replaces <code>[steps.verify].on</code> must keep a <code>BLOCKED</code> edge. The default is <code>{ to = "ready-to-verify", max = 3 }</code>.</p>
+  <p>When verify is on, <code>spec.md</code> must include <code>## Verify after deploy</code>. <code>VERIFY: PASS</code> ends at <code>done</code>. <code>VERIFY: FAIL</code> ends as <code>failed</code> after <code>retries</code>. <code>VERIFY: BLOCKED</code> means the environment could not be reached: the job returns to <code>ready-to-verify</code>. The fourth <code>BLOCKED</code> in a row goes to <code>escalated</code>. It does not comment as a failure, open an issue, or open a revert pull request. If <code>ready-to-verify</code> is off, <code>BLOCKED</code> fails the job through <code>on_failure</code>. A project that replaces <code>steps.verify.on</code> must keep a <code>BLOCKED</code> edge. The default is <code>{ to: ready-to-verify, max: 3 }</code>.</p>
 
   <h2 id="fixing-after-the-merge">Fixing after the merge</h2>
   <p>The built-in <code>debug</code> step sends a job back to <code>build</code> on its branch, which is gone after the merge. A <code>post-debug</code> step handles problems found after the merge, such as a failed smoke test or slower CI, and keeps the fix in the same job. This recipe asks a maintainer after each merge, who answers <code>/mfactory close</code>, <code>/mfactory test</code> or <code>/mfactory debug &lt;what you saw&gt;</code>:</p>
   <pre data-lang="toml"><code>[project]
-issue_link = "refs"
-
-[steps.merge]
-on = { MERGED = "after-merge", FAILED = "escalated" }
-
-[steps.after-merge]
-type = "human"
-who = "maintainer"
-ask = "merged: close the job, run the post-merge tests, or debug"
-on = { CLOSE = "done", TEST = "verify", DEBUG = "post-debug" }
-
-[steps.verify]
-enabled = true
-after = "merge"
-commands = ["pytest -q"]
-on = { PASS = "after-merge", FAIL = "post-debug", BLOCKED = { to = "after-merge", max = 3 } }
-
-[steps.post-debug]
-type = "agent"
-on = { FOUND = { to = "build", max = 2 }, UNKNOWN = "after-merge" }</code></pre>
+issue_link = "refs"</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      merge:
+        on: { MERGED: after-merge, FAILED: escalated }
+      after-merge:
+        type: human
+        who: maintainer
+        ask: "merged: close the job, run the post-merge tests, or debug"
+        on: { CLOSE: done, TEST: verify, DEBUG: post-debug }
+      verify:
+        enabled: true
+        after: merge
+        commands: [pytest -q]
+        on: { PASS: after-merge, FAIL: post-debug, BLOCKED: { to: after-merge, max: 3 } }
+      post-debug:
+        type: agent
+        on: { FOUND: { to: build, max: 2 }, UNKNOWN: after-merge }</code></pre>
   <p><code>post-debug</code> is a built-in role with outcomes <code>FOUND</code> and <code>UNKNOWN</code>. A step with another name sets <code>role = "post-debug"</code>. The agent gets the merged pull request, its merge commit and a detached checkout of the current base branch. It reads CI and the merged diff and writes <code>round-N/post-debug.md</code>. It changes no code: <code>done</code> refuses its file if the checkout changed.</p>
   <p>Any entry to <code>build</code> after the job's pull request merged starts a follow-up. That includes <code>FOUND</code>, and <code>FEEDBACK</code> from <code>escalated</code>. The merged pull request moves to <code>prs</code> in <code>job.json</code>, and the job builds on a new branch <code>&lt;branch_prefix&gt;&lt;job&gt;-fix-N</code> from the base, in a new round. The builder opens a new pull request that starts with <code>Refs #&lt;issue&gt;</code>, and the fix goes through the gate, review, approval and merge again. The dashboard lists every pull request of the job. The <code>max</code> on <code>FOUND</code> limits follow-ups. With <code>issue_link = "closes"</code> the issue is closed by then, so <code>FOUND</code> is refused until someone reopens it. Unlike <code>on_failure = "issue"</code>, which opens a new job, a follow-up keeps one issue and one history.</p>
 
@@ -300,11 +313,13 @@ default = { model = "gpt-5.6-sol" }</code></pre>
   <pre data-lang="toml"><code>[skills]
 all = ["code-style"]
 
-[steps.build]
-skills = ["testing", "migrations"]
-
 [reviewers.security]
 skills = ["auth-rules"]</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      build:
+        skills: [testing, migrations]</code></pre>
   <p>Each agent's prompt names the <code>SKILL.md</code> files to read. This works the same in every tool. In Claude Code, a skill in <code>.claude/skills</code> is also loaded up front. <code>mfactory sync</code> refuses a name that matches no skill and says where it looked.</p>
 
   <h2 id="tracker-a-jira-board">Tracker: a Jira board</h2>
@@ -455,10 +470,12 @@ queue = "Ready for factory"
     <li>People are named per tracker, because a GitHub login and a Jira account id can look the same. In <code>authors</code> and <code>assignees</code>, a tracker left out is not filtered. A <code>who</code> table names every tracker. The words <code>author</code>, <code>maintainer</code> and <code>operator</code> stay plain strings.</li>
   </ul>
   <pre data-lang="toml"><code>[run]
-authors = { github = ["alice"], jira = ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }
-
-[steps.spec-approval]
-who = { github = ["alice"], jira = ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }</code></pre>
+authors = { github = ["alice"], jira = ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      spec-approval:
+        who: { github: [alice], jira: ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }</code></pre>
   <ul>
     <li>When one tracker cannot be reached, the other's jobs carry on. <code>mfactory queue</code> prints <code>problem: Jira: &lt;reason&gt;</code>, a job waiting on that tracker shows <code>could not read Jira</code>, and the dashboard shows the problem. When neither can be reached, the command fails as before.</li>
     <li>A job keeps the tracker it came from, so adding a second tracker leaves jobs in flight running. A job whose tracker is taken out of <code>kind</code> gets a <code>skip</code> row until the tracker is back.</li>

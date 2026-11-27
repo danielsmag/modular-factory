@@ -73,6 +73,13 @@ for candidate in python3 python3.13 python3.12 python3.11; do
 done
 [ -n "$PYTHON" ] || fail "Python 3.11 or later is needed and was not found"
 [ "$PYTHON" = python3 ] || echo "note: python3 is older than 3.11; the factory needs \`python3\` to be 3.11 or later to run"
+if ! "$PYTHON" -c 'import yaml' 2>/dev/null; then
+  echo "note: PyYAML is not installed; the factory reads its pipelines from YAML files"
+  echo "      installing it with: $PYTHON -m pip install --user pyyaml"
+  "$PYTHON" -m pip install --user --quiet pyyaml 2>/dev/null ||
+    "$PYTHON" -m pip install --user --quiet --break-system-packages pyyaml 2>/dev/null ||
+    fail "could not install PyYAML. Install it yourself (\`$PYTHON -m pip install --user pyyaml\`, or your OS package python3-yaml), then run this again"
+fi
 
 if [ -z "$SOURCE" ]; then
   command -v curl >/dev/null 2>&1 || fail "curl is needed to download the factory (or pass --source DIR)"

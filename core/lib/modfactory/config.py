@@ -968,9 +968,14 @@ def _step_problems(cfg, steps, kinds, both, human_keys, test_table):
     return out
 
 
+def cfg_legacy_only(pipe) -> bool:
+    """True when factory.toml's [steps.*] still change this pipeline, so a problem is named as factory.toml names it."""
+    return any(label == FILE for label in pipe.sources.values())
+
+
 def _in_pipeline(pipe, found):
     """Problems of a pipeline other than default name its file and the pipeline."""
-    if pipe is None or pipe.name == pipelines.DEFAULT:
+    if pipe is None or (pipe.name == pipelines.DEFAULT and (pipe.file == "built-in" or cfg_legacy_only(pipe))):
         return found
     def relabel(message: str) -> str:
         message = re.sub(r"\[steps\.([^\]]+)\]", r"steps.\1", message)
@@ -1015,3 +1020,34 @@ def as_json(cfg):
     """The merged config as rows, for the dashboard."""
     return [{"key": ".".join(p), "value": v, "source": cfg.sources.get(p, "default")}
             for p, v in leaves(cfg.data)]
+
+
+def pipelines_json(cfg):
+    """The project's pipelines for the dashboard: each one's graph, its file's YAML, and any problems."""
+    base = cfg.base_config
+    texts: dict[str, str] = {report.path: report.text for report in base.pipeline_files}
+    builtin_text: str = pipelines.BUILTIN_FILE.read_text()
+    chosen: str = str(base.data["run"].get("pipeline") or "")
+    rows = []
+    for name, pipe in base.pipelines.items():
+        try:
+            drawn = graph.as_json(base.view(name))
+        except (KeyError, TypeError, ValueError):
+            drawn = None
+        rows.append({
+            "name": name, "description": pipe.description, "file": pipe.file, "extends": pipe.extends,
+            "start": pipe.start, "escalate_to": pipe.escalate_to, "graph": drawn,
+            "yaml": texts.get(pipe.file, builtin_text if pipe.file == "built-in" else ""),
+            "steps": len(pipe.steps),
+        })
+    return {
+        "default": chosen or (next(iter(base.pipelines)) if len(base.pipelines) == 1 else None),
+        "ask": not chosen and len(base.pipelines) > 1,
+        "folder": str(base.data["paths"].get("pipelines") or "pipelines"),
+        "legacy": bool(getattr(base, "legacy_pipeline", False)),
+        "pipelines": rows,
+        "files": [{"path": r.path, "names": r.names, "errors": r.errors, "yaml": r.text}
+                  for r in base.pipeline_files],
+        "problems": list(base.pipeline_problems),
+    }
+

@@ -182,7 +182,7 @@ def test_a_job_cannot_change_the_factory_that_judges_it(world):
     paths = (
         "factory.toml", ".factory/roles/build.md", ".claude/agents/mfactory-approve.md",
         ".cursor/agents/mfactory-build.md", ".codex/agents/mfactory-build.toml",
-        ".agents/skills/mfactory/SKILL.md",
+        ".agents/skills/mfactory/SKILL.md", "pipelines/default.yaml",
     )
     job = world.start(until="build")
     verdict, report = gate(world, job, {path: "mine now\n" for path in paths})

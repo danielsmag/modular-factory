@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 from conftest import ROOT, git
-from modfactory import install
+from modfactory import config, install, pipelines
 from modfactory.cli.maintain import _changelog_note, status_all, upgrade_everything
 from modfactory.util import dashboard_page
 from modfactory.workspace.service import DashboardServer, one_handler
@@ -51,7 +51,16 @@ def test_init_installs_everything_a_project_needs(bare):
     toml = (repo / "factory.toml").read_text()
     assert 'enabled = ["claude", "codex"]' in toml and 'base_branch = "main"' in toml
     assert "pr_title_pattern" in toml
-    assert "# [steps.merge]\n# enabled = true" in toml
+    assert "[steps" not in toml and '# pipeline = "default"' in toml
+    for item in ("pipelines/default.yaml", "schema/pipeline.schema.json"):
+        assert (repo / ".factory" / item).exists(), item
+    starter = (repo / "pipelines" / "default.yaml").read_text()
+    assert starter.startswith("# yaml-language-server: $schema=../.factory/schema/pipeline.schema.json")
+    cfg = config.load(repo)
+    assert cfg.pipelines["default"].file == "pipelines/default.yaml"
+    shipped = pipelines.parse(pipelines.BUILTIN_FILE.read_text(), "built-in")
+    builtin = pipelines.normalise_edges(shipped["pipelines"]["default"]["steps"])
+    assert cfg.steps == builtin  # the starter is the built-in pipeline, spelled out
     assert (repo / ".gitignore").read_text() == (
         "node_modules/\n\n# software factory runtime state\n/.factory/jobs/\n/.worktrees/\n")
     assert (repo / ".claude/agents/mfactory-build.md").exists()

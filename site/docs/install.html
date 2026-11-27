@@ -18,7 +18,7 @@
     <li><code>git</code>, and the GitHub CLI <code>gh</code>, signed in (<code>gh auth login</code>) with write access to the repository.</li>
     <li>One of Claude Code, Cursor, or Codex.</li>
   </ul>
-  <p>The factory adds nothing to your project's dependencies. It is a folder of Python files that use only the standard library. macOS, Linux, or WSL. The script uses <code>fcntl</code> and <code>bash</code>.</p>
+  <p>The factory adds nothing to your project's dependencies. It is a folder of Python files that need one package besides the standard library: PyYAML, for the pipelines in <code>pipelines/*.yaml</code>. <code>install.sh</code> installs it when it is missing, and <code>mfactory doctor</code> checks for it. macOS, Linux, or WSL. The script uses <code>fcntl</code> and <code>bash</code>.</p>
 
   <h2 id="install-the-command">Install the command</h2>
   <pre data-lang="bash"><code>curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --global</code></pre>

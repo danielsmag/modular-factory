@@ -7,7 +7,7 @@ changed from the project it is derived from.
 
 | Part | What it is | What it decides |
 | --- | --- | --- |
-| The script, `.factory/bin/mfactory` | Python, standard library only | Everything about state: which step a job is in, where an outcome leads, whether a limit is reached, whether the checks pass, when to merge. |
+| The script, `.factory/bin/mfactory` | Python, the standard library and PyYAML | Everything about state: which step a job is in, where an outcome leads, whether a limit is reached, whether the checks pass, when to merge. |
 | The orchestrator, the `/mfactory` skill | A prompt your coding tool's main agent follows | Nothing. It asks the script what to do, starts the agents the script names, and reports back. |
 | The agents | One small generated file per step, pointing at a prompt in `.factory/roles/` | The content of their one step: a spec, a build, a review. |
 
@@ -73,14 +73,20 @@ core/lib/modfactory/      the factory's code
       jira_acli.py        Jira through the Atlassian CLI, when REST has no credentials
       routing.py          GitHub and Jira together: each issue to its own tracker, the queues in turn
       adf.py              Jira's document format, to and from text
+  pipelines.py            the YAML pipelines: read, check against the schema, resolve extends
+  jsonschema_lite.py      the JSON Schema keywords the pipeline schema uses
+  runstate.py             each step's state in a job, for the dashboard's job graph
   store.py, cost.py, util.py
 core/roles/*.md           one prompt per agent step and reviewer
 core/skill/SKILL.md       the orchestrator
-core/defaults.toml        the default pipeline and settings
+core/defaults.toml        the default settings
+core/pipelines/default.yaml  the built-in pipeline
+core/schema/pipeline.schema.json  what a pipeline file may contain
 core/templates/factory.toml  the factory.toml written on first install
 web/dashboard.html        the dashboard shell: one project, or every project in the workspace with a filter
 web/dashboard.css         styles, inlined into the page when it is served
 web/dashboard.js          the page's script, inlined the same way
+web/dag.js                a pipeline drawn as a left-to-right graph, coloured by a job's step states
 adapters/*.toml           per tool: folders, agent file format, default models
 install.sh
 tests/
@@ -255,7 +261,10 @@ Intake reads an issue nobody has reviewed. Each tool can limit what it may do.
 
 - **A package, not one file.** The CLI is `core/bin/mfactory` plus the
   `modfactory` package beside it. The command line lives in `modfactory/cli/`.
-  It still installs as one folder with no dependencies.
+  It still installs as one folder. Its one dependency is PyYAML, for the
+  pipelines; their JSON Schema is checked by a small validator in the package,
+  `jsonschema_lite.py`, rather than by the `jsonschema` package, which brings
+  compiled dependencies.
 - **A shared role file.** `roles/common.md` holds what every agent must know
   (the prompt's format, the rules, the file format), so each role file holds
   only its own step.

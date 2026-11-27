@@ -425,7 +425,9 @@ def main(argv: list[str]) -> int:
             _hand_off(argv)
         return run(args)
     except ConfigError as error:
-        print(f"mfactory: {config.FILE} has {len(error.problems)} problem(s):", file=sys.stderr)
+        yaml_too: bool = any(".yaml" in problem or ".yml" in problem for problem in error.problems)
+        where: str = "the configuration" if yaml_too else config.FILE
+        print(f"mfactory: {where} has {len(error.problems)} problem(s):", file=sys.stderr)
         for problem in error.problems:
             print(f"  - {problem}", file=sys.stderr)
         return 1

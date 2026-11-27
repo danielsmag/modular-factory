@@ -43,7 +43,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: python -m pip install pytest pytest-xdist
+      - run: python -m pip install pytest pytest-xdist pyyaml
       - run: make test
 
   # The release workflow's run title is fixed when it starts, so pass the version in.

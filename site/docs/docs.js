@@ -29,8 +29,8 @@ const PAGES = [
   { id: "workspace", group: "Guides", file: "workspace.html", title: "Workspace and dashboard",
     blurb: "One read-only board for several projects, and the cap on how many jobs start.",
     heads: [["Dashboard", "dashboard"], ["Add a project", "add-a-project"], ["One board", "one-board"], ["Concurrency", "concurrency"]] },
-  { id: "configuration", group: "Reference", file: "configuration.html", title: "factory.toml",
-    blurb: "Every key in factory.toml, including checks, reviewers, models, skills, and protected paths.",
+  { id: "configuration", group: "Reference", file: "configuration.html", title: "Configuration",
+    blurb: "Every key in factory.toml and in a pipeline file, including checks, reviewers, models, skills, and protected paths.",
     heads: [["How values merge", "how-values-merge"], ["Project, tools and run", "project-tools-and-run"], ["Checks", "checks"], ["Steps", "steps"], ["Loop limits", "loop-limits"], ["Who merges", "who-merges"], ["Optional steps", "optional-steps"], ["Adding a step", "adding-a-step"], ["Human steps", "human-steps"], ["Validation", "validation"], ["Reviewers and surfaces", "reviewers-and-surfaces"], ["Models and effort", "models-and-effort"], ["Project skills", "project-skills"], ["Tracker: a Jira board", "tracker-a-jira-board"], ["GitHub issues and a Jira board together", "tracker-both"], ["Labels, paths and ports", "labels-paths-and-ports"]] },
   { id: "cli", group: "Reference", file: "cli.html", title: "CLI",
     blurb: "mfactory commands for install, configuration, jobs, the dashboard, and the workspace.",
@@ -164,7 +164,7 @@ function enhanceCode(article) {
   }
 }
 function paint(code, lang) {
-  if (lang !== "toml" && lang !== "bash") return;
+  if (lang !== "toml" && lang !== "bash" && lang !== "yaml") return;
   const src = code.textContent;
   const lines = src.split("\n");
   const nodes = [];
@@ -174,6 +174,7 @@ function paint(code, lang) {
   };
   lines.forEach((line, index) => {
     if (lang === "toml") tomlLine(line, push);
+    else if (lang === "yaml") yamlLine(line, push);
     else bashLine(line, push);
     if (index < lines.length - 1) push("", "\n");
   });
@@ -217,6 +218,19 @@ function tomlLine(line, push) {
     push("key", line.slice(0, eq));
     push("", "=");
     quoted(line.slice(eq + 1), push);
+    return;
+  }
+  quoted(line, push);
+}
+function yamlLine(line, push) {
+  const trimmed = line.trimStart();
+  if (trimmed.startsWith("#")) { push("com", line); return; }
+  const found = line.match(/^(\s*-?\s*)([A-Za-z0-9_.-]+)(:)(.*)$/);
+  if (found) {
+    push("", found[1]);
+    push("key", found[2]);
+    push("", found[3]);
+    quoted(found[4], push);
     return;
   }
   quoted(line, push);

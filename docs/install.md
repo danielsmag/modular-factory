@@ -9,7 +9,10 @@
 - One of Claude Code, Cursor or Codex.
 
 The factory adds nothing to your project's dependencies. It is a folder of
-Python files that use only the standard library.
+Python files that need one package besides the standard library: PyYAML, to
+read the pipelines in `pipelines/*.yaml`. `install.sh` installs it with
+`pip install --user pyyaml` when it is missing, and `mfactory doctor` checks it
+is there. Your OS package (`python3-yaml`) works as well.
 
 ## 1. Install
 
