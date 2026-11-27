@@ -186,7 +186,7 @@ h2.job-title { font-size: var(--fs-title); overflow-wrap: anywhere; }
 .jboard-head .fold { font: 600 var(--fs-body) var(--sans); }
 .kanban.jira .kcol-cards { max-height: 70vh; overflow-y: auto; padding-right: 2px; }
 .kcard.job { border-color: var(--code-dim); }
-.kcard .card-top .chip { margin-left: auto; }
+.kcard .card-top .chip { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .irows { display: flex; flex-direction: column; gap: 6px; }
 .irow {
   display: grid; grid-template-columns: 60px minmax(0, 1fr) auto; grid-template-areas: "num title meta" "num chips meta";

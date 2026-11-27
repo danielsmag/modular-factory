@@ -13,7 +13,7 @@ steps, the commands that prove a build works, which model and effort each step
 uses, how often a step may send work back, and which of the project's own
 skills each agent reads.
 
-![The dashboard's board view, showing made-up sample jobs](docs/dashboard-board.png?v=2)
+![The dashboard's board view: Jira boards, GitHub issues and the factory's jobs, all made up](docs/dashboard-board.png?v=3)
 
 > **Status: not yet run inside a real tool.** The pipeline is covered by
 > automated tests that play the orchestrator and the agents against a
@@ -247,12 +247,23 @@ mfactory stop
 
 The page comes with the global install (`install.sh --global`), not with each
 project. `.factory/bin/mfactory dashboard` hands off to the global `mfactory`.
-It serves a read-only page on your machine: jobs by step, with a Now panel of
-the agents still on the current step, queued issues that are not jobs yet, the
-pipeline, what each job wrote, an overview with the job table, and the merged
-configuration with the source of each value. A queued issue opens its body and
-comments. It changes nothing;
-approvals and feedback go through `/mfactory` or an issue comment.
+It serves a read-only page on your machine. Its Board has three blocks:
+
+- **Jira**: the Jira boards you choose, one or several, each drawn with its
+  columns and cards. A picker lists every board your Jira account can see; the
+  project's own board is shown until you choose.
+- **GitHub issues**: each repository's open issues, newest first, with All,
+  Assigned to me and Not in the factory.
+- **Factory**: jobs by step, with a Now panel of the agents still on the
+  current step and the queued issues that are not jobs yet.
+
+A card or an issue that is a factory job carries the job's chip. Each block
+folds, and the browser remembers the boards you chose and what you folded. The
+page also has the pipeline, what each job wrote, an overview with the job
+table, and the merged configuration with the source of each value. An issue
+opens its body and comments. It changes nothing; approvals and feedback go
+through `/mfactory` or an issue comment. The Jira block reads Jira's REST API,
+so start the dashboard from a shell that has `JIRA_EMAIL` and `JIRA_API_TOKEN`.
 
 ![The dashboard's pipeline view, showing made-up sample jobs](docs/dashboard-pipeline.png?v=2)
 

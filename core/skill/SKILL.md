@@ -264,7 +264,7 @@ feedback or asking for something new, ask.
   every project in the workspace and prints its address; `mfactory stop` ends
   it. The page comes with the global install, so `.factory/bin/mfactory
   dashboard` hands off to it. Overview is the job table, running slots, and
-  merged jobs. Board is jobs by step, with a Now panel of the agents still on the current step. Inside this checkout the page opens with
+  merged jobs. Board has three blocks: the Jira boards the user chooses, the repository's open GitHub issues, and the factory's jobs by step with a Now panel of the agents still on the current step. Inside this checkout the page opens with
   this project selected.
 - **Several projects**: the workspace is `~/.mfactory/workspace.toml`.
   `mfactory install` adds the repository to it, and `mfactory workspace add`

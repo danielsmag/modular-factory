@@ -293,8 +293,14 @@ Intake reads an issue nobody has reviewed. Each tool can limit what it may do.
   with a steady-pace line, and cost or time by step. With Claude Code on a
   plan, cost by step can show plan usage instead of API-equivalent dollars,
   and cards show the Session and Weekly limits. Not jobs per day: with a
-  few merges a week, a per-day chart is mostly zeros. The board stays jobs by
-  step, with a Now panel of the agents still on the current step.
+  few merges a week, a per-day chart is mostly zeros. The board's factory block
+  stays jobs by step, with a Now panel of the agents still on the current step.
+- **The board shows Jira and GitHub too.** Above the factory's jobs, a Jira
+  block draws the boards a person picks, several stacked rather than merged,
+  because boards have different workflows and a merged column would hide where
+  a card lives. A GitHub block lists the repository's open issues. What a
+  person picks and folds is kept in the browser, so the dashboard still writes
+  nothing, and a personal view does not belong in the committed factory.toml.
 - **The pipeline view is a column of steps** with forward edges on the right
   and back edges on the left. A left-to-right drawing of twelve steps was too
   small to read.

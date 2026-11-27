@@ -65,6 +65,7 @@ class FakeJira:
         self.assignable = {"op", "maint"}
         self.project = "PROJ"
         self.board_id = 7
+        self.board_name = "Factory board"
         self.columns = [(name, list(statuses)) for name, statuses in COLUMNS]
         # Boards other than the factory's own, by id: name, type, project key and columns.
         self.boards = {}
@@ -254,7 +255,7 @@ class FakeJira:
 
     def _boards(self):
         """Every board, the factory's own first: its columns are `self.columns`, which tests may change."""
-        own = {"name": "Factory board", "type": "kanban", "project": self.project, "columns": self.columns}
+        own = {"name": self.board_name, "type": "kanban", "project": self.project, "columns": self.columns}
         return {self.board_id: own, **self.boards}
 
     def _page(self, rows, query, key, extra=None):

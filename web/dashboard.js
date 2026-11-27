@@ -1514,8 +1514,10 @@ function queuedIssue(projectId, key) {
 function queueLabelOf(project) {
   return (project.labels && project.labels.queue) || "factory";
 }
+// "job 016 · review": the job's number and where it is, short enough for a card.
 function jobChip(job) {
-  return el("span", { class: "chip " + kindOf(job), text: "job " + jobNum(job.id) + " · " + (job.waiting ? "Needs you" : job.step) });
+  const number = String(job.id || "").split("-")[0];
+  return el("span", { class: "chip " + kindOf(job), title: job.id, text: "job " + number + " · " + (job.waiting ? "Needs you" : job.step) });
 }
 function textMatches(values) {
   const q = state.query.trim().toLowerCase();

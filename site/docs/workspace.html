@@ -20,7 +20,7 @@ mfactory dashboard --port 4747 --no-open</code></pre>
   <p>The page comes with the global install (<code>install.sh --global</code>), so a machine has one dashboard and no copy sits in <code>.factory/</code>. <code>.factory/bin/mfactory dashboard</code>, <code>start</code> and <code>stop</code> hand off to the global <code>mfactory</code>.</p>
   <p>The page has five views:</p>
   <ul>
-    <li><strong>Board.</strong> Jobs by step, with a Now panel of the agents still on the current step.</li>
+    <li><strong>Board.</strong> Three blocks that each fold. <strong>Jira</strong>: the Jira boards you choose, one or several, with their columns and cards; a picker lists every board the account can see. <strong>GitHub issues</strong>: each repository's open issues, newest first, with All, Assigned to me and Not in the factory. <strong>Factory</strong>: jobs by step, with a Now panel of the agents still on the current step.</li>
     <li><strong>Pipeline.</strong> A column of steps. Forward edges on the right, back edges on the left, and how many jobs sit in each step.</li>
     <li><strong>Jobs.</strong> What each job wrote: spec, build, checks, reviews.</li>
     <li><strong>Overview.</strong> Running slots, a running total of merged jobs with a steady-pace line, cost or time by step, and the job table. With a few merges a week, a per-day chart is mostly zeros.</li>
@@ -43,6 +43,7 @@ mfactory workspace remove</code></pre>
 
   <h2 id="one-board">One board</h2>
   <p>Choose All for one board, one pipeline per project, one job list, and one config table per project. Choose one project for that project's views. Queue rows that are not jobs yet stay on the board.</p>
+  <p>With All, the Jira and GitHub blocks show each project under its name. The boards you choose, the GitHub filter, and the blocks you fold are kept in this browser, so the dashboard itself writes nothing. A card or an issue that is a factory job carries the job's chip and opens its drawer. The Jira block reads Jira's REST API with each project's own <code>[tracker.jira]</code> settings: start the dashboard from a shell that has <code>JIRA_EMAIL</code> and <code>JIRA_API_TOKEN</code>. A board the account cannot see shows its error in its own place, and the rest of the page still loads.</p>
   <p><code>workspace queue</code> runs each project's own <code>.factory/bin/mfactory queue</code>. A project that fails is reported, and the others still print. Queue cards link to the issue and open a drawer with the issue's body and comments, fetched when it opens.</p>
 
   <h2 id="concurrency">Concurrency</h2>
