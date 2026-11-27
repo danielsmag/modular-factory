@@ -229,8 +229,14 @@ class World:
         self._factory = Factory(config.load(self.repo), say=self.said.append)
         return self._factory
 
-    def create(self, issue):
-        return self.factory().create(issue)["id"]
+    def create(self, issue, pipeline=None):
+        return self.factory().create(issue, pipeline)["id"]
+
+    def pipeline_file(self, name, text):
+        """Write `pipelines/<name>` in the project: one or more YAML pipelines."""
+        folder = self.repo / "pipelines"
+        folder.mkdir(exist_ok=True)
+        (folder / name).write_text(text)
 
     def next(self, job):
         self.factory().next(job)
@@ -317,8 +323,9 @@ class World:
     def act(self, job):
         """Do what the agents of the job's current step would do, all of them succeeding."""
         j = self.job(job)
-        step = self._factory.cfg.steps[j["step"]]
-        role = self._factory.cfg.role(j["step"]) if step["type"] == "agent" else step["type"]
+        cfg = self._factory.cfg.pipeline_of(j)
+        step = cfg.steps[j["step"]]
+        role = cfg.role(j["step"]) if step["type"] == "agent" else step["type"]
         {"intake": self.intake, "spec": self.spec, "build": self.build, "review": self.review,
          "approve": self.approve, "debug": self.debug, "verify": self.verifier}[role](job)
 

@@ -97,8 +97,11 @@ class Store:
 
     # -- slots
 
+    def _pipe(self, job):
+        return self.cfg.pipeline_of(job)
+
     def holds_slot(self, job):
-        step = self.cfg.steps.get(job["step"])
+        step = self._pipe(job).steps.get(job["step"])
         return bool(step) and step["type"] in RUNNING_TYPES
 
     def running(self):

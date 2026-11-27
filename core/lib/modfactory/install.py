@@ -12,13 +12,13 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
-from . import checks, config, graph
+from . import checks, config, graph, pipelines
 from . import sync as syncer
 from .service import tracker as trackers
 from .store import Store
 from .util import CORE, SOURCE_REPO, ConfigError, FactoryError, Refused, run, tail, version
 
-ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "templates", "VERSION"]
+ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "pipelines", "schema", "templates", "VERSION"]
 TEMPLATE: Path = CORE / "templates" / "factory.toml"
 _BASE_TOKEN: str = "__BASE_BRANCH__"
 _TOOLS_TOKEN: str = "__TOOLS__"
@@ -138,7 +138,8 @@ def _pattern_present(have: set[str], pattern: str) -> bool:
 def personal_patterns(cfg: config.Config) -> list[str]:
     """Ignore lines for a personal install: the factory, its runtime dirs, and generated files."""
     worktrees: str = str(cfg["paths"]["worktrees"]).strip("/")
-    patterns: list[str] = [f"/{config.FILE}", "/.factory/", f"/{worktrees}/"]
+    folder: str = str(cfg["paths"].get("pipelines") or "pipelines").strip("/")
+    patterns: list[str] = [f"/{config.FILE}", "/.factory/", f"/{folder}/", f"/{worktrees}/"]
     seen: set[str] = set(patterns)
     names: list[str] = [name for name in _TOOL_ORDER if name in cfg.adapters]
     names.extend(sorted(name for name in cfg.adapters if name not in _TOOL_ORDER))
@@ -219,6 +220,7 @@ def init(repo: Path, tools: list[str] | None = None, say: Callable[[str], None] 
         path.write_text(render_starter(base_branch(repo), tools or ["claude"]))
         say(f"ok    {config.FILE} written")
 
+    write_pipelines(repo, say)
     cfg = config.load(repo)
     personal = personal or is_personal(repo)
     if personal:
@@ -249,10 +251,29 @@ def init(repo: Path, tools: list[str] | None = None, say: Callable[[str], None] 
     say(f"  1. In your tool, run `/mfactory setup` to fill in {config.FILE} (or edit it yourself).")
     say("  2. Run `.factory/bin/mfactory doctor`.")
     if personal:
-        say(f"  3. Leave {config.FILE}, .factory/ and the generated files untracked. This checkout ignores them.")
+        say(f"  3. Leave {config.FILE}, pipelines/, .factory/ and the generated files untracked. "
+            "This checkout ignores them.")
     else:
-        say(f"  3. Commit {config.FILE}, .factory/ and the generated files to {cfg.base}, and push.")
+        say(f"  3. Commit {config.FILE}, pipelines/, .factory/ and the generated files to {cfg.base}, and push.")
     say(f"  4. Label an issue `{cfg['labels']['queue']}` and run `/mfactory run`.")
+
+
+def write_pipelines(repo: Path, say: Callable[[str], None] = print) -> None:
+    """Create the pipelines/ folder at the repository root with default.yaml, unless it holds pipelines already."""
+    setting: object = None
+    if (repo / config.FILE).is_file():
+        try:
+            setting = config.read_toml(repo / config.FILE).get("paths", {}).get("pipelines")
+        except ConfigError:
+            setting = None
+    folder: Path = pipelines.folder(repo, setting)
+    rel: str = folder.relative_to(repo).as_posix()
+    if pipelines.project_files(repo, setting):
+        say(f"ok    {rel}/ has pipelines and was left as it is")
+        return
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "default.yaml").write_text(pipelines.starter_text())
+    say(f"ok    {rel}/default.yaml written: the default pipeline, ready to edit")
 
 
 # ---- upgrade ---------------------------------------------------------------
@@ -357,6 +378,13 @@ def doctor(repo, run_checks=True, say=print):
         (ok if res.returncode == 0 else fail)("gh is signed in" if res.returncode == 0
                                               else "gh isn't signed in: run `gh auth login`")
 
+    try:
+        yaml = pipelines.yaml_module()
+        ok(f"PyYAML {yaml.__version__}")
+    except FactoryError as e:
+        fail(f"{e}. The pipelines are YAML files.")
+        return failures
+
     # config and graph
     try:
         cfg = config.load(repo)
@@ -368,15 +396,29 @@ def doctor(repo, run_checks=True, say=print):
     except FactoryError as e:
         fail(str(e))
         return failures
-    off = [n for n, s in cfg.steps.items() if not graph.enabled(s)]
-    ok(f"{config.FILE} is valid: {len(cfg.steps) - len(off)} steps on"
-       + (f", off: {', '.join(off)}" if off else ""))
-    gap: str | None = graph.hand_merge_warning(cfg.steps)
-    if gap:
-        warn(gap)
-    closed: str | None = graph.closed_issue_warning(cfg.steps, cfg["project"].get("issue_link", "refs"))
-    if closed:
-        warn(closed)
+    ok(f"{config.FILE} is valid")
+    folder_setting: object = cfg["paths"].get("pipelines")
+    folder: Path = pipelines.folder(repo, folder_setting)
+    if not pipelines.project_files(repo, folder_setting):
+        warn(f"{folder.relative_to(repo).as_posix()}/ has no pipeline files, so jobs run the built-in pipeline. "
+             "Run `mfactory install` to write pipelines/default.yaml.")
+    if getattr(cfg, "legacy_pipeline", False):
+        warn(f"[steps.*] and [run].start/escalate_to in {config.FILE} are the old way to change the pipeline. "
+             "Run `.factory/bin/mfactory migrate pipelines` to move them to pipelines/default.yaml.")
+    for name, pipe in cfg.pipelines.items():
+        view = cfg.view(name)
+        off = [n for n, s in view.steps.items() if not graph.enabled(s)]
+        where: str = pipe.file if pipe.file != "built-in" else "built-in"
+        ok(f'pipeline "{name}" ({where}) is valid: {len(view.steps) - len(off)} steps on'
+           + (f", off: {', '.join(off)}" if off else ""))
+        gap: str | None = graph.hand_merge_warning(view.steps)
+        if gap:
+            warn(gap if name == pipelines.DEFAULT else f'pipeline "{name}": {gap}')
+        closed: str | None = graph.closed_issue_warning(view.steps, cfg["project"].get("issue_link", "refs"))
+        if closed:
+            warn(closed if name == pipelines.DEFAULT else f'pipeline "{name}": {closed}')
+    if len(cfg.pipelines) > 1 and not cfg["run"].get("pipeline"):
+        ok(f"{len(cfg.pipelines)} pipelines and no [run].pipeline: `/mfactory run` asks which one each job runs")
     dropped: list[str] = Store(cfg).reconcile_index()
     if dropped:
         ok(f"index.json rewritten; dropped {', '.join(dropped)}")

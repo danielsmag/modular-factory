@@ -221,7 +221,7 @@ class ActivityLog:
         step_name: object = job.get("step")
         if not isinstance(step_name, str):
             return []
-        step: object = self._cfg.steps.get(step_name)
+        step: object = self._cfg.pipeline_of(job).steps.get(step_name)
         if not isinstance(step, dict):
             return []
         kind: object = step.get("type")

@@ -1,0 +1,136 @@
+# yaml-language-server: $schema=../schema/pipeline.schema.json
+#
+# The factory's built-in pipeline. A project's pipelines/ folder holds its own
+# copy, written by `mfactory install`; this one is used when that folder has no
+# `default`. Don't edit this copy: `mfactory upgrade` replaces it.
+#
+# Each step names its type and where each outcome leads. `max` on an edge is a
+# loop limit: when it is used up the job goes to `escalate_to` instead.
+
+pipelines:
+  default:
+    description: Intake, spec, build, checks, review and approval, then a person merges.
+    start: intake             # the step a new job starts in
+    escalate_to: escalated    # the human step a job goes to when an edge's max is reached
+    steps:
+      intake:
+        type: agent
+        on:
+          ACCEPT: spec
+          NEEDS-INFO: { to: ask-author, max: 2 }
+          REJECT: rejected
+
+      ask-author:
+        type: human
+        who: author
+        ask: intake has questions for the author
+        shows: intake.md
+        on:
+          ANSWER: intake
+          REJECT: rejected
+
+      spec:
+        type: agent
+        on:
+          DONE: spec-approval
+
+      spec-approval:
+        type: human
+        enabled: false
+        skip: APPROVE
+        who: maintainer
+        ask: approve the spec before it is built
+        shows: spec.md
+        on:
+          APPROVE: build
+          CHANGES: { to: spec, max: 3 }
+          REJECT: rejected
+
+      build:
+        type: agent
+        port: true
+        # The default AGENTS.md falls back to CLAUDE.md, and is skipped when neither exists.
+        rules: [AGENTS.md, "user:CLAUDE.md"]
+        on:
+          READY: gate
+          BLOCKED: escalated
+
+      gate:
+        type: checks
+        on:
+          PASS: review
+          FAIL: { to: debug, max: 2 }
+
+      debug:
+        type: agent
+        enabled: false
+        skip: FOUND
+        on:
+          FOUND: build
+          UNKNOWN: build
+
+      review:
+        type: review
+        on:
+          PASS: approve
+          CHANGES: { to: build, max: 2 }
+
+      approve:
+        type: agent
+        on:
+          APPROVE: ready-to-merge
+          ESCALATE: escalated
+
+      ready-to-merge:
+        type: human
+        who: maintainer
+        ask: "approved: merge it yourself"
+        shows: decision.md
+        pr_ready: true
+        on:
+          FEEDBACK: { to: build, max: 3 }
+          REJECT: rejected
+
+      merge:
+        type: merge
+        enabled: false        # a maintainer merges; turn this on only with approve's APPROVE edge
+        skip: MERGED
+        on:
+          MERGED: ready-to-verify
+          FAILED: escalated
+
+      ready-to-verify:
+        type: human
+        enabled: false        # turn on when a person must say the deploy is live before verify runs
+        skip: VERIFY
+        who: maintainer
+        ask: "deployed: verify it"
+        on:
+          VERIFY: verify
+          REJECT: rejected
+
+      verify:
+        type: verify
+        enabled: false
+        skip: PASS
+        after: merge          # merge or deploy
+        commands: []
+        agent: false
+        retries: 1
+        on_failure: comment   # comment, issue or revert-pr
+        wait: ""              # for after = deploy: exits 0 once FACTORY_MERGE_SHA is live
+        timeout_minutes: 20
+        url: ""
+        on:
+          PASS: done
+          FAIL: failed
+          BLOCKED: { to: ready-to-verify, max: 3 }
+
+      escalated:
+        type: human
+        who: maintainer
+        ask: this job needs a maintainer
+        pr_ready: true
+        on:
+          FEEDBACK: build
+          REJECT: rejected

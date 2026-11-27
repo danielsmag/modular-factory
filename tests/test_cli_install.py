@@ -90,7 +90,7 @@ def test_personal_install_leaves_the_factory_untracked(bare):
     assert res.returncode == 0, res.stderr
     assert (bare.repo / ".gitignore").read_text() == before
     assert ".gitignore" not in res.stdout
-    assert "Leave factory.toml, .factory/ and the generated files untracked." in res.stdout
+    assert "Leave factory.toml, pipelines/, .factory/ and the generated files untracked." in res.stdout
     exclude = Path(git("rev-parse", "--git-path", "info/exclude", cwd=bare.repo))
     if not exclude.is_absolute():
         exclude = bare.repo / exclude
@@ -99,6 +99,7 @@ def test_personal_install_leaves_the_factory_untracked(bare):
         "# software factory, this checkout only",
         "/factory.toml",
         "/.factory/",
+        "/pipelines/",
         "/.worktrees/",
         "/.claude/agents/mfactory-*",
         "/.claude/agents/factory-*",
@@ -257,7 +258,9 @@ def test_doctor_passes_on_a_ready_project(world):
     res = doctor(world)
     assert res.returncode == 0, res.stdout
     for line in ("ok    gh is signed in",
-                 "ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, merge, ready-to-verify, verify",
+                 "ok    factory.toml is valid",
+                 'ok    pipeline "default" (pipelines/default.yaml) is valid: 9 steps on, '
+                 "off: spec-approval, debug, merge, ready-to-verify, verify",
                  "ok    generated agent and skill files match factory.toml", "ok    origin/main can be fetched",
                  "ok    .factory/jobs/ is ignored by git", "ok    GitHub labels exist",
                  "Everything a run needs is in place."):

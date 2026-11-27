@@ -41,6 +41,10 @@ class Factory(Humans, Cards, Scripted, Queue):
 
     # ---- Small helpers -----------------------------------------------------
 
+    def _pipe(self, job):
+        """The config of the pipeline this job runs: its steps, start and escalate_to."""
+        return self.cfg.pipeline_of(job)
+
     def dir(self, job):
         return self.store.path(job["id"])
 
@@ -71,7 +75,7 @@ class Factory(Humans, Cards, Scripted, Queue):
         """The one file this step's agent writes, relative to the job folder."""
         if step["type"] == "verify":
             return "verify.md"
-        template = step.get("writes") or ROLE_FILES.get(self.cfg.role(name)) or f"{name}.md"
+        template = step.get("writes") or ROLE_FILES.get(self._pipe(job).role(name)) or f"{name}.md"
         return template.format(round=max(job["round"], 1), attempt=max(job["attempt"], 1))
 
     def signature(self, job, rel):
@@ -101,15 +105,15 @@ class Factory(Humans, Cards, Scripted, Queue):
 
     def _enter(self, job, target):
         """Put the job in `target`, passing through steps that are switched off."""
-        target, skipped = graph.resolve(self.cfg.steps, target)
+        target, skipped = graph.resolve(self._pipe(job).steps, target)
         held = bool(job["step"]) and self.store.holds_slot(job)
         job["step"], job["entered_at"], job["waiting"] = target, now(), None
         self._place(job, target)
         if target in graph.END_STATES:
             self._finish(job, target)
             return target, skipped
-        step = self.cfg.steps[target]
-        kind, role = step["type"], self.cfg.role(target)
+        step = self._pipe(job).steps[target]
+        kind, role = step["type"], self._pipe(job).role(target)
         if not self.store.holds_slot(job):
             job["running_since"] = job["running_order"] = None
         elif not (held and job.get("running_since")):
@@ -241,20 +245,20 @@ class Factory(Humans, Cards, Scripted, Queue):
             self.tracker.waiting_off(job["issue"], job["waiting"].get("label"))
         if step["type"] == "verify":
             self._remove_worktree(self._verify_path(job))
-        if step["type"] == "agent" and self.cfg.role(name) == "post-debug":
+        if step["type"] == "agent" and self._pipe(job).role(name) == "post-debug":
             self._remove_worktree(self._investigate_path(job))
 
     def _move(self, job, outcome, reason=None, to=None):
         """Leave the current step by `outcome`'s edge, or to the escalation step when its max is used up."""
         name = job["step"]
-        step = self.cfg.steps[name]
+        step = self._pipe(job).steps[name]
         edge = step["on"].get(outcome)
         if edge is None:
             raise Refused(f"{name} has no edge for {outcome}. Its outcomes: {', '.join(step['on'])}")
         key = f"{name}.{outcome}"
         for other in [k for k in job["taken"] if k.split(".")[0] == name and k != key]:
             del job["taken"][other]  # a different outcome ends the run of repeats
-        escalate, target, limit_reason = self.cfg["run"]["escalate_to"], to or edge["to"], None
+        escalate, target, limit_reason = self._pipe(job)["run"]["escalate_to"], to or edge["to"], None
         if "max" in edge and job["taken"].get(key, 0) >= edge["max"]:
             target = escalate
             limit_reason = f"[steps.{name}].on.{outcome} max = {edge['max']} reached"
@@ -329,10 +333,10 @@ class Factory(Humans, Cards, Scripted, Queue):
     # ---- Prompts -----------------------------------------------------------
 
     def _header(self, job: dict[str, Any], name: str, agent: str | None = None) -> str:
-        who: str = shown_agent(agent or self.cfg.agent_name(name, self.risk(job)))
+        who: str = shown_agent(agent or self._pipe(job).agent_name(name, self.risk(job)))
         tree: str = job["worktree"]
-        step: dict[str, Any] = self.cfg.steps.get(name) or {}
-        if step.get("type") == "agent" and self.cfg.role(name) == "post-debug":
+        step: dict[str, Any] = self._pipe(job).steps.get(name) or {}
+        if step.get("type") == "agent" and self._pipe(job).role(name) == "post-debug":
             tree = self._investigate_path(job)
         worktree: str = tree if Path(tree).exists() else "not created yet"
         return (f"Job: {job['id']}. Step: {name}. Agent: {who}. "
@@ -346,9 +350,9 @@ class Factory(Humans, Cards, Scripted, Queue):
         ref: str = self.tracker.ref(job["issue"])
         return f"{ref} ({self.tracker.of(job['issue']).label})" if len(self.tracker.members) > 1 else ref
 
-    def _verify_enabled(self) -> bool:
+    def _verify_enabled(self, job: dict[str, Any]) -> bool:
         """True when the built-in verify step will run."""
-        step: dict[str, Any] | None = self.cfg.steps.get("verify")
+        step: dict[str, Any] | None = self._pipe(job).steps.get("verify")
         return bool(step) and step.get("type") == "verify" and graph.enabled(step)
 
     def _require_deploy_section(self, path: Path) -> None:
@@ -358,7 +362,7 @@ class Factory(Humans, Cards, Scripted, Queue):
                           "once the change is live.")
 
     def _prompt(self, job, name, step):
-        role = self.cfg.role(name) if step["type"] == "agent" else "verify"
+        role = self._pipe(job).role(name) if step["type"] == "agent" else "verify"
         out = self.dir(job) / self.output_file(job, name, step)
         parts = [self._header(job, name)]
         if role == "build":
@@ -374,8 +378,8 @@ class Factory(Humans, Cards, Scripted, Queue):
             parts.append(f"Checkout of origin/{self.cfg.base}: {self._investigate_path(job)}.")
         elif role == "approve":
             parts.append(f"PR: #{job['pr']}. Final round: {job['round']}.")
-        elif role == "spec" and self._verify_enabled():
-            after: str = str(self.cfg.steps["verify"].get("after") or "merge")
+        elif role == "spec" and self._verify_enabled(job):
+            after: str = str(self._pipe(job).steps["verify"].get("after") or "merge")
             parts.append("Verify is on. spec.md must include a ## Verify after deploy section: "
                          f"what to run or look at once the change is live (verify runs after {after}).")
         elif role == "verify":
@@ -409,13 +413,13 @@ class Factory(Humans, Cards, Scripted, Queue):
 
         The name carries the model and effort, so a builder is resumed only while they are unchanged.
         """
-        if "claude" not in self.cfg.tools or self.cfg.role(name) != "build":
+        if "claude" not in self.cfg.tools or self._pipe(job).role(name) != "build":
             return None
         if not self.cfg["tools"].get("claude", {}).get("resume_builder"):
             return None
         if self._progress_note(job, "build"):
             return None  # the last builder stopped early, likely out of context: start a new one
-        chosen: dict[str, Any] = self.cfg.model_for("claude", name, self.risk(job))
+        chosen: dict[str, Any] = self._pipe(job).model_for("claude", name, self.risk(job))
         parts: list[str] = ["mfactory", name, job["id"], str(chosen.get("model") or ""),
                             str(chosen.get("effort") or "")]
         return "-".join(part for part in parts if part)
@@ -456,7 +460,7 @@ class Factory(Humans, Cards, Scripted, Queue):
             if name in graph.END_STATES:
                 self.say(f"finished {self.tag(job)}: {name}" + self._finished_note(job))
                 return
-            step = self.cfg.steps.get(name)
+            step = self._pipe(job).steps.get(name)
             if step is None:
                 raise Refused(f"{job['id']} is at step {name!r}, which factory.toml no longer has. "
                               "Restore the step, or reject the job.")
@@ -485,9 +489,9 @@ class Factory(Humans, Cards, Scripted, Queue):
                 if self.fresh(job, rel):
                     self.say(f"note: {rel} is already written for this step. If no agent is still "
                              f"working on it, run `{CLI} done {job['id']}` instead of starting one.")
-                key = self.cfg.agent_name(name, self.risk(job))
+                key = self._pipe(job).agent_name(name, self.risk(job))
                 self._say_agents(job, [(key, self._prompt(job, name, step))],
-                                 reply=self.cfg.role(name) == "intake",
+                                 reply=self._pipe(job).role(name) == "intake",
                                  resume_as=self._builder_name(job, name))
                 return
             if kind == "review":
@@ -508,7 +512,7 @@ class Factory(Humans, Cards, Scripted, Queue):
             elif kind == "verify":
                 outcome = self._verify(job, name, step)
                 if outcome is None:
-                    self._say_agents(job, [(self.cfg.agent_name(name), self._prompt(job, name, step))])
+                    self._say_agents(job, [(self._pipe(job).agent_name(name), self._prompt(job, name, step))])
                     return
                 self.say(self._move(job, outcome, job["verify"].get("detail")))
 
@@ -539,7 +543,7 @@ class Factory(Humans, Cards, Scripted, Queue):
             job["handoff"].append(f"The checks failed (round {r}, attempt {a}): read round-{r}/checks.md "
                                   f"and round-{r}/checks.log, fix the cause, push, and update build.md.")
         line = self._move(job, verdict, reason)
-        if job["step"] in graph.END_STATES or self.cfg.steps[job["step"]]["type"] == "human":
+        if job["step"] in graph.END_STATES or self._pipe(job).steps[job["step"]]["type"] == "human":
             job["gate_failed"] = False
             self.store.save(job)
         return line
@@ -550,7 +554,7 @@ class Factory(Humans, Cards, Scripted, Queue):
         """Read the outcome of the step an agent just finished and follow its edge."""
         job = self.store.open(ref)
         name = job["step"]
-        step = self.cfg.steps.get(name)
+        step = self._pipe(job).steps.get(name)
         if step is None:
             raise Refused(f"{job['id']} is finished ({name})" if name in graph.END_STATES
                           else f"{job['id']} is at unknown step {name!r}")
@@ -573,7 +577,7 @@ class Factory(Humans, Cards, Scripted, Queue):
         rel = self.output_file(job, name, step)
         path = self.dir(job) / rel
         if reply is not None:
-            if self.cfg.role(name) != "intake":
+            if self._pipe(job).role(name) != "intake":
                 raise Refused("only the intake agent returns its file as a reply; "
                               f"{name}'s agent must write {rel} itself")
             text = _intake_reply(reply)
@@ -595,7 +599,7 @@ class Factory(Humans, Cards, Scripted, Queue):
         return rel, path, outcome
 
     def _agent_done(self, job, name, step, reply):
-        role = self.cfg.role(name)
+        role = self._pipe(job).role(name)
         rel, path, outcome = self._read_outcome(job, name, step, reply)
         reason = None
         if role == "intake":
@@ -612,7 +616,7 @@ class Factory(Humans, Cards, Scripted, Queue):
                               f"{job.get('head_at_entry', '')[:7]} to {head[:7]}); it must only write {rel}")
             if role == "custom" and job["pr"]:
                 self._require_pushed(job)
-        if role == "spec" and outcome == "DONE" and self._verify_enabled():
+        if role == "spec" and outcome == "DONE" and self._verify_enabled(job):
             self._require_deploy_section(path)
         if role == "approve" and outcome == "ESCALATE":
             reason = "The approver escalated this job. See decision.md."
@@ -637,7 +641,8 @@ class Factory(Humans, Cards, Scripted, Queue):
         surfaces = [s.strip() for s in h.get("SURFACES", "").split(",") if s.strip() and s.strip() != "none"]
         unknown = [s for s in surfaces if s not in self.cfg.live_surfaces]
         if h.get("DECISION") != outcome:
-            raise Refused(f"intake.md's first line must be `DECISION: {' | '.join(self.cfg.steps[job['step']]['on'])}`")
+            outcomes: str = " | ".join(self._pipe(job).steps[job["step"]]["on"])
+            raise Refused(f"intake.md's first line must be `DECISION: {outcomes}`")
         if h.get("RISK") not in RISKS:
             raise Refused(f"intake.md says RISK: {h.get('RISK')!r}; it must be one of {', '.join(RISKS)}")
         if unknown:
@@ -771,7 +776,7 @@ class Factory(Humans, Cards, Scripted, Queue):
             job["pr"], job["pr_url"] = pr["number"], pr["url"]
             job["merge_sha"] = (pr.get("mergeCommit") or {}).get("oid")
             reason += f"; merged in PR #{pr['number']} ({(job['merge_sha'] or 'unknown')[:7]})"
-        step: dict[str, Any] | None = self.cfg.steps.get(old)
+        step: dict[str, Any] | None = self._pipe(job).steps.get(old)
         if step is not None:
             self._leave(job, old, step)
         entry: dict[str, Any] = {"step": old, "outcome": "CLOSED-BY-HAND", "entered_at": job["entered_at"],
@@ -890,9 +895,9 @@ class Factory(Humans, Cards, Scripted, Queue):
         if target in graph.END_STATES:
             raise Refused(f"{target} is not a step to move to. Move the job to a human step and answer "
                           f"it with reject, or `{CLI} close job {job['id']}` to end it as done")
-        new: dict[str, Any] | None = self.cfg.steps.get(target)
+        new: dict[str, Any] | None = self._pipe(job).steps.get(target)
         if new is None:
-            live: list[str] = [n for n, s in self.cfg.steps.items() if graph.enabled(s)]
+            live: list[str] = [n for n, s in self._pipe(job).steps.items() if graph.enabled(s)]
             raise Refused(f"factory.toml has no step {target!r}. Enabled steps: {', '.join(live)}")
         if not graph.enabled(new):
             raise Refused(f"{target} is switched off in factory.toml ([steps.{target}].enabled = false)")
@@ -901,7 +906,7 @@ class Factory(Humans, Cards, Scripted, Queue):
         if new["type"] == "verify" and not job.get("merge_sha"):
             raise Refused(f"{target} checks a merged change and pull request #{job['pr']} is not merged")
         note = note.strip()
-        step: dict[str, Any] | None = self.cfg.steps.get(old)
+        step: dict[str, Any] | None = self._pipe(job).steps.get(old)
         if step is not None:
             self._leave(job, old, step)
         self._measure_plan(job, old)

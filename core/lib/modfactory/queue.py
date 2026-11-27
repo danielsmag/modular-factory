@@ -24,6 +24,8 @@ class _QueueHost(Protocol):
 
     def _enter(self, job: dict[str, Any], target: str) -> tuple[str, list[str]]: ...
 
+    def _pipe(self, job: dict[str, Any] | None) -> Config: ...
+
     def _adopt_merge(self, job: dict[str, Any]) -> bool: ...
 
     def _find_reply(self, job: dict[str, Any], step: dict[str, Any]) -> tuple[str, str, str, Any] | None: ...
@@ -42,6 +44,20 @@ class _QueueHost(Protocol):
                     answered: bool) -> str: ...
 
 
+class NeedsPipeline(Refused):
+    """A new job could run more than one pipeline and none was chosen: the operator must pick one."""
+
+    def __init__(self, cfg: Config):
+        base: Config = cfg.base_config
+        self.choices: list[dict[str, str]] = [
+            {"name": name, "description": pipe.description, "file": pipe.file}
+            for name, pipe in base.pipelines.items()]
+        listed: str = "; ".join(f"{c['name']}" + (f" ({c['description']})" if c["description"] else "")
+                                for c in self.choices)
+        super().__init__(f"choose a pipeline with --pipeline NAME, or set [run].pipeline in factory.toml. "
+                         f"Pipelines: {listed}")
+
+
 class Queue:
     """Job queue. `Factory` owns `cfg`, `gh`, `tracker`, and `store` and mixes this in."""
 
@@ -50,14 +66,21 @@ class Queue:
     tracker: Tracker | Trackers
     store: Store
 
-    def create(self: _QueueHost, number: object) -> dict[str, Any]:
-        """A new job for an open issue that is in the tracker's queue."""
+    def create(self: _QueueHost, number: object, pipeline: str | None = None) -> dict[str, Any]:
+        """A new job for an open issue that is in the tracker's queue, running `pipeline`.
+
+        Without `pipeline` the job runs [run].pipeline, or the project's only pipeline.
+        With several and none chosen, it refuses with `NeedsPipeline`, which lists them.
+        """
         key: Key = self.tracker.key(number)
         ref: str = self.tracker.ref(key)
         for j in self.store.all():
             if j["issue"] == key:
                 raise Refused(f"issue {ref} already has job {j['id']} (at {j['step']}). "
                               f"To start over, run mfactory delete {j['id']}.")
+        chosen: str | None = self.cfg.choose_pipeline(pipeline)
+        if chosen is None:
+            raise NeedsPipeline(self.cfg)
         running = [j["id"] for j in self.store.running()]
         limit = self.cfg["run"]["concurrency"]
         if len(running) >= limit:
@@ -75,6 +98,7 @@ class Queue:
         job = {
             "id": job_id, "number": n, "issue": key, "tracker": self.tracker.of(key).kind, "title": issue["title"],
             "issue_url": issue["url"], "author": issue["author"]["login"], **named,
+            "pipeline": chosen,
             "step": None, "entered_at": None, "running_since": None, "running_order": None,
             "round": 0, "attempt": 0, "gate_failed": False, "taken": {}, "handoff": [],
             "branch": branch,
@@ -90,7 +114,7 @@ class Queue:
         self.store.save(job)
         job = self.store.open(job_id)
         self._write_issue_md(job, issue)
-        self._enter(job, self.cfg["run"]["start"])
+        self._enter(job, self._pipe(job)["run"]["start"])
         self.store.save(job)
         return job
 
@@ -168,7 +192,7 @@ class Queue:
         rows, replied, waiting, other = [], [], [], []
         for j in sorted(jobs.values(), key=lambda j: j["id"]):
             n, name = j["issue"], j["step"]
-            step = self.cfg.steps.get(name)
+            step = self._pipe(j).steps.get(name)
             try:
                 tracker: Tracker = self.tracker.of(n)
             except Refused:
