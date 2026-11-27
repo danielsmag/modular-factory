@@ -4,6 +4,11 @@
 const SVG = "http://www.w3.org/2000/svg";
 const REFRESH_MS = 5000;
 const QUEUE_MS = 15000;
+// The Board's Jira and GitHub blocks: how old an answer may get, and how often to look for old ones.
+const FEED_MS = 60000;
+const FEED_TICK_MS = 15000;
+const BLOCKS_KEY = "mfactory.board.collapsed";
+const GH_FILTER_KEY = "mfactory.github.filter";
 const RUNNING = new Set(["agent", "checks", "review", "merge", "verify"]);
 const CHOICE_KEY = "mfactory.workspace.selected";
 const FOOT_NOTE = "read-only · approvals and feedback go through /mfactory or an issue comment";
@@ -40,6 +45,23 @@ function writeChoice(id) {
     localStorage.setItem(CHOICE_KEY, id);
   } catch (error) {}
 }
+// View settings kept in this browser, as JSON. Storage can be missing or refuse, so every read has a fallback.
+const prefs = {
+  get(key, fallback) {
+    try {
+      if (typeof localStorage === "undefined") return fallback;
+      const raw = localStorage.getItem(key);
+      return raw === null ? fallback : JSON.parse(raw);
+    } catch (error) {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      if (typeof localStorage !== "undefined") localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {}
+  },
+};
 const SPLIT_KEY = "factory-split";
 const SPLIT_MIN = 140;
 const SPLIT_DEFAULT = 220;
@@ -58,6 +80,9 @@ const state = {
   index: null, graph: null, config: null, error: null, query: "", range: "30", file: null, source: "all", drawer: null,
   workspace: false, projects: [], selected: readChoice(), queueRows: [], queueErrors: [], queueStale: false,
   split: readSplit(), now: {}, nowSeq: 0, nowSeen: {}, raw: false, planUsage: null, unit: null,
+  feeds: { jira: {}, github: {} }, feedsBusy: false, feedsAgain: false, jiraPicker: null,
+  ghFilter: prefs.get(GH_FILTER_KEY, "all"), collapsed: new Set(prefs.get(BLOCKS_KEY, [])),
+  memo: new Map(), jobsStamp: 0, queueStamp: 0,
 };
 if (queryProject()) writeChoice(state.selected);
 
@@ -395,10 +420,10 @@ function paintAges() {
 }
 function waitingAudience(job) {
   const who = job.waiting && job.waiting.who;
-  if (who === "author") return "the author (" + person(job.author, job.author_name, job.project) + ")";
-  if (who === "operator") return job.waiting.operator ? "the operator (" + person(job.waiting.operator, null, job.project) + ")" : "the operator";
+  if (who === "author") return "the author (" + person(job.author, job.author_name, job.project, job.issue, job.tracker) + ")";
+  if (who === "operator") return job.waiting.operator ? "the operator (" + person(job.waiting.operator, null, job.project, job.issue, job.tracker) + ")" : "the operator";
   if (Array.isArray(who)) {
-    const names = who.map((login) => person(login, null, job.project));
+    const names = who.map((login) => person(login, null, job.project, job.issue, job.tracker));
     if (names.length <= 1) return names[0] || "a maintainer";
     if (names.length === 2) return names[0] + " or " + names[1];
     return names.slice(0, -1).join(", ") + ", or " + names[names.length - 1];
@@ -409,7 +434,7 @@ function flagOf(job) {
   const who = job.waiting && job.waiting.who;
   if (who === "author") return "asked author";
   if (who === "operator" || who === "maintainer") return "your call";
-  if (Array.isArray(who)) return who.length === 1 ? "asked @" + who[0] : "asked " + who.length + " people";
+  if (Array.isArray(who)) return who.length === 1 ? "asked " + person(who[0], null, job.project, job.issue, job.tracker) : "asked " + who.length + " people";
   if (job.step === "rejected") return "rejected";
   return "";
 }
@@ -1205,7 +1230,7 @@ function queueCard(row) {
     opened || row.author || (row.labels || []).length ? el("div", { class: "meta" },
       opened ? el("span", { text: opened }) : null,
       opened ? ageNode(row.created_at, "ago") : null,
-      row.author ? el("span", { text: person(row.author, null, row.project) }) : null,
+      row.author ? el("span", { text: person(row.author, null, row.project, row.issue) }) : null,
       labelChips(row.labels)) : null,
     row.action === "hold" && row.title && row.note ? el("p", { class: "hint", text: row.note }) : null);
 }
@@ -1223,7 +1248,7 @@ function issueBody(drawer) {
     el("h4", { class: "block-title", text: "Comments" }),
     comments.length
       ? comments.map((comment) => el("section", { class: "d-comment" },
-        el("div", { class: "step-meta", text: [comment.author ? person(comment.author, null, drawer.project) : "", day(comment.created_at)].filter(Boolean).join(" · ") }),
+        el("div", { class: "step-meta", text: [comment.author ? person(comment.author, null, drawer.project, drawer.issue) : "", day(comment.created_at)].filter(Boolean).join(" · ") }),
         el("pre", { class: "file", text: comment.body || "" })))
       : el("p", { class: "kempty", text: "No comments." }));
 }
@@ -1248,7 +1273,7 @@ function issueDrawer() {
         el("h3", { id: "d-title", text: data.title || row.title || row.note || "issue " + issueRef(drawer.issue) }),
         el("div", { class: "links" }, issueLink),
         el("div", { class: "facts" },
-          author ? el("span", { text: person(author, null, drawer.project) }) : null,
+          author ? el("span", { text: person(author, null, drawer.project, drawer.issue) }) : null,
           labelChips(labels),
           dated("opened", created),
           dated("updated", updated),
@@ -1400,17 +1425,436 @@ function board() {
   const all = jobs();
   const shown = all.filter(matches);
   const cols = boardColumns(all);
-  const nodes = [
-    el("div", { class: "head" },
-      el("div", {}, el("h1", { text: "Board" }), el("p", { class: "sub", text: boardSub() })),
-      el("span", { class: "src", text: shown.length + " of " + all.length })),
-    ...problemLines(),
-    nowPanel(shown),
-    cols.length ? el("div", { class: "kanban" }, cols.map((col) => column(col, shown))) : el("p", { class: "kempty", text: state.workspace && !state.projects.length ? "no projects yet" : "no jobs" }),
-  ];
+  const kanban = () => (cols.length
+    ? el("div", { class: "kanban", "data-scroll-key": "factory" }, cols.map((col) => column(col, shown)))
+    : el("p", { class: "kempty", text: state.workspace && !state.projects.length ? "no projects yet" : "no jobs" }));
+  const head = (count) => el("div", { class: "head" },
+    el("div", {}, el("h1", { text: "Board" }), el("p", { class: "sub", text: boardSub() })),
+    count ? el("span", { class: "src", text: count }) : null);
+  // Files served without the dashboard's server have no Jira or GitHub routes: the factory alone.
+  if (!state.workspace) return withDrawer([head(shown.length + " of " + all.length), ...problemLines(), nowPanel(shown), kanban()]);
+  const projects = visibleProjects();
+  const nodes = [head(null)];
+  if (projects.length) nodes.push(jiraBlock(projects), githubBlock(projects));
+  nodes.push(blockSection("factory", "Factory", shown.length + " of " + all.length, [],
+    () => [...problemLines(), nowPanel(shown), kanban()]));
+  return withDrawer(nodes);
+}
+function withDrawer(nodes) {
   const panel = drawer();
   if (panel) nodes.push(panel);
   return nodes;
+}
+
+// ---- the board's blocks: Jira boards and GitHub issues ----
+// Each block folds, and the browser remembers which. A block's nodes are reused while what they show is
+// unchanged, so the 5 s refresh of jobs does not rebuild hundreds of cards.
+function blockOpen(id) {
+  return !state.collapsed.has(id);
+}
+function toggleBlock(id) {
+  if (state.collapsed.has(id)) state.collapsed.delete(id);
+  else state.collapsed.add(id);
+  prefs.set(BLOCKS_KEY, Array.from(state.collapsed));
+  render();
+  if (blockOpen(id)) refreshFeeds(false);
+}
+function safeId(id) {
+  return String(id).replace(/[^A-Za-z0-9_-]/g, "-");
+}
+function foldButton(id, title, extra) {
+  const open = blockOpen(id);
+  return el("button", {
+    type: "button", class: "fold", "aria-expanded": open ? "true" : "false", "aria-controls": "body-" + safeId(id),
+    "data-focus": "fold:" + id, onclick: () => toggleBlock(id),
+  }, icon("m9 6 6 6-6 6"), el("span", { class: "fold-title", text: title }), extra || null);
+}
+function blockSection(id, title, count, tools, build) {
+  const open = blockOpen(id);
+  const counted = count === null || count === undefined ? null : el("span", { class: "count", text: String(count) });
+  return el("section", { class: "block" + (open ? "" : " folded"), "aria-label": title },
+    el("div", { class: "block-head" },
+      el("h2", {}, foldButton(id, title, counted)),
+      el("div", { class: "block-tools" }, tools)),
+    el("div", { class: "block-body", id: "body-" + safeId(id), hidden: !open }, open ? build() : null));
+}
+function memo(id, key, build) {
+  const hit = state.memo.get(id);
+  if (hit && hit.key === key) return hit.node;
+  const node = build();
+  state.memo.set(id, { key, node });
+  return node;
+}
+function drawerKey() {
+  const d = state.drawer;
+  return d ? [d.kind || "job", d.project, d.issue || d.id].join(":") : "";
+}
+function refreshButton(name) {
+  return el("button", {
+    type: "button", class: "refresh", title: "Read again", "aria-label": "Read " + name + " again",
+    "data-focus": "refresh:" + name, onclick: () => refreshFeeds(true),
+  }, icon("M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"));
+}
+function updatedNode(entries) {
+  const times = entries.filter((entry) => entry && entry.at).map((entry) => entry.at);
+  if (!times.length) return null;
+  return el("span", { class: "src" }, "updated ", ageNode(new Date(Math.min(...times)).toISOString(), "ago"));
+}
+// Jira writes "+0000"; a browser reads "+00:00" for certain.
+function isoStamp(stamp) {
+  return typeof stamp === "string" ? stamp.replace(/([+-]\d{2})(\d{2})$/, "$1:$2") : stamp;
+}
+function jobFor(projectId, key) {
+  return jobs().find((job) => job.project === projectId && String(job.issue) === String(key)) || null;
+}
+function queuedIssue(projectId, key) {
+  return state.queueRows.some((row) => row.project === projectId && String(row.issue) === String(key)
+    && (row.action === "new" || row.action === "hold"));
+}
+function queueLabelOf(project) {
+  return (project.labels && project.labels.queue) || "factory";
+}
+function jobChip(job) {
+  return el("span", { class: "chip " + kindOf(job), text: "job " + jobNum(job.id) + " · " + (job.waiting ? "Needs you" : job.step) });
+}
+function textMatches(values) {
+  const q = state.query.trim().toLowerCase();
+  return !q || values.some((value) => String(value || "").toLowerCase().includes(q));
+}
+
+// ---- reading the blocks' data ----
+function feedUrl(project, tail, fresh) {
+  return "/projects/" + encodeURIComponent(project) + tail + (fresh ? "?fresh=1" : "");
+}
+async function getFeed(url) {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    const body = await res.json().catch(() => null);
+    if (res.ok && body) return { data: body, error: null };
+    return { data: null, error: (body && body.error) || "Could not load it (" + res.status + ")." };
+  } catch (error) {
+    return { data: null, error: "Could not reach the dashboard's server." };
+  }
+}
+// Keep an answer; true when it differs from the one before, so the page draws again only then.
+function keepFeed(holder, key, found) {
+  const json = JSON.stringify([found.data, found.error]);
+  const before = holder[key];
+  holder[key] = { at: Date.now(), data: found.data, error: found.error, json };
+  return !before || before.json !== json;
+}
+function jiraHolder(id) {
+  if (!state.feeds.jira[id]) state.feeds.jira[id] = { boards: null, board: {} };
+  return state.feeds.jira[id];
+}
+function boardFold(projectId, board) {
+  return "jira:" + projectId + ":" + board;
+}
+// The boards picked for a project in this browser, or the project's own board until one is picked.
+function pickedBoards(id) {
+  const saved = prefs.get("mfactory.jira.boards." + id, null);
+  if (Array.isArray(saved)) return saved.filter((n) => Number.isInteger(n) && n > 0);
+  const entry = state.feeds.jira[id] && state.feeds.jira[id].boards;
+  const configured = entry && entry.data ? entry.data.configured : null;
+  return Number.isInteger(configured) && configured > 0 ? [configured] : [];
+}
+async function refreshFeeds(force) {
+  if (!state.workspace || route().view !== "board") return;
+  if (state.feedsBusy) {
+    state.feedsAgain = true;
+    return;
+  }
+  state.feedsBusy = true;
+  let changed = false;
+  try {
+    const now = Date.now();
+    const due = (entry) => force || !entry || now - entry.at >= FEED_MS;
+    await Promise.all(visibleProjects().map(async (project) => {
+      const id = project.id;
+      const work = [];
+      if (blockOpen("jira")) {
+        work.push((async () => {
+          const holder = jiraHolder(id);
+          if (due(holder.boards)) changed = keepFeed(holder, "boards", await getFeed(feedUrl(id, "/jira/boards", force))) || changed;
+          const data = holder.boards && holder.boards.data;
+          if (!data || data.off || data.note) return;
+          await Promise.all(pickedBoards(id).map(async (board) => {
+            if (!blockOpen(boardFold(id, board)) || !due(holder.board[board])) return;
+            changed = keepFeed(holder.board, board, await getFeed(feedUrl(id, "/jira/boards/" + board, force))) || changed;
+          }));
+        })());
+      }
+      if (blockOpen("github") && due(state.feeds.github[id])) {
+        work.push(getFeed(feedUrl(id, "/github/issues", force)).then((found) => {
+          changed = keepFeed(state.feeds.github, id, found) || changed;
+        }));
+      }
+      await Promise.all(work);
+    }));
+  } finally {
+    state.feedsBusy = false;
+  }
+  if (changed && route().view === "board") render();
+  if (state.feedsAgain) {
+    state.feedsAgain = false;
+    refreshFeeds(false);
+  }
+}
+
+// ---- the Jira block ----
+function jiraBlock(projects) {
+  const many = projects.length > 1;
+  const shown = projects.filter((project) => {
+    const entry = state.feeds.jira[project.id] && state.feeds.jira[project.id].boards;
+    return !(many && entry && entry.data && entry.data.off);
+  });
+  const entries = [];
+  let boards = 0;
+  shown.forEach((project) => {
+    const holder = state.feeds.jira[project.id];
+    if (!holder) return;
+    entries.push(holder.boards);
+    const data = holder.boards && holder.boards.data;
+    if (data && !data.off && !data.note) {
+      const picked = pickedBoards(project.id);
+      boards += picked.length;
+      picked.forEach((board) => entries.push(holder.board[board]));
+    }
+  });
+  const tools = [updatedNode(entries), refreshButton("Jira")];
+  return blockSection("jira", "Jira", boards || null, tools, () => (shown.length
+    ? shown.map((project) => jiraArea(project, many))
+    : el("p", { class: "kempty", text: "No project here takes jobs from Jira." })));
+}
+function jiraArea(project, many) {
+  const id = project.id;
+  const entry = state.feeds.jira[id] && state.feeds.jira[id].boards;
+  const area = (...kids) => el("div", { class: "jira-area" }, many ? el("h3", { class: "block-title", text: projectLabel(project) }) : null, kids);
+  if (!entry) return area(el("p", { class: "kempty", text: "Loading..." }));
+  if (entry.error) return area(el("p", { class: "error", text: entry.error }));
+  const data = entry.data;
+  if (data.off || data.note) return area(el("p", { class: "notice", text: data.off || data.note }));
+  const picked = pickedBoards(id);
+  const names = picked.map((board) => {
+    const found = (data.boards || []).find((item) => item.id === board);
+    return found ? found.name : "board " + board;
+  });
+  return area(
+    el("div", { class: "jira-tools" },
+      el("button", {
+        type: "button", class: "picker-open", "aria-haspopup": "dialog", "data-focus": "picker:" + id,
+        onclick: () => openPicker(id),
+      }, "Boards: ", el("span", { text: names.length ? names.join(", ") : "none chosen" }), " ▾")),
+    picked.length ? picked.map((board) => jiraBoard(project, data, board))
+      : el("p", { class: "kempty", text: "No board chosen. Choose one or several to see them here." }));
+}
+function jiraBoard(project, boards, board) {
+  const fold = boardFold(project.id, board);
+  const info = (boards.boards || []).find((item) => item.id === board) || null;
+  const entry = jiraHolder(project.id).board[board];
+  const view = entry && entry.data;
+  const title = (view && view.board && view.board.name) || (info && info.name) || "Board " + board;
+  const facts = [info && info.project, (view && view.board && view.board.type) || (info && info.type)].filter(Boolean).join(" · ");
+  const url = (view && view.board && view.board.url) || (info && info.url);
+  const open = blockOpen(fold);
+  return el("section", { class: "jboard", "aria-label": title },
+    el("div", { class: "jboard-head" },
+      el("h3", {}, foldButton(fold, title, facts ? el("span", { class: "dim", text: facts }) : null)),
+      url ? link(url, "open in Jira") : null,
+      view && view.truncated ? el("span", { class: "src", text: "showing " + view.shown + " of " + view.total }) : null),
+    el("div", { id: "body-" + safeId(fold), hidden: !open }, open ? boardBody(project, board, entry) : null));
+}
+function boardBody(project, board, entry) {
+  if (!entry) return el("p", { class: "kempty", text: "Loading..." });
+  if (entry.error) return el("p", { class: "error", text: entry.error });
+  const scroll = "jira:" + project.id + ":" + board;
+  return memo(scroll, [entry.json, state.query, state.jobsStamp, state.queueStamp, drawerKey()].join("\n"), () =>
+    el("div", { class: "kanban jira", "data-scroll-key": scroll }, (entry.data.columns || []).map((col, index) => {
+      const cards = (col.cards || []).filter((card) => textMatches([card.key, card.title, card.status, card.assignee, card.type, ...(card.labels || [])]));
+      return el("section", { class: "kcol", "aria-label": col.name },
+        el("div", { class: "kcol-head" }, el("h3", { text: col.name }), el("span", { class: "count", text: String(cards.length) })),
+        el("div", { class: "kcol-cards", "data-scroll-key": scroll + ":" + index },
+          cards.length ? cards.map((card) => jiraCard(project, card)) : el("p", { class: "kempty", text: "—" })));
+    })));
+}
+function priorityClass(priority) {
+  return /highest|high|blocker|critical/i.test(String(priority || "")) ? "hot" : "";
+}
+function jiraCard(project, card) {
+  const job = jobFor(project.id, card.key);
+  const row = { project: project.id, issue: card.key, title: card.title, issue_url: card.url, labels: card.labels,
+    author: null, created_at: null, updated_at: isoStamp(card.updated_at), action: "" };
+  const open = () => (job ? openDrawer(job) : openIssue(row));
+  const on = job ? sameDrawer(job) : sameIssue(row);
+  return el("article", {
+    class: "kcard" + (job ? " job" : "") + (on ? " on" : ""), tabindex: 0, role: "button",
+    "aria-label": card.key + " " + card.title, "data-focus": "jcard:" + project.id + ":" + card.key,
+    onclick: (event) => { if (event.target.closest("a")) return; open(); },
+    onkeydown: (event) => {
+      if (event.target.closest("a")) return;
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); }
+    },
+  },
+    el("div", { class: "card-top" }, el("span", { class: "num", text: card.key }), job ? jobChip(job) : null),
+    el("p", { class: "feature", text: card.title }),
+    el("div", { class: "meta" },
+      card.type ? el("span", { text: card.type }) : null,
+      card.priority ? el("span", { class: priorityClass(card.priority), text: card.priority }) : null,
+      card.assignee ? el("span", { text: card.assignee }) : null,
+      card.updated_at ? ageNode(isoStamp(card.updated_at), "ago") : null,
+      labelChips(card.labels)));
+}
+
+// ---- the board picker: a dialog outside #view, so a refresh of the page never rebuilds it ----
+function openPicker(project) {
+  state.jiraPicker = { project, query: "" };
+  renderPicker();
+}
+function closePicker() {
+  const picker = state.jiraPicker;
+  if (!picker) return;
+  state.jiraPicker = null;
+  renderPicker();
+  restoreFocus(document.getElementById("view"), "picker:" + picker.project);
+  refreshFeeds(false);
+}
+function renderPicker() {
+  const layer = document.getElementById("layer");
+  if (!layer) return;
+  const picker = state.jiraPicker;
+  if (!picker) {
+    layer.replaceChildren();
+    return;
+  }
+  const project = state.projects.find((item) => item.id === picker.project);
+  const entry = state.feeds.jira[picker.project] && state.feeds.jira[picker.project].boards;
+  const boards = entry && entry.data && Array.isArray(entry.data.boards) ? entry.data.boards : [];
+  const list = el("div", { class: "picker-list", role: "group", "aria-label": "Boards" });
+  const foot = el("span", { class: "src" });
+  const input = el("input", {
+    type: "search", class: "picker-search", placeholder: "Filter boards...", "aria-label": "Filter boards",
+    autocomplete: "off", spellcheck: "false",
+    oninput: (event) => { picker.query = event.target.value; fillPicker(list, foot, boards); },
+  });
+  const dialog = el("div", { class: "picker", role: "dialog", "aria-modal": "true", "aria-labelledby": "picker-title", onkeydown: keepFocusIn },
+    el("div", { class: "picker-head" },
+      el("h3", { id: "picker-title", text: "Choose Jira boards" }),
+      project ? el("span", { class: "src", text: projectLabel(project) }) : null),
+    input, list,
+    el("div", { class: "picker-foot" }, foot, el("button", { type: "button", class: "pick-done", text: "Done", onclick: closePicker })));
+  layer.replaceChildren(el("div", { class: "overlay picker-layer" }, el("div", { class: "scrim", onpointerdown: closePicker }), dialog));
+  fillPicker(list, foot, boards);
+  input.focus();
+}
+function fillPicker(list, foot, boards) {
+  const picker = state.jiraPicker;
+  const chosen = new Set(pickedBoards(picker.project));
+  const q = picker.query.trim().toLowerCase();
+  const shown = boards.filter((board) => !q || [board.name, board.project, board.type, String(board.id)].some((value) => String(value || "").toLowerCase().includes(q)));
+  const groups = new Map();
+  shown.forEach((board) => {
+    const key = board.project || "Other";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(board);
+  });
+  const nodes = Array.from(groups.entries()).map(([key, items]) => el("div", { class: "picker-group" },
+    el("h4", { text: key }),
+    items.map((board) => el("label", { class: "picker-item" },
+      el("input", { type: "checkbox", checked: chosen.has(board.id), onchange: (event) => pickBoard(picker.project, board.id, event.target.checked, foot) }),
+      el("span", { class: "picker-name", text: board.name }),
+      el("span", { class: "dim", text: [board.type, "#" + board.id].filter(Boolean).join(" · ") })))));
+  list.replaceChildren(...(nodes.length ? nodes : [el("p", { class: "kempty", text: boards.length ? "No board matches." : "No boards to choose from." })]));
+  foot.textContent = chosen.size + " chosen";
+}
+function pickBoard(project, board, on, foot) {
+  const picked = pickedBoards(project).filter((n) => n !== board);
+  if (on) picked.push(board);
+  prefs.set("mfactory.jira.boards." + project, picked);
+  foot.textContent = picked.length + " chosen";
+  render();
+  refreshFeeds(false);
+}
+function keepFocusIn(event) {
+  if (event.key !== "Tab") return;
+  const items = Array.from(event.currentTarget.querySelectorAll("input, button"));
+  if (!items.length) return;
+  const first = items[0], last = items[items.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+}
+
+// ---- the GitHub issues block ----
+const GH_FILTERS = [["all", "All"], ["mine", "Assigned to me"], ["outside", "Not in the factory"]];
+function setGhFilter(name) {
+  state.ghFilter = name;
+  prefs.set(GH_FILTER_KEY, name);
+  render();
+}
+function filteredIssues(project, data) {
+  return (data.issues || []).filter((issue) => {
+    if (!textMatches(["#" + issue.number, issue.title, issue.author, ...(issue.assignees || []), ...(issue.labels || [])])) return false;
+    if (state.ghFilter === "mine") return (issue.assignees || []).indexOf(data.me) >= 0;
+    if (state.ghFilter === "outside") {
+      return !jobFor(project.id, issue.number) && !queuedIssue(project.id, issue.number)
+        && (issue.labels || []).indexOf(queueLabelOf(project)) < 0;
+    }
+    return true;
+  });
+}
+function githubBlock(projects) {
+  const many = projects.length > 1;
+  const parts = projects.map((project) => {
+    const entry = state.feeds.github[project.id];
+    return { project, entry, list: entry && entry.data ? filteredIssues(project, entry.data) : [] };
+  });
+  const count = parts.reduce((sum, part) => sum + part.list.length, 0);
+  const tools = [
+    el("div", { class: "tabs", role: "group", "aria-label": "Which issues" }, GH_FILTERS.map(([name, label]) => el("button", {
+      type: "button", "aria-pressed": state.ghFilter === name ? "true" : "false", "data-focus": "ghf:" + name,
+      text: label, onclick: () => setGhFilter(name),
+    }))),
+    updatedNode(parts.map((part) => part.entry)), refreshButton("GitHub issues")];
+  return blockSection("github", "GitHub issues", count, tools, () => parts.map((part) => githubArea(part, many)));
+}
+function githubArea(part, many) {
+  const { project, entry, list } = part;
+  const area = (...kids) => el("div", { class: "gh-area" }, many ? el("h3", { class: "block-title", text: projectLabel(project) }) : null, kids);
+  if (!entry) return area(el("p", { class: "kempty", text: "Loading..." }));
+  if (entry.error) return area(el("p", { class: "error", text: entry.error }));
+  const data = entry.data;
+  const rows = memo("gh:" + project.id, [entry.json, state.query, state.ghFilter, state.jobsStamp, state.queueStamp, drawerKey()].join("\n"), () => (list.length
+    ? el("div", { class: "irows" }, list.map((issue) => issueRow(project, issue)))
+    : el("p", { class: "kempty", text: state.query || state.ghFilter !== "all" ? "No issue matches." : "No open issues." })));
+  const more = data.truncated
+    ? el("p", { class: "src more" }, "The " + (data.issues || []).length + " most recently updated. ", link(data.repo_url ? data.repo_url + "/issues" : null, "All issues on GitHub"))
+    : null;
+  return area(rows, more);
+}
+function issueRow(project, issue) {
+  const job = jobFor(project.id, issue.number);
+  const label = queueLabelOf(project);
+  const queued = !job && (queuedIssue(project.id, issue.number) || (issue.labels || []).indexOf(label) >= 0);
+  const row = { project: project.id, issue: String(issue.number), title: issue.title, issue_url: issue.url,
+    labels: issue.labels, author: issue.author, created_at: issue.created_at, updated_at: issue.updated_at, action: "" };
+  const open = () => openIssue(row);
+  return el("article", {
+    class: "irow" + (sameIssue(row) ? " on" : ""), tabindex: 0, role: "button", "aria-label": "#" + issue.number + " " + issue.title,
+    "data-focus": "irow:" + project.id + ":" + issue.number,
+    onclick: (event) => { if (event.target.closest("a")) return; open(); },
+    onkeydown: (event) => {
+      if (event.target.closest("a")) return;
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); }
+    },
+  },
+    el("span", { class: "num", text: "#" + issue.number }),
+    el("span", { class: "ititle", text: issue.title }),
+    el("span", { class: "ichips" },
+      job ? jobChip(job) : queued ? el("span", { class: "chip run", text: "queued" }) : null,
+      labelChips((issue.labels || []).filter((name) => !(queued && name === label)))),
+    el("span", { class: "imeta" },
+      (issue.assignees || []).length ? el("span", { text: issue.assignees.map((login) => "@" + login).join(", ") }) : null,
+      issue.author ? el("span", { class: "dim", text: "by @" + issue.author }) : null,
+      issue.updated_at ? ageNode(issue.updated_at, "ago") : null));
 }
 
 // ---- overview ----
@@ -1747,7 +2191,7 @@ function pipelineGraph(graph, count) {
   for (const node of nodes.values()) {
     const { name, step, h } = node, n = count(name), end = !step;
     const waiting = step && step.type === "human" && n > 0;
-    const kind = end ? "end" : step.type + (step.who ? " · " + step.who : "") + (step.enabled === false ? " · off" : "");
+    const kind = end ? "end" : step.type + (step.who ? " · " + whoText(step.who) : "") + (step.enabled === false ? " · off" : "");
     const group = svg("g", { class: "node" + (end ? " end" : "") + (step && step.enabled === false ? " off" : "") + (waiting ? " wait" : "") });
     group.append(svg("rect", { x: xl, y: node.y, width: NW, height: h, rx: 3 }),
       svg("text", { class: "name", x: xl + 11, y: node.y + 18, text: name.length > 20 ? name.slice(0, 19) + "…" : name }),
@@ -1776,7 +2220,7 @@ function pipelineDiagram(graph, jobList) {
     const stepRows = graph.steps.map((step) => el("tr", {},
       el("td", { class: "mono", text: step.name }),
       el("td", {}, el("span", { class: "chip" + (off(step) ? " off" : ""), text: step.type + (off(step) ? " · off" : "") }),
-        step.who ? el("div", { class: "dim step-who", text: step.who }) : null),
+        step.who ? el("div", { class: "dim step-who", text: whoText(step.who) }) : null),
       el("td", { class: "mono wrap" }, (step.edges || []).map((e) => el("div", { class: off(step) && e.outcome !== step.skip ? "dim" : "" },
         e.outcome, el("span", { class: "dim", text: " → " }), e.to, e.max !== null && e.max !== undefined ? el("span", { class: "dim", text: `  max ${e.max}` }) : null))),
       el("td", { class: "mono dim", text: count(step.name) || "-" })));
@@ -1923,15 +2367,38 @@ function trackerInfo(projectId) {
   }
   return {};
 }
+// Which tracker holds an issue: the job says so, or the key's shape does (a number is GitHub's).
+function trackerOfKey(key, tracker) {
+  if (tracker === "github" || tracker === "jira") return tracker;
+  return /^#?\d+$/.test(String(key == null ? "" : key)) ? "github" : "jira";
+}
 // A person as the page shows them: a GitHub login gets "@"; Jira knows people by name, or by an account id.
-function person(login, name, projectId) {
+// With an issue's key the issue's own tracker decides, so a project with both trackers names each right.
+function person(login, name, projectId, key, tracker) {
   if (name) return String(name);
   const text = String(login || "");
-  return trackerInfo(projectId).kind === "jira" ? text : "@" + text;
+  const kind = key !== undefined && key !== null ? trackerOfKey(key, tracker) : trackerInfo(projectId).kind;
+  return kind === "jira" ? text : "@" + text;
+}
+// A human step's `who` as text: a role, logins, or a table of logins per tracker.
+function whoText(who) {
+  if (Array.isArray(who)) return who.join(", ");
+  if (who && typeof who === "object") {
+    return Object.keys(who).map((kind) => kind + ": " + (Array.isArray(who[kind]) ? who[kind].join(", ") : String(who[kind]))).join(" · ");
+  }
+  return who ? String(who) : "";
+}
+// How issues join the queue, from each tracker's own words: "Label an issue `factory`, or move a card to ...".
+function enqueueHint() {
+  for (const project of visibleProjects()) {
+    const hints = (project.trackers || []).map((item) => item && item.enqueue).filter(Boolean);
+    if (hints.length) return hints[0] + hints.slice(1).map((hint) => ", or " + hint.charAt(0).toLowerCase() + hint.slice(1)).join("");
+  }
+  return trackerInfo().enqueue;
 }
 // "Label an issue `factory`" as text and code nodes, from the tracker's own words.
 function enqueueNodes() {
-  const hint = trackerInfo().enqueue;
+  const hint = enqueueHint();
   if (!hint) return ["Label an issue ", el("code", { text: queueLabel() })];
   return String(hint).split("`").map((part, index) => (index % 2 ? el("code", { text: part }) : part));
 }
@@ -2010,7 +2477,7 @@ function normalizeSelection() {
 function filterButton(id, text) {
   return el("button", {
     type: "button", text, "aria-pressed": state.selected === id ? "true" : "false",
-    onclick: () => { state.selected = id; writeChoice(id); render(); refreshNow(); },
+    onclick: () => { state.selected = id; writeChoice(id); render(); refreshNow(); refreshFeeds(false); },
   });
 }
 function renderFilters() {
@@ -2083,8 +2550,8 @@ function render() {
   const keep = inside ? null : active;
   const scrollers = ".joblist, .file, .d-doc, .d-files, .d-runs, .d-timeline, .sh-out, .filelist";
   const scroll = [...target.querySelectorAll(scrollers)].map((n) => n.scrollTop);
-  const kanban = target.querySelector(".kanban");
-  const kanbanLeft = kanban ? kanban.scrollLeft : 0;
+  // The board has a kanban per Jira board and one for the factory: each keeps its own scroll, by key.
+  const keyed = new Map([...target.querySelectorAll("[data-scroll-key]")].map((n) => [n.getAttribute("data-scroll-key"), [n.scrollLeft, n.scrollTop]]));
   let content;
   const ready = state.workspace ? !state.error || state.projects.length : !!(state.index && state.graph);
   if (!ready) {
@@ -2112,8 +2579,10 @@ function render() {
   }
   target.replaceChildren(...content);
   [...target.querySelectorAll(scrollers)].forEach((n, i) => { if (scroll[i]) n.scrollTop = scroll[i]; });
-  const nextKanban = target.querySelector(".kanban");
-  if (nextKanban && kanbanLeft) nextKanban.scrollLeft = kanbanLeft;
+  target.querySelectorAll("[data-scroll-key]").forEach((n) => {
+    const kept = keyed.get(n.getAttribute("data-scroll-key"));
+    if (kept) { n.scrollLeft = kept[0]; n.scrollTop = kept[1]; }
+  });
   if (state.drawer && state.drawer.focus) {
     const close = target.querySelector("[data-close]");
     if (close) close.focus();
@@ -2209,6 +2678,7 @@ async function fetchActivity(job) {
 }
 let probed = false;
 let queueTimer = null;
+let feedTimer = null;
 async function refreshQueue() {
   if (!state.workspace) return;
   try {
@@ -2219,6 +2689,7 @@ async function refreshQueue() {
     state.queueRows = rows;
     state.queueErrors = errors;
     state.queueStale = false;
+    if (changed) state.queueStamp += 1;
     if (changed) render();
     else paintLive();
   } catch (error) {
@@ -2233,6 +2704,7 @@ async function refreshWorkspace() {
   const changed = JSON.stringify([next, plan]) !== JSON.stringify([state.projects, state.planUsage]);
   state.projects = next;
   state.planUsage = plan;
+  if (changed) state.jobsStamp += 1;
   const hadError = state.error;
   state.error = null;
   if (changed || hadError || route().view === "config") {
@@ -2286,7 +2758,9 @@ async function refresh() {
         refetchDrawer();
         refreshQueue();
         refreshNow();
+        refreshFeeds(false);
         if (!queueTimer) queueTimer = setInterval(refreshQueue, QUEUE_MS);
+        if (!feedTimer) feedTimer = setInterval(() => refreshFeeds(false), FEED_TICK_MS);
         return;
       }
       probed = true;
@@ -2310,10 +2784,16 @@ search.addEventListener("input", () => {
 });
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); search.focus(); search.select(); }
+  else if (e.key === "Escape" && state.jiraPicker) { e.preventDefault(); closePicker(); }
   else if (e.key === "Escape" && document.activeElement === search) { search.value = ""; state.query = ""; search.blur(); render(); }
   else if (e.key === "Escape" && state.drawer && route().view === "board") closeDrawer();
 });
-window.addEventListener("hashchange", () => { if (route().view === "config") refresh(); render(); });
+window.addEventListener("hashchange", () => {
+  if (route().view === "config") refresh();
+  if (state.jiraPicker && route().view !== "board") { state.jiraPicker = null; renderPicker(); }
+  render();
+  refreshFeeds(false);
+});
 render();
 refresh();
 setInterval(refresh, REFRESH_MS);
