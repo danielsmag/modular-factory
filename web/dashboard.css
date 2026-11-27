@@ -186,6 +186,10 @@ h2.job-title { font-size: var(--fs-title); overflow-wrap: anywhere; }
 .jboard-head .fold { font: 600 var(--fs-body) var(--sans); }
 .kanban.jira .kcol-cards { max-height: 70vh; overflow-y: auto; padding-right: 2px; }
 .kcard.job { border-color: var(--code-dim); }
+.board-error { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.board-error .error { margin: 0; }
+.drop-board { font: var(--fs-floor) var(--mono); border: 1px solid var(--line-2); border-radius: 3px; padding: 3px 9px; color: var(--text-2); }
+.drop-board:hover { color: var(--text); border-color: var(--text); }
 .kcard .card-top .chip { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .irows { display: flex; flex-direction: column; gap: 6px; }
 .irow {

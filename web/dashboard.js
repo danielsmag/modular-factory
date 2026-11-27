@@ -9,6 +9,7 @@ const FEED_MS = 60000;
 const FEED_TICK_MS = 15000;
 const BLOCKS_KEY = "mfactory.board.collapsed";
 const GH_FILTER_KEY = "mfactory.github.filter";
+const GH_FILTER_NAMES = ["all", "mine", "outside"];
 const RUNNING = new Set(["agent", "checks", "review", "merge", "verify"]);
 const CHOICE_KEY = "mfactory.workspace.selected";
 const FOOT_NOTE = "read-only · approvals and feedback go through /mfactory or an issue comment";
@@ -62,6 +63,14 @@ const prefs = {
     } catch (error) {}
   },
 };
+function storedFolds() {
+  const found = prefs.get(BLOCKS_KEY, []);
+  return Array.isArray(found) ? found.filter((id) => typeof id === "string") : [];
+}
+function storedFilter() {
+  const found = prefs.get(GH_FILTER_KEY, "all");
+  return GH_FILTER_NAMES.indexOf(found) >= 0 ? found : "all";
+}
 const SPLIT_KEY = "factory-split";
 const SPLIT_MIN = 140;
 const SPLIT_DEFAULT = 220;
@@ -80,8 +89,8 @@ const state = {
   index: null, graph: null, config: null, error: null, query: "", range: "30", file: null, source: "all", drawer: null,
   workspace: false, projects: [], selected: readChoice(), queueRows: [], queueErrors: [], queueStale: false,
   split: readSplit(), now: {}, nowSeq: 0, nowSeen: {}, raw: false, planUsage: null, unit: null,
-  feeds: { jira: {}, github: {} }, feedsBusy: false, feedsAgain: false, jiraPicker: null,
-  ghFilter: prefs.get(GH_FILTER_KEY, "all"), collapsed: new Set(prefs.get(BLOCKS_KEY, [])),
+  feeds: { jira: {}, github: {} }, jiraPicker: null,
+  ghFilter: storedFilter(), collapsed: new Set(storedFolds()),
   memo: new Map(), jobsStamp: 0, queueStamp: 0,
 };
 if (queryProject()) writeChoice(state.selected);
@@ -112,9 +121,11 @@ function issueRef(key) {
   const text = key == null ? "" : String(key);
   return /^\d+$/.test(text) ? "#" + text : text;
 }
+// A link the page may follow: a web address, or a server on this machine such as a local Jira.
+const WEB_URL = /^(?:https:\/\/\S+|http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?(?:\/\S*)?)$/;
 function link(url, text) {
-  // Only real web addresses become links; anything else is shown as plain text.
-  return /^https:\/\//.test(url || "") ? el("a", { class: "ext", href: url, target: "_blank", rel: "noopener noreferrer", text }) : el("span", { class: "mono", text });
+  // Only those become links; anything else is shown as plain text.
+  return WEB_URL.test(url || "") ? el("a", { class: "ext", href: url, target: "_blank", rel: "noopener noreferrer", text }) : el("span", { class: "mono", text });
 }
 // The job's pull requests, oldest first: those merged before a follow-up, then the current one.
 function jobPrs(job) {
@@ -1489,10 +1500,10 @@ function drawerKey() {
   const d = state.drawer;
   return d ? [d.kind || "job", d.project, d.issue || d.id].join(":") : "";
 }
-function refreshButton(name) {
+function refreshButton(name, block) {
   return el("button", {
     type: "button", class: "refresh", title: "Read again", "aria-label": "Read " + name + " again",
-    "data-focus": "refresh:" + name, onclick: () => refreshFeeds(true),
+    "data-focus": "refresh:" + block, onclick: () => refreshFeeds(true, block),
   }, icon("M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"));
 }
 function updatedNode(entries) {
@@ -1560,47 +1571,55 @@ function pickedBoards(id) {
   const configured = entry && entry.data ? entry.data.configured : null;
   return Number.isInteger(configured) && configured > 0 ? [configured] : [];
 }
-async function refreshFeeds(force) {
-  if (!state.workspace || route().view !== "board") return;
-  if (state.feedsBusy) {
-    state.feedsAgain = true;
-    return;
-  }
-  state.feedsBusy = true;
-  let changed = false;
+// Feeds being read now, by address: a feed is never asked for twice at once.
+const feedsInFlight = new Set();
+let drawQueued = false;
+// Draw once for every feed that landed since the last frame, so a fast feed never waits for a slow one.
+function drawSoon() {
+  if (drawQueued) return;
+  drawQueued = true;
+  const draw = () => {
+    drawQueued = false;
+    if (route().view === "board") render();
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(draw);
+  else setTimeout(draw, 0);
+}
+async function loadFeed(holder, key, url) {
+  const id = url.split("?")[0];
+  if (feedsInFlight.has(id)) return;
+  feedsInFlight.add(id);
   try {
-    const now = Date.now();
-    const due = (entry) => force || !entry || now - entry.at >= FEED_MS;
-    await Promise.all(visibleProjects().map(async (project) => {
-      const id = project.id;
-      const work = [];
-      if (blockOpen("jira")) {
-        work.push((async () => {
-          const holder = jiraHolder(id);
-          if (due(holder.boards)) changed = keepFeed(holder, "boards", await getFeed(feedUrl(id, "/jira/boards", force))) || changed;
-          const data = holder.boards && holder.boards.data;
-          if (!data || data.off || data.note) return;
-          await Promise.all(pickedBoards(id).map(async (board) => {
-            if (!blockOpen(boardFold(id, board)) || !due(holder.board[board])) return;
-            changed = keepFeed(holder.board, board, await getFeed(feedUrl(id, "/jira/boards/" + board, force))) || changed;
-          }));
-        })());
-      }
-      if (blockOpen("github") && due(state.feeds.github[id])) {
-        work.push(getFeed(feedUrl(id, "/github/issues", force)).then((found) => {
-          changed = keepFeed(state.feeds.github, id, found) || changed;
-        }));
-      }
-      await Promise.all(work);
-    }));
+    if (keepFeed(holder, key, await getFeed(url))) drawSoon();
   } finally {
-    state.feedsBusy = false;
+    feedsInFlight.delete(id);
   }
-  if (changed && route().view === "board") render();
-  if (state.feedsAgain) {
-    state.feedsAgain = false;
-    refreshFeeds(false);
-  }
+}
+// Read the feeds that are open and old, or all of them with `force`. `only` limits it to one block.
+function refreshFeeds(force, only) {
+  if (!state.workspace || route().view !== "board") return;
+  const now = Date.now();
+  const due = (entry) => force || !entry || now - entry.at >= FEED_MS;
+  visibleProjects().forEach((project) => {
+    const id = project.id;
+    if ((!only || only === "jira") && blockOpen("jira")) {
+      const holder = jiraHolder(id);
+      const boards = () => {
+        const data = holder.boards && holder.boards.data;
+        if (!data || data.off || data.note) return;
+        pickedBoards(id).forEach((board) => {
+          if (blockOpen(boardFold(id, board)) && due(holder.board[board])) {
+            loadFeed(holder.board, board, feedUrl(id, "/jira/boards/" + board, force));
+          }
+        });
+      };
+      if (due(holder.boards)) loadFeed(holder, "boards", feedUrl(id, "/jira/boards", force)).then(boards);
+      else boards();
+    }
+    if ((!only || only === "github") && blockOpen("github") && due(state.feeds.github[id])) {
+      loadFeed(state.feeds.github, id, feedUrl(id, "/github/issues", force));
+    }
+  });
 }
 
 // ---- the Jira block ----
@@ -1623,7 +1642,7 @@ function jiraBlock(projects) {
       picked.forEach((board) => entries.push(holder.board[board]));
     }
   });
-  const tools = [updatedNode(entries), refreshButton("Jira")];
+  const tools = [updatedNode(entries), refreshButton("Jira", "jira")];
   return blockSection("jira", "Jira", boards || null, tools, () => (shown.length
     ? shown.map((project) => jiraArea(project, many))
     : el("p", { class: "kempty", text: "No project here takes jobs from Jira." })));
@@ -1666,9 +1685,18 @@ function jiraBoard(project, boards, board) {
       view && view.truncated ? el("span", { class: "src", text: "showing " + view.shown + " of " + view.total }) : null),
     el("div", { id: "body-" + safeId(fold), hidden: !open }, open ? boardBody(project, board, entry) : null));
 }
+function dropBoard(project, board) {
+  prefs.set("mfactory.jira.boards." + project, pickedBoards(project).filter((n) => n !== board));
+  render();
+}
 function boardBody(project, board, entry) {
   if (!entry) return el("p", { class: "kempty", text: "Loading..." });
-  if (entry.error) return el("p", { class: "error", text: entry.error });
+  if (entry.error) {
+    return el("div", { class: "board-error" },
+      el("p", { class: "error", text: entry.error }),
+      el("button", { type: "button", class: "drop-board", "data-focus": "drop:" + project.id + ":" + board,
+        text: "Remove this board", onclick: () => dropBoard(project.id, board) }));
+  }
   const scroll = "jira:" + project.id + ":" + board;
   return memo(scroll, [entry.json, state.query, state.jobsStamp, state.queueStamp, drawerKey()].join("\n"), () =>
     el("div", { class: "kanban jira", "data-scroll-key": scroll }, (entry.data.columns || []).map((col, index) => {
@@ -1759,6 +1787,11 @@ function fillPicker(list, foot, boards) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(board);
   });
+  // Boards picked here that Jira no longer shows (deleted, or out of reach): listed ticked, so they can go.
+  const known = new Set(boards.map((board) => board.id));
+  const lost = Array.from(chosen).filter((id) => !known.has(id) && (!q || ("#" + id).includes(q)))
+    .map((id) => ({ id, name: "Board " + id, project: "", type: "not found" }));
+  if (lost.length) groups.set("No longer available", lost);
   const nodes = Array.from(groups.entries()).map(([key, items]) => el("div", { class: "picker-group" },
     el("h4", { text: key }),
     items.map((board) => el("label", { class: "picker-item" },
@@ -1815,7 +1848,7 @@ function githubBlock(projects) {
       type: "button", "aria-pressed": state.ghFilter === name ? "true" : "false", "data-focus": "ghf:" + name,
       text: label, onclick: () => setGhFilter(name),
     }))),
-    updatedNode(parts.map((part) => part.entry)), refreshButton("GitHub issues")];
+    updatedNode(parts.map((part) => part.entry)), refreshButton("GitHub issues", "github")];
   return blockSection("github", "GitHub issues", count, tools, () => parts.map((part) => githubArea(part, many)));
 }
 function githubArea(part, many) {
