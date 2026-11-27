@@ -11,10 +11,10 @@ from typing import Any
 from ... import board
 from ...util import Refused
 from . import adf
-from .base import Key, Who
+from .base import JIRA_KEY, Key, OneTracker, Who
 from .jira_api import Client
 
-KEY = re.compile(r"[A-Za-z][A-Za-z0-9_]*-[1-9][0-9]*")
+KEY = JIRA_KEY
 # The last line of every comment the factory writes. The factory posts from the operator's own account,
 # so this is what tells its comments from ones the operator typed. It is plain text, so it survives
 # whichever way Jira is reached.
@@ -43,9 +43,10 @@ def _status_name(value: object) -> str:
     return value if isinstance(value, str) else ""
 
 
-class JiraTracker:
+class JiraTracker(OneTracker):
     kind = "jira"
     label = "Jira"
+    has_board = True
     # How Jira is reached: its REST API here, the Atlassian CLI in `jira_acli.py`.
     via = "rest"
     # True when the tracker can tell who moved a card, so a move can answer a human step.

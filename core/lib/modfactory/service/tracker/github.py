@@ -7,7 +7,7 @@ from typing import Any
 
 from ...util import MARKER, Refused
 from ..gh import GitHub, marked
-from .base import Key, Who
+from .base import Key, OneTracker, Who
 
 WRITERS = {"admin", "maintain", "write"}
 # The labels `install` creates: colour and description for each `[labels]` key.
@@ -23,7 +23,7 @@ def _failure(res: CompletedProcess[str]) -> str:
     return why[0] if why else "gh failed"
 
 
-class GitHubTracker:
+class GitHubTracker(OneTracker):
     kind = "github"
     label = "GitHub"
     # A person may be asked, and may reply, on the job's pull request as well as on the issue.

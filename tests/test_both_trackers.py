@@ -3,7 +3,9 @@
 import pytest
 from conftest import JIRA_COLUMNS
 from modfactory import config
-from modfactory.util import ConfigError
+from modfactory.service import tracker as trackers
+from modfactory.service.tracker import GitHubTracker, JiraTracker, Trackers
+from modfactory.util import ConfigError, Refused
 
 BOTH = """
 [tracker]
@@ -127,3 +129,90 @@ def test_jira_still_needs_a_site_and_a_board_with_both(world):
     found = problems(world, '[tracker]\nkind = ["github", "jira"]\n' + JIRA_COLUMNS)
     assert "[tracker.jira].site is missing" in found
     assert "[tracker.jira].board is missing" in found
+
+
+# ---- Routing each issue to its tracker -------------------------------------------
+
+
+def both(world):
+    world.use_both()
+    return trackers.make(config.load(world.repo))
+
+
+def test_one_kind_still_makes_the_plain_tracker(world):
+    plain = trackers.make(config.load(world.repo))
+    assert type(plain) is GitHubTracker
+    assert plain.of(12) is plain
+    assert plain.members == [plain] and plain.primary is plain
+    assert plain.board_member() is None
+    assert plain.problems == [] and plain.unread == set()
+    world.use_jira()
+    jira = trackers.make(config.load(world.repo))
+    assert isinstance(jira, JiraTracker)
+    assert jira.of("PROJ-1") is jira and jira.board_member() is jira
+
+
+def test_router_sends_each_key_to_its_tracker(world):
+    found = both(world)
+    assert isinstance(found, Trackers)
+    assert found.key("12") == 12 and found.key("#12") == 12
+    assert found.of(12).kind == "github"
+    assert found.key("proj-3") == "PROJ-3"
+    assert found.of("PROJ-3").kind == "jira"
+    assert found.ref(12) == "#12" and found.ref("PROJ-3") == "PROJ-3"
+
+
+def test_router_refuses_a_key_neither_tracker_takes(world):
+    found = both(world)
+    with pytest.raises(Refused, match=r"12.*PROJ-123"):
+        found.key("x y")
+
+
+def test_a_tracker_names_the_tracker_a_key_belongs_to(world):
+    plain = trackers.make(config.load(world.repo))
+    with pytest.raises(Refused, match=r"PROJ-3.*Jira.*\[tracker\]\.kind"):
+        plain.of("PROJ-3")
+
+
+def test_queue_takes_turns_primary_first(world):
+    found = both(world)
+    first, second = world.issue("First on GitHub"), world.issue("Second on GitHub")
+    one, two = world.jira.ticket("First in Jira"), world.jira.ticket("Second in Jira")
+    assert [issue["number"] for issue in found.queue()] == [first, one, second, two]
+
+
+def test_statuses_splits_keys_by_tracker(world):
+    found = both(world)
+    key = world.jira.ticket("On the board", status="Build")
+    number = world.issue("On GitHub")
+    assert found.statuses([number, key]) == {key: "Build"}
+
+
+def test_pr_link_rule_has_one_rule_per_tracker(world):
+    rule = both(world).pr_link_rule()
+    assert "number such as 12" in rule and "`Refs #<issue>`" in rule
+    assert "key such as PROJ-123" in rule and "`Refs PROJ-123`" in rule
+
+
+def test_new_issues_go_to_the_first_tracker(world):
+    found = both(world)
+    assert found.create_issue("Filed by the factory", "Body").startswith("https://github.test/")
+    world.use_both(kind='["jira", "github"]')
+    first_jira = trackers.make(config.load(world.repo))
+    assert "/browse/PROJ-" in first_jira.create_issue("Filed by the factory", "Body")
+
+
+def test_the_router_has_no_per_tracker_facts(world):
+    found = both(world)
+    for name in ("kind", "label", "pr_threads", "links_by_title", "drag_answers", "comment_limit",
+                 "operator", "mention", "status_for", "requeue_hint"):
+        assert not hasattr(found, name), name
+
+
+def test_board_member_and_members(world):
+    found = both(world)
+    assert [member.kind for member in found.members] == ["github", "jira"]
+    assert found.primary is found.members[0]
+    assert found.board_member() is found.member("jira")
+    with pytest.raises(Refused, match="gitlab"):
+        found.member("gitlab")
