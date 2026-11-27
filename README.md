@@ -263,7 +263,8 @@ page also has the pipeline, what each job wrote, an overview with the job
 table, and the merged configuration with the source of each value. An issue
 opens its body and comments. It changes nothing; approvals and feedback go
 through `/mfactory` or an issue comment. The Jira block reads Jira's REST API,
-so start the dashboard from a shell that has `JIRA_EMAIL` and `JIRA_API_TOKEN`.
+with the account email and token the factory uses. If they come from
+`JIRA_EMAIL` and `JIRA_API_TOKEN`, start the dashboard from a shell that has them.
 
 ![The dashboard's pipeline view, showing made-up sample jobs](docs/dashboard-pipeline.png?v=2)
 

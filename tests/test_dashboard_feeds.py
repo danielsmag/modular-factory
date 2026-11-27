@@ -9,6 +9,7 @@ import urllib.request
 from datetime import UTC, datetime
 
 import pytest
+import stub_jira
 from conftest import ROOT
 from modfactory.service.gh import GitHub
 from modfactory.service.tracker import jira as jira_tracker
@@ -71,7 +72,7 @@ def test_the_routes_answer_with_json(world, base):
 
 
 def client(world):
-    return Client(world.jira.url, "JIRA_EMAIL", "JIRA_API_TOKEN")
+    return Client(world.jira.url, "JIRA_EMAIL", "JIRA_API_TOKEN", world.repo)
 
 
 def two_boards(world):
@@ -389,3 +390,21 @@ def test_two_projects_each_use_their_own_jira_variables(world, tmp_path, monkeyp
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_boards_read_the_email_from_factory_toml_and_the_token_from_dotenv(world, base, monkeypatch):
+    two_boards(world)
+    world.use_both(settings=f'email = "{stub_jira.EMAIL}"')
+    (world.repo / ".env").write_text(f"JIRA_API_TOKEN={stub_jira.TOKEN}\n")
+    monkeypatch.delenv("JIRA_EMAIL")
+    monkeypatch.delenv("JIRA_API_TOKEN")
+    status, body, _ = get(f"{base}/projects/{world.repo.name}/jira/boards")
+    assert status == 200 and [board["id"] for board in json.loads(body)["boards"]] == [7, 8]
+
+
+def test_a_token_file_that_cannot_be_read_says_so(world, base):
+    two_boards(world)
+    world.use_both(settings='token_file = "no-such-token"')
+    status, body, _ = get(f"{base}/projects/{world.repo.name}/jira/boards/7")
+    note = json.loads(body)["note"]
+    assert status == 200 and "[tracker.jira].token_file" in note and "no-such-token" in note

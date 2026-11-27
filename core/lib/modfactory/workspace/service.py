@@ -29,7 +29,7 @@ from ..config import load as load_config
 from ..service import tracker as trackers
 from ..service.gh import GitHub
 from ..service.tracker.base import key_kind
-from ..service.tracker.jira_api import Client
+from ..service.tracker.jira_api import Client, account_email, account_token
 from ..util import FactoryError, Refused, dashboard_page, user_dir
 from . import feeds
 from .paths import FILE, SERVED
@@ -45,9 +45,10 @@ ISSUE_KEY: re.Pattern[str] = re.compile(r"[1-9][0-9]{0,9}|[A-Za-z][A-Za-z0-9_]{1
 BOARD_ID: re.Pattern[str] = re.compile(r"[1-9][0-9]{0,9}")
 JIRA_OFF: str = ('Jira is off for this project. Add "jira" to [tracker] kind and set [tracker.jira] site '
                  "and board in factory.toml.")
-NO_CREDENTIALS: str = ("Jira boards are read through Jira's REST API, with the account and token in the "
-                       "dashboard's environment. Set {names} in a shell, then run `mfactory stop` and "
-                       "`mfactory start dashboard` from it.")
+NO_CREDENTIALS: str = ("Jira boards are read through Jira's REST API, and the dashboard found no {what}. "
+                       "Set {names} in a shell, then run `mfactory stop` and `mfactory start dashboard` from "
+                       "it. The email can also be [tracker.jira].email, and the token can be in the "
+                       "project's .env or [tracker.jira].token_file.")
 
 
 def _web_url(value: object) -> str | None:
@@ -186,17 +187,28 @@ class Feeds:
     def _jira(self, project: Project) -> tuple[Client, int] | str:
         """A REST client for the project's Jira site and its board, or why there is none to read.
 
-        Boards are read through REST whenever the account and token are set, whatever `via` says: the
-        Atlassian CLI cannot read a board, and the dashboard's own environment is the one that counts.
+        Boards are read through REST whenever an email and a token are found, whatever `via` says: the
+        Atlassian CLI cannot read a board. They are found as the factory finds them: the email in
+        factory.toml or `email_env`, the token in `token_file`, `token_env`, or the project's `.env`.
         """
         cfg: Config = load_config(project.path)
         if "jira" not in config.tracker_kinds(cfg["tracker"]["kind"]):
             return JIRA_OFF
         settings: dict[str, Any] = cfg["tracker"]["jira"]
-        missing: list[str] = [settings[key] for key in ("email_env", "token_env") if not os.environ.get(settings[key])]
+        try:
+            email: str = account_email(settings)[0]
+            token: str = account_token(settings, project.path)[0]
+        except Refused as error:  # a token_file that cannot be read says which, never what it holds
+            return str(error)
+        missing: list[tuple[str, str]] = [pair for pair, found in (
+            (("account email", str(settings["email_env"])), email), (("API token", str(settings["token_env"])), token),
+        ) if not found]
         if missing:
-            return NO_CREDENTIALS.format(names=" and ".join(missing))
-        client: Client = Client(str(settings["site"]), settings["email_env"], settings["token_env"])
+            return NO_CREDENTIALS.format(what=" and no ".join(what for what, _ in missing),
+                                         names=" and ".join(name for _, name in missing))
+        client: Client = Client(str(settings["site"]), str(settings["email_env"]), str(settings["token_env"]),
+                                project.path, email=str(settings.get("email") or ""),
+                                token_file=str(settings.get("token_file") or ""))
         return client, int(settings.get("board") or 0)
 
     def jira_boards(self, project: Project, label: str, fresh: bool) -> Reply:
