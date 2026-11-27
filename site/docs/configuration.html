@@ -354,6 +354,7 @@ export JIRA_API_TOKEN="..."</code></pre>
   <p><code>[tracker.jira.columns]</code> maps a step, an end state (<code>done</code>, <code>rejected</code>, <code>failed</code>) or <code>queue</code> to a Jira status. The factory moves the card when the job enters the step.</p>
   <ul>
     <li><code>queue</code> is required. It is the status new jobs are picked from, and it may be a list.</li>
+    <li><code>watch</code> is optional: a status, or a list of them, whose cards the dashboard shows in a <strong>Watching</strong> lane before the queue, with the same link and drawer. They are never built: <code>queue</code>, <code>create</code> and <code>/mfactory run</code> skip them, and <code>/mfactory run &lt;KEY&gt;</code> on one says to move it to the queue first. The board's filter and <code>jql</code> scope them like the queue. A watched status cannot also be <code>queue</code>, a step's or an end state's status. <code>tracker show</code> and <code>doctor</code> check that each one is on the board. For example, <code>watch = ["Pending Design", "Pending US Approval"]</code>.</li>
     <li>A key is a step's name in <code>factory.toml</code>, so a step you add, rename or switch off needs no other change. A key that is not a step fails <code>mfactory sync</code>, with the steps listed.</li>
     <li>Steps may share a status, for a smaller board.</li>
     <li>A step with no status leaves the card where it is.</li>

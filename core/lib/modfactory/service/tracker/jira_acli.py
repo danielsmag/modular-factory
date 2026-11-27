@@ -262,6 +262,7 @@ class AcliJiraTracker(JiraTracker):
                     "problem": None}
 
         rows: list[dict[str, Any]] = [row(board.QUEUE, "-", True, s) for s in board.queue_statuses(self.columns)]
+        rows += [row(board.WATCH, "watch", True, s) for s in board.watch_statuses(self.columns)]
         rows += [row(name, step["type"], step.get("enabled", True), self.status_for(name))
                  for name, step in self.steps.items()]
         rows += [row(state, "end", True, self.status_for(state)) for state in ("done", "rejected", "failed")]

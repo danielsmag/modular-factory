@@ -932,6 +932,17 @@ export JIRA_API_TOKEN="..."
 **status**. The factory moves the card when the job enters the step.
 
 - `queue` is required. It is the status new jobs are picked from, and it may be a list.
+- `watch` is optional: a status, or a list of them, whose cards the dashboard shows in a **Watching** lane
+  before the queue, with the same link and drawer. They are never built: `queue`, `create` and
+  `/mfactory run` skip them, and `/mfactory run <KEY>` on one says to move it to the queue first. The board's
+  filter and `jql` scope them like the queue. A watched status cannot also be `queue`, a step's or an end
+  state's status. `tracker show` and `doctor` check that each one is on the board.
+
+  ```toml
+  [tracker.jira.columns]
+  queue = "Pending Development"
+  watch = ["Pending Design", "Pending US Approval"]
+  ```
 - A key is a step's name in `factory.toml`, so a step you add, rename or switch off needs no other change.
   A key that is not a step fails `mfactory sync`, with the steps listed.
 - Steps may share a status, for a smaller board.

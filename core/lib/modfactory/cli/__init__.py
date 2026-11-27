@@ -239,8 +239,9 @@ def run(args: argparse.Namespace) -> int:
         if command == "queue" and args.json:
             _stale_note(cfg, sys.stderr)
             _index_note(factory, sys.stderr)
-            queued: tuple[list[tuple[Any, ...]], list[dict[str, Any]]] = factory.queue_and_issues()
-            print(json.dumps(queue_json(*queued)))
+            rows, issues = factory.queue_and_issues()
+            watch_rows, watched = factory.watch_rows()
+            print(json.dumps(queue_json(rows + watch_rows, issues + watched)))
         elif command == "queue":
             _stale_note(cfg)
             _index_note(factory, sys.stdout)

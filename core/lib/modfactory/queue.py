@@ -171,6 +171,13 @@ class Queue:
                 rows.append(("hold",) + row[1:4] + (f"concurrency {limit} reached",))
         return rows + waiting + other, issues
 
+    def watch_rows(self: _QueueHost) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]:
+        """Rows for the tracker's watched issues, and those issues. Only `queue --json` shows them, and no
+        job is ever made from them: `queue` and `create` never see them."""
+        jobs: set[Any] = {j["issue"] for j in self.store.all()}
+        issues: list[dict[str, Any]] = [i for i in self.tracker.watched() if i["number"] not in jobs]
+        return [("watch", i["number"], "-", "-", i.get("status") or "watched") for i in issues], issues
+
 
 def queue_json(rows: list[tuple[Any, ...]], issues: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """`mfactory queue --json`: each row, plus what `gh issue list` said about its issue."""

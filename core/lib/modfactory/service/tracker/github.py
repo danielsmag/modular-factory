@@ -81,6 +81,10 @@ class GitHubTracker:
             "--json", "number,title,url,createdAt,updatedAt,author,assignees,labels")
         return sorted(found, key=lambda issue: issue["number"])
 
+    def watched(self) -> list[dict[str, Any]]:
+        """GitHub has no watched issues: an issue is in the queue or not."""
+        return []
+
     def withdrawn(self, key: Key, queued: set[Key]) -> str | None:
         if key in queued:
             return None
