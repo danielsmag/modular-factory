@@ -197,7 +197,10 @@ class JiraTracker(OneTracker):
         return self.issue(key)
 
     def _in_queue(self) -> str:
-        names: list[str] = board.queue_statuses(self.columns)
+        return self._in_statuses(board.queue_statuses(self.columns))
+
+    @staticmethod
+    def _in_statuses(names: list[str]) -> str:
         quoted: str = ", ".join('"' + name.replace("\\", "\\\\").replace('"', '\\"') + '"' for name in names)
         return f"status in ({quoted})"
 
@@ -212,10 +215,19 @@ class JiraTracker(OneTracker):
         """The cards in the queue column, in the board's order: the top card is built first."""
         return self._board_issues(self._in_queue())
 
+    def watched(self) -> list[dict[str, Any]]:
+        """The cards in the `watch` statuses, for the dashboard only. No job is ever made from them."""
+        names: list[str] = board.watch_statuses(self.columns)
+        return self._board_issues(self._in_statuses(names)) if names else []
+
     def queue_gate(self, issue: dict[str, Any]) -> str | None:
         key: Key = issue["number"]
         names: list[str] = board.queue_statuses(self.columns)
         shown: str = ", ".join(f"`{name}`" for name in names)
+        status: str = issue.get("status") or ""
+        if any(_same(status, name) for name in board.watch_statuses(self.columns)):
+            return (f"{key} is in `{status}`, which is only watched, not built. "
+                    f"Move it to `{names[0]}` first" + (f" (or {shown})" if len(names) > 1 else "") + ".")
         if not any(_same(issue.get("status") or "", name) for name in names):
             return (f"{key} is in `{issue.get('status')}`, not in the queue column ({shown}). "
                     "Only cards there run.")
@@ -467,7 +479,7 @@ class JiraTracker(OneTracker):
                 elif status.casefold() in finished and step == board.QUEUE:
                     problem = (f"`{status}` is in Jira's Done category, so a card there counts as a closed issue "
                                "and no job starts from it")
-                elif status.casefold() in finished and kind != "end":
+                elif status.casefold() in finished and kind not in ("end", "watch"):
                     warnings.append(f"[tracker.jira.columns].{step}: `{status}` is in Jira's Done category, so Jira "
                                     f"counts the issue as finished while the job is at {step}")
             return {"step": step, "type": kind, "enabled": enabled, "status": status, "column": column,
@@ -475,10 +487,12 @@ class JiraTracker(OneTracker):
 
         queue: list[str] = board.queue_statuses(self.columns)
         rows: list[dict[str, Any]] = [row(board.QUEUE, "-", True, status) for status in queue]
+        rows += [row(board.WATCH, "watch", True, status) for status in board.watch_statuses(self.columns)]
         rows += [row(name, step["type"], step.get("enabled", True), self.status_for(name))
                  for name, step in self.steps.items()]
         rows += [row(state, "end", True, self.status_for(state)) for state in ("done", "rejected", "failed")]
-        sound: set[str] = {r["status"].casefold() for r in rows if r["status"] and not r["problem"]}
+        sound: set[str] = {r["status"].casefold() for r in rows
+                           if r["status"] and not r["problem"] and r["step"] != board.WATCH}
         problems, unchecked = self._workflow_gaps(queue, sound)
         return {"tracker": self.kind, "via": self.via, "site": self.site, "board": self.board, "rows": rows,
                 "unused": [name for name in on_board if name.casefold() not in used],

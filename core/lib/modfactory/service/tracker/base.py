@@ -75,6 +75,10 @@ class Tracker(Protocol):
         """The open issues waiting for a job, in the order to start them."""
         ...
 
+    def watched(self) -> list[dict[str, Any]]:
+        """Open issues the dashboard shows as coming up and the factory never builds. Often none."""
+        ...
+
     def withdrawn(self, key: Key, queued: set[Key]) -> str | None:
         """Why a running job's issue no longer asks to be built, or None. `queued` is the keys in `queue`."""
         ...
