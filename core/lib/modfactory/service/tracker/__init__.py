@@ -44,7 +44,7 @@ def for_repo(repo: Path) -> Tracker | Trackers:
         return github_reader(repo)
 
 
-def github_reader(repo: Path) -> GitHubTracker:
+def github_reader(repo: Path, timeout: float | None = None) -> GitHubTracker:
     """GitHub issues with the default labels: for reading an issue of a checkout whatever its tracker."""
     defaults = config.read_toml(CORE / "defaults.toml")
-    return GitHubTracker(GitHub(repo), defaults["labels"], defaults["project"]["issue_link"])
+    return GitHubTracker(GitHub(repo, timeout=timeout), defaults["labels"], defaults["project"]["issue_link"])

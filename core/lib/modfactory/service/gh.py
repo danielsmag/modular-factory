@@ -20,10 +20,13 @@ def marked(comment: dict[str, Any]) -> dict[str, Any]:
 
 
 class GitHub:
-    def __init__(self, repo):
+    def __init__(self, repo, timeout: float | None = None):
         self.repo = repo
+        # Seconds any one `gh` command may take; None waits as long as it takes, as the factory always has.
+        self.timeout = timeout
 
     def call(self, *args, input=None, check=True, timeout=None):
+        timeout = timeout if timeout is not None else self.timeout
         try:
             return run(["gh", *map(str, args)], cwd=self.repo, input=input, check=check, timeout=timeout)
         except FileNotFoundError:
@@ -35,13 +38,13 @@ class GitHub:
     def json(self, *args, timeout=None):
         return json.loads(self.call(*args, timeout=timeout).stdout)
 
-    def open_issues(self, limit: int = 200, timeout: float = 30) -> list[dict[str, Any]]:
+    def open_issues(self, limit: int = 200, timeout: float | None = None) -> list[dict[str, Any]]:
         """The repository's open issues, most recently updated first, at most `limit`."""
         found: object = self.json("issue", "list", "--state", "open", "--limit", limit, "--search",
                                   "sort:updated-desc", "--json", ISSUE_FIELDS, timeout=timeout)
         return [row for row in found if isinstance(row, dict)] if isinstance(found, list) else []
 
-    def repo_url(self, timeout: float = 30) -> str | None:
+    def repo_url(self, timeout: float | None = None) -> str | None:
         """The repository's address on GitHub."""
         found: object = self.json("repo", "view", "--json", "url", timeout=timeout)
         url: object = found.get("url") if isinstance(found, dict) else None

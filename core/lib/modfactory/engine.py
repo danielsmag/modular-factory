@@ -51,7 +51,7 @@ class Factory(Humans, Cards, Scripted, Queue):
 
     def _operator(self, job: dict[str, Any]) -> str:
         """The account running the factory, as the job's tracker shows people."""
-        tracker = self.tracker.of(job["issue"])
+        tracker: trackers.Tracker = self.tracker.of(job["issue"])
         return tracker.mention(tracker.operator())
 
     def tag(self, job):
@@ -953,7 +953,7 @@ class Factory(Humans, Cards, Scripted, Queue):
     # ---- issue.md ----------------------------------------------------------
 
     def _write_issue_md(self, job, issue=None):
-        tracker = self.tracker.of(job["issue"])
+        tracker: trackers.Tracker = self.tracker.of(job["issue"])
         issue = issue or tracker.issue(job["issue"])
         author = issue["author"]["login"]
         trusted = {author, tracker.operator()}

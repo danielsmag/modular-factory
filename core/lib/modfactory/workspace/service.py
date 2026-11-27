@@ -177,9 +177,11 @@ class Feeds:
     account and its token. A failure is an answer too: the page shows it in that block only.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, timeout: float = 30) -> None:
         self.cache: feeds.FeedCache = feeds.FeedCache(ttl=60, error_ttl=15)
         self.slow: feeds.FeedCache = feeds.FeedCache(ttl=600, error_ttl=15)
+        # Seconds one `gh` command may take before the GitHub block says it did not answer.
+        self.timeout: float = timeout
 
     def _jira(self, project: Project) -> tuple[Client, int] | str:
         """A REST client for the project's Jira site and its board, or why there is none to read.
@@ -216,8 +218,8 @@ class Feeds:
             (label, "jira", board_id), lambda: feeds.jira_board(client, board_id), fresh))
 
     def github_issues(self, project: Project, label: str, fresh: bool) -> Reply:
-        gh: GitHub = GitHub(project.path)
-        reader: trackers.GitHubTracker = trackers.github_reader(project.path)
+        gh: GitHub = GitHub(project.path, timeout=self.timeout)
+        reader: trackers.GitHubTracker = trackers.github_reader(project.path, timeout=self.timeout)
 
         def me() -> str:
             return self.slow.get((label, "github", "me"), reader.operator)

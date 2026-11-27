@@ -482,3 +482,14 @@ def test_tracker_sync_skips_a_job_whose_tracker_left(world):
     res = world.cli("tracker", "sync")
     assert res.returncode == 0, res.stdout + res.stderr
     assert f"skip   {number}  {job}  intake  its tracker, GitHub, is not in [tracker].kind" in res.stdout
+
+
+def test_a_github_outage_does_not_stop_jira_jobs(world):
+    world.use_both()
+    world.issue("On GitHub")
+    key = world.jira.ticket("In Jira")
+    world.set_gh(lambda state: state.update(fail="issue list"))
+    res = world.cli("queue")
+    assert res.returncode == 0, res.stderr
+    assert f"new  {key}  -  -  In Jira" in res.stdout.splitlines()
+    assert "problem: GitHub:" in res.stderr

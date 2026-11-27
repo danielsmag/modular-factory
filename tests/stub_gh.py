@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 STATE = Path(os.environ["GH_STATE"])
@@ -93,6 +94,9 @@ def main(argv):
     pos, named = flags(rest)
     out = ""
 
+    for start, seconds in (state.get("slow") or {}).items():
+        if " ".join(argv).startswith(start):
+            time.sleep(seconds)  # a gh that answers late, for timeouts
     if state.get("fail") and " ".join(argv).startswith(state["fail"]):
         save(state)
         sys.exit(f"stub gh: told to fail on `{state['fail']}`")

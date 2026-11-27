@@ -60,6 +60,7 @@ core/lib/modfactory/      the factory's code
     jobs.py               read each project's jobs, graph, and config, tolerating old files
     command.py            `mfactory workspace` subcommands
     service.py            the dashboard server, and start/stop
+    feeds.py              the Board's Jira boards and GitHub issues, read through a short cache
   service/                services the factory calls
     gh.py                 pull requests on GitHub, through the `gh` CLI
     human.py              asking a person and reading the reply

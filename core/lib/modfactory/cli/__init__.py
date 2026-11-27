@@ -14,6 +14,7 @@ from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
 from ..queue import queue_json
+from ..service.tracker import Tracker
 from ..store import Store
 from ..util import ConfigError, FactoryError, Refused, find_repo, global_binary, has_dashboard_page, version
 from ..workspace import service as workspace_http
@@ -79,7 +80,7 @@ def _tracker_suggest(cfg: Any, as_json: bool) -> None:
 
 def _tracker_show(factory: Factory, as_json: bool) -> int:
     """`mfactory tracker show`: each step, its status and its board column. 1 when the board has a problem."""
-    board_tracker = factory.tracker.board_member()
+    board_tracker: Tracker | None = factory.tracker.board_member()
     report: dict[str, Any] | None = board_tracker.board_report() if board_tracker else None
     if board_tracker is None or report is None:
         print(f"{factory.tracker.primary.label} issues have no board: {factory.tracker.queue_note()}")
@@ -265,7 +266,7 @@ def run(args: argparse.Namespace) -> int:
             text: str = _stdin_text()
             if not text.strip():
                 raise Refused("the issue's text goes on stdin")
-            target = factory.tracker.member(args.tracker) if args.tracker else factory.tracker.primary
+            target: Tracker = factory.tracker.member(args.tracker) if args.tracker else factory.tracker.primary
             print(target.create_issue(" ".join(args.title), text, queue=True))
         elif command == "next":
             factory.next(args.job)

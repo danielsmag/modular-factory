@@ -442,6 +442,7 @@ queue = "Ready for factory"
     <li>Each job asks and listens on its own tracker. A job from a GitHub issue is asked on the issue or its pull request, with the factory's labels. A job from a Jira card is asked in Jira, and its card follows the job. <code>/mfactory approve 12</code> and <code>/mfactory approve PROJ-123</code> both work.</li>
     <li>Pull requests follow the issue. A GitHub issue's starts with <code>Refs #12</code>, or <code>Closes #12</code> with <code>issue_link = "closes"</code>. A Jira issue's starts with <code>Refs PROJ-123</code> and carries the key in its title.</li>
     <li><code>mfactory file</code> opens the issue on the first tracker in <code>kind</code>. <code>mfactory file --tracker jira "&lt;title&gt;"</code> chooses.</li>
+    <li><code>[project] pr_title</code> and <code>pr_title_pattern</code> apply to every job's pull request, so with both trackers the pattern must also accept a title without a Jira key.</li>
     <li>People are named per tracker, because a GitHub login and a Jira account id can look the same. In <code>authors</code> and <code>assignees</code>, a tracker left out is not filtered. A <code>who</code> table names every tracker. The words <code>author</code>, <code>maintainer</code> and <code>operator</code> stay plain strings.</li>
   </ul>
   <pre data-lang="toml"><code>[run]

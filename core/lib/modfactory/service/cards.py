@@ -62,7 +62,7 @@ class Cards:
         if not self._may_reply(job, step, login):
             return "stray", (move, f"Only {self._audience(job, self._who_of(job, step))} "
                                    f"may answer `{name}`.")
-        tracker = self.tracker.of(job["issue"])
+        tracker: Tracker = self.tracker.of(job["issue"])
         outcomes: list[str] = board.drag_outcomes(self.cfg.steps, tracker.status_for, name, to)
         if len(outcomes) > 1:
             return "stray", (move, f"`{to}` could mean {' or '.join(outcomes)}, so answer in a comment "
@@ -93,7 +93,7 @@ class Cards:
 
     def _drag_choices(self, job: dict[str, Any], name: str, step: dict[str, Any]) -> str:
         """The statuses a person may move the job's card to, each with the outcome it means. Empty for none."""
-        tracker = self.tracker.of(job["issue"])
+        tracker: Tracker = self.tracker.of(job["issue"])
         if not tracker.drag_answers:
             return ""
         escalate: str = self.cfg["run"]["escalate_to"]
@@ -113,7 +113,7 @@ class Cards:
         self._place(job, name)
         if (job.get("board") or {}).get("warning"):
             return
-        tracker = self.tracker.of(job["issue"])
+        tracker: Tracker = self.tracker.of(job["issue"])
         moved: str = "This card was moved" if move.get("by") is None else (
             f"{tracker.mention(move['by']['login'], move['by'].get('name'))} moved this card")
         tracker.comment(job["issue"], (

@@ -6,6 +6,7 @@ from typing import Any
 
 from .. import config, graph
 from ..util import Refused, body, now
+from .tracker.base import Tracker
 
 COMMAND = re.compile(r"\s*/(?:m)?factory[ \t]+([a-z][a-z-]*)\b[ \t]*(.*)", re.S)
 NEEDS_TEXT = {"CHANGES", "FEEDBACK", "REJECT", "ANSWER"}
@@ -58,7 +59,7 @@ class Humans:
 
     def _audience(self, job, who):
         """Who `who` is for this job, with the author and the operator as the job's tracker shows people."""
-        tracker = self.tracker.of(job["issue"])
+        tracker: Tracker = self.tracker.of(job["issue"])
         mention = tracker.mention
         operator: str = mention(tracker.operator()) if who == "operator" else ""
         return audience(who, mention(job["author"], job.get("author_name")), operator, mention)
@@ -81,7 +82,7 @@ class Humans:
 
     def _ask(self, job, name, step):
         """Post the question where the person will see it, label the issue, and park the job."""
-        tracker = self.tracker.of(job["issue"])
+        tracker: Tracker = self.tracker.of(job["issue"])
         who: str | list[str] = self._who_of(job, step)
         open_pr: bool = bool(job["pr"] and not job["merge_sha"])
         kind, number = ("pr", job["pr"]) if open_pr and tracker.pr_threads else ("issue", job["issue"])
@@ -138,7 +139,7 @@ class Humans:
     # ---- Reading replies ---------------------------------------------------
 
     def _may_reply(self, job, step, login):
-        tracker = self.tracker.of(job["issue"])
+        tracker: Tracker = self.tracker.of(job["issue"])
         who: str | list[str] = self._who_of(job, step)
         if who == "author":
             return login == job["author"] or login == tracker.operator()

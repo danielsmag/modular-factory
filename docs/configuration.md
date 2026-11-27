@@ -1075,6 +1075,8 @@ queue = "Ready for factory"
   `issue_link = "closes"`. A Jira issue's starts with `Refs PROJ-123` and carries the key in its title.
 - `mfactory file` opens the issue on the first tracker in `kind`. `mfactory file --tracker jira "<title>"`
   chooses.
+- `[project] pr_title` and `pr_title_pattern` apply to every job's pull request, so with both trackers the
+  pattern must also accept a title without a Jira key.
 - People are named per tracker, because a GitHub login and a Jira account id can look the same:
 
   ```toml

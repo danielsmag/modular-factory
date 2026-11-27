@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import threading
 import urllib.error
 import urllib.request
@@ -14,9 +15,10 @@ from modfactory.service.tracker import jira as jira_tracker
 from modfactory.service.tracker.jira_api import Client
 from modfactory.util import Refused
 from modfactory.workspace import feeds
+from modfactory.workspace.paths import SCHEMA
 from modfactory.workspace.project import Project
 from modfactory.workspace.queue import collect_queue
-from modfactory.workspace.service import DashboardServer, Feeds, issue_response, one_handler
+from modfactory.workspace.service import DashboardServer, Feeds, handler, issue_response, one_handler
 
 TODAY = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
 
@@ -341,3 +343,49 @@ def test_drawer_opens_github_issues_in_a_jira_only_project(world):
     number = world.issue("A GitHub issue next to a Jira board")
     status, body = issue_response(Project(world.repo), str(number))
     assert status == 200 and body["title"] == "A GitHub issue next to a Jira board"
+
+
+# ---- What the plan named and the first pass missed ---------------------------------
+
+
+def test_a_gh_timeout_is_a_502_that_says_so(world):
+    world.set_gh(lambda state: state.update(slow={"issue list": 3}))
+    status, body, _ = Feeds(timeout=0.5).github_issues(Project(world.repo), "app", False)
+    assert status == 502
+    assert json.loads(body)["error"] == ("Could not load the issues from GitHub: "
+                                        "`gh issue list` did not answer within 0.5 s")
+
+
+def test_fresh_reads_a_board_again(world, base, monkeypatch):
+    jira = two_boards(world)
+    monkeypatch.setattr(feeds, "FRESH_AFTER_SECONDS", 0)
+    url = f"{base}/projects/{world.repo.name}/jira/boards/7"
+    get(url)
+    get(url)
+    assert len(jira.called("GET", "/rest/agile/1.0/board/7/issue")) == 1
+    assert get(url + "?fresh=1")[0] == 200
+    assert len(jira.called("GET", "/rest/agile/1.0/board/7/issue")) == 2
+
+
+def test_two_projects_each_use_their_own_jira_variables(world, tmp_path, monkeypatch):
+    jira = world.use_both(settings='email_env = "ALPHA_EMAIL"\ntoken_env = "ALPHA_TOKEN"')
+    beta = tmp_path / "beta"
+    shutil.copytree(world.repo, beta, symlinks=True)
+    toml = beta / "factory.toml"
+    toml.write_text(toml.read_text().replace("ALPHA_", "BETA_"))
+    monkeypatch.setenv("ALPHA_EMAIL", os.environ["JIRA_EMAIL"])
+    monkeypatch.setenv("ALPHA_TOKEN", os.environ["JIRA_API_TOKEN"])
+    file = tmp_path / "workspace.toml"
+    file.write_text(f'schema = {SCHEMA}\n\n[[projects]]\npath = "{world.repo}"\n\n[[projects]]\npath = "{beta}"\n')
+    server = DashboardServer(("127.0.0.1", 0), handler(file))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        at = f"http://127.0.0.1:{server.server_address[1]}/projects"
+        status, body, _ = get(f"{at}/{world.repo.name}/jira/boards/7")
+        assert status == 200 and json.loads(body)["board"]["id"] == 7
+        status, body, _ = get(f"{at}/beta/jira/boards/7")
+        assert status == 200 and "BETA_EMAIL and BETA_TOKEN" in json.loads(body)["note"]
+        assert len(jira.called("GET", "/rest/agile/1.0/board/7/issue")) == 1
+    finally:
+        server.shutdown()
+        server.server_close()
