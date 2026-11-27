@@ -138,7 +138,7 @@ class Cards:
         active: list[dict[str, Any]] = [
             j for j in self.store.all()
             if j["step"] not in graph.END_STATES and j["step"] in self.cfg.steps
-            and self.tracker.of(j["issue"]).status_for(j["step"]) is not None]
+            and self._card_status(j) is not None]
         if not active:
             return set()
         where: dict[Any, str] = self.tracker.statuses([j["issue"] for j in active])
@@ -153,6 +153,13 @@ class Cards:
                 if job:
                     self._settle_card(job, name, kind, data)
         return answered
+
+    def _card_status(self, job: dict[str, Any]) -> str | None:
+        """The status the job's card should be in. None for no board, or a tracker no longer in `kind`."""
+        try:
+            return self.tracker.of(job["issue"]).status_for(job["step"])
+        except Refused:
+            return None
 
     def sync_cards(self) -> bool:
         """`mfactory tracker sync`: put every unfinished job's card in its step's status. False when one failed.

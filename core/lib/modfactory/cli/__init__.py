@@ -24,6 +24,12 @@ from .parser import parser
 DASHBOARD_COMMANDS: frozenset[str] = frozenset({"dashboard", "start", "stop"})
 
 
+def _problem_lines(factory: Factory) -> None:
+    """Each tracker that could not be read while the other was, on stderr, for people and the workspace."""
+    for problem in factory.tracker.problems:
+        print(f"problem: {problem}", file=sys.stderr)
+
+
 def _stale_note(cfg, out: TextIO = sys.stdout) -> None:
     """Agents run from the generated files, so say when they no longer match factory.toml."""
     try:
@@ -241,6 +247,7 @@ def run(args: argparse.Namespace) -> int:
             _index_note(factory, sys.stderr)
             queued: tuple[list[tuple[Any, ...]], list[dict[str, Any]]] = factory.queue_and_issues()
             print(json.dumps(queue_json(*queued)))
+            _problem_lines(factory)
         elif command == "queue":
             _stale_note(cfg)
             _index_note(factory, sys.stdout)
@@ -249,6 +256,7 @@ def run(args: argparse.Namespace) -> int:
                 print("  ".join(str(cell) for cell in row))
             if not rows:
                 print(f"nothing to do: {factory.tracker.empty_note()} and no job is unfinished")
+            _problem_lines(factory)
         elif command == "create":
             job = factory.create(args.issue)
             print(f"created {job['id']} for {factory.tracker.ref(job['issue'])} at {job['step']}")

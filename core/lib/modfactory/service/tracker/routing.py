@@ -10,7 +10,7 @@ such as `pr_threads` or `operator()`, is not here: a call site asks `of(key)` fo
 from itertools import zip_longest
 from typing import Any
 
-from ...util import Refused
+from ...util import FactoryError, Refused
 from .base import LABELS, Key, Tracker, Who, key_kind, left_kind
 
 # How each tracker's pull request rule starts, so the build agent can tell which one applies.
@@ -20,9 +20,10 @@ RULE_INTRO = {"github": "If the issue is a number such as 12: ", "jira": "If the
 class Trackers:
     def __init__(self, members: list[Tracker]) -> None:
         self.members: list[Tracker] = members
-        # Filled by `queue()`: what could not be read, and the kinds of the trackers it failed for.
+        # What could not be read, and the kinds of the trackers it failed for. Filled as calls fail.
         self.problems: list[str] = []
         self.unread: set[str] = set()
+        self._errors: dict[str, FactoryError] = {}
 
     # -- the set
 
@@ -72,9 +73,36 @@ class Trackers:
         return self.of(key).issue_details(key)
 
     def queue(self) -> list[dict[str, Any]]:
-        """Every tracker's queue, taken in turn from the first: each keeps its own order, and none waits."""
-        queues: list[list[dict[str, Any]]] = [tracker.queue() for tracker in self.members]
+        """Every tracker's queue, taken in turn from the first: each keeps its own order, and none waits.
+
+        A tracker that cannot be read is left out, named in `problems` and `unread`, so the other's jobs
+        still start. When none can be read, the first failure is raised.
+        """
+        queues: list[list[dict[str, Any]]] = []
+        for tracker in self.members:
+            if tracker.kind in self.unread:
+                continue  # it already failed in this run; asking again would only wait for it again
+            try:
+                queues.append(tracker.queue())
+            except FactoryError as error:
+                self.unreadable(tracker, error)
+        if len(self.unread) == len(self.members):
+            raise self._errors[self.members[0].kind]
         return [issue for turn in zip_longest(*queues) for issue in turn if issue is not None]
+
+    def unreadable(self, tracker: Tracker, error: FactoryError) -> None:
+        """Remember that `tracker` could not be read, once, so the other tracker's jobs carry on."""
+        if tracker.kind not in self.unread:
+            self.unread.add(tracker.kind)
+            self._errors[tracker.kind] = error
+            lines: list[str] = str(error).strip().splitlines()
+            self.problems.append(f"{tracker.label}: {lines[-1] if lines else 'could not be read'}")
+
+    def reason(self, kind: str) -> str:
+        """Why the tracker of `kind` could not be read, for a job that waits on it."""
+        label: str = LABELS.get(kind, kind)
+        return next((problem.removeprefix(f"{label}: ") for problem in self.problems
+                     if problem.startswith(f"{label}: ")), "")
 
     def withdrawn(self, key: Key, queued: set[Key]) -> str | None:
         return self.of(key).withdrawn(key, queued)
@@ -128,12 +156,15 @@ class Trackers:
         self.of(key).move(key, step)
 
     def statuses(self, keys: list[Key]) -> dict[Key, str]:
-        """Where each card is, asked of each tracker for its own keys."""
+        """Where each card is, asked of each tracker for its own keys. A tracker that fails leaves its keys out."""
         out: dict[Key, str] = {}
         for tracker in self.members:
             mine: list[Key] = [key for key in keys if key_kind(key) == tracker.kind]
-            if mine:
-                out.update(tracker.statuses(mine))
+            if mine and tracker.kind not in self.unread:
+                try:
+                    out.update(tracker.statuses(mine))
+                except FactoryError as error:
+                    self.unreadable(tracker, error)
         return out
 
     def last_move(self, key: Key, status: str) -> dict[str, Any] | None:

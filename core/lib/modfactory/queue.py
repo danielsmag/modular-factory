@@ -7,8 +7,9 @@ from . import config, graph
 from .config import Config
 from .service import GitHub
 from .service.tracker import Key, Tracker, Trackers
+from .service.tracker.base import LABELS, key_kind
 from .store import Store
-from .util import Refused, now
+from .util import FactoryError, Refused, now
 
 
 class _QueueHost(Protocol):
@@ -36,6 +37,9 @@ class _QueueHost(Protocol):
     def queue_and_issues(self) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]: ...
 
     def _picks(self) -> Callable[[dict[str, Any]], bool]: ...
+
+    def _reply_note(self, job: dict[str, Any], step: dict[str, Any], tracker: Tracker,
+                    answered: bool) -> str | None: ...
 
 
 class Queue:
@@ -120,6 +124,19 @@ class Queue:
             return issue["author"]["login"] in by or bool(assigned & to)
         return picks
 
+    def _reply_note(self: _QueueHost, job: dict[str, Any], step: dict[str, Any], tracker: Tracker,
+                    answered: bool) -> str | None:
+        """`a reply is waiting`, or who a parked job waits for. None when its tracker could not be read."""
+        if answered:
+            return "a reply is waiting"
+        try:
+            if self._find_reply(job, step):
+                return "a reply is waiting"
+            return f"waiting for {self._audience(job, self._who_of(job, step))}"
+        except FactoryError as error:
+            self.tracker.unreadable(tracker, error)  # one tracker raises here, as it always has
+            return None
+
     def queue(self: _QueueHost) -> list[tuple[Any, ...]]:
         """Rows of `action issue job step note`, in the order to act on them.
 
@@ -147,6 +164,14 @@ class Queue:
         for j in sorted(jobs.values(), key=lambda j: j["id"]):
             n, name = j["issue"], j["step"]
             step = self.cfg.steps.get(name)
+            try:
+                tracker: Tracker = self.tracker.of(n)
+            except Refused:
+                owner: str | None = key_kind(n)
+                other.append(("skip", n, j["id"], name,
+                              f"its tracker, {LABELS.get(owner or '', owner)}, is not in [tracker].kind"))
+                continue
+            down: bool = tracker.kind in self.tracker.unread
             if name in graph.END_STATES:
                 if n in open_numbers:
                     other.append(("skip", n, j["id"], name,
@@ -154,14 +179,16 @@ class Queue:
             elif step is None:
                 other.append(("skip", n, j["id"], name, "factory.toml no longer has this step"))
             elif step["type"] == "human":
-                if j["id"] in answered or self._find_reply(j, step):
-                    replied.append(("resume", n, j["id"], name, "a reply is waiting"))
+                note: str | None = None if down else self._reply_note(j, step, tracker, j["id"] in answered)
+                if note is None:
+                    note = f"could not read {tracker.label}: {self.tracker.reason(tracker.kind)}"
+                if note == "a reply is waiting":
+                    replied.append(("resume", n, j["id"], name, note))
                 else:
-                    who_phrase: str = self._audience(j, self._who_of(j, step))
-                    waiting.append(("wait", n, j["id"], name, f"waiting for {who_phrase}"))
+                    waiting.append(("wait", n, j["id"], name, note))
             elif step["type"] == "verify":
                 rows.append(("resume", n, j["id"], name, "validating after " + step["after"]))
-            elif not (j["pr"] or j.get("prs")) and (gone := self.tracker.withdrawn(n, open_numbers)):
+            elif not down and not (j["pr"] or j.get("prs")) and (gone := self.tracker.withdrawn(n, open_numbers)):
                 other.append(("skip", n, j["id"], name, gone))
             else:
                 turn = running.index(j["id"]) < limit

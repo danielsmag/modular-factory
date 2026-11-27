@@ -122,6 +122,9 @@ def collect_queue(
         for (action, issue, job, step, note), meta in parsed:
             rows.append((label, action, issue, job, step, note))
             metas.append(meta)
+        # A project with two trackers still answers when one of them could not be read, and says which.
+        errors += [f"{label}: {line.removeprefix('problem: ').strip()}"
+                   for line in (result.stderr or "").splitlines() if line.startswith("problem: ")]
     if limit is not None:
         rows = cap_rows(rows, limit)
     return rows, metas, errors

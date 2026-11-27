@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from conftest import AUTO_MERGE, World
 from modfactory.util import Refused
+from modfactory.workspace.project import Project
+from modfactory.workspace.queue import collect_queue
 
 ONE = "[run]\nconcurrency = 1\n"
 
@@ -247,3 +249,15 @@ def test_the_queue_offers_only_the_issues_pick_authors_and_assignees_name(world)
                              ("new", 3, "-", "-", "Mine"), ("new", 4, "-", "-", "Assigned to me"),
                              ("new", 5, "-", "-", "Carol's")]
     assert world.job(world.create(2))["issue"] == 2                         # by number, any labeled issue runs
+
+
+def test_workspace_queue_reports_a_tracker_that_could_not_be_read(tmp_path):
+    repo = tmp_path / "app"
+    binary = repo / ".factory" / "bin" / "mfactory"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("#!/bin/sh\necho '[]'\necho 'note: generated files are older' >&2\n"
+                      "echo 'problem: Jira: could not reach Jira at https://acme.atlassian.net' >&2\n")
+    binary.chmod(0o755)
+    rows, _, errors = collect_queue([Project(repo)], lambda project: "app", None)
+    assert rows == []
+    assert errors == ["app: Jira: could not reach Jira at https://acme.atlassian.net"]

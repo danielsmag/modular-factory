@@ -338,3 +338,48 @@ def test_an_older_index_still_gives_the_page_its_one_tracker(world):
     path.write_text(json.dumps(old))
     [project] = workspace_jobs.build_snapshot([Project(world.repo)], lambda p: "app")["projects"]
     assert [entry["kind"] for entry in project["trackers"]] == ["github"]
+
+
+# ---- One tracker down -------------------------------------------------------------
+
+
+def test_a_jira_outage_does_not_stop_github_jobs(world):
+    world.use_both()
+    number = world.issue("On GitHub")
+    world.jira.ticket("In Jira")
+    world.jira.fail = ("/rest", 503)
+    res = world.cli("queue")
+    assert res.returncode == 0, res.stderr
+    assert f"new  {number}  -  -  On GitHub" in res.stdout.splitlines()
+    assert "problem: Jira: Jira answered 503" in res.stderr
+
+
+def test_a_job_whose_tracker_is_down_waits_with_the_reason(world):
+    world.use_both(extra=SPEC_APPROVAL)
+    key = world.jira.ticket()
+    job = world.create(key)
+    world.play(job, until="spec-approval")
+    number = world.issue("On GitHub")
+    world.jira.fail = ("/rest", 503)
+    rows = world.queue()
+    [row] = [row for row in rows if row[2] == job]
+    assert row[:4] == ("wait", key, job, "spec-approval")
+    assert row[4].startswith("could not read Jira: Jira answered 503")
+    assert ("new", number, "-", "-", "On GitHub") in rows
+
+
+def test_every_tracker_down_still_fails(world):
+    world.use_both()
+    world.issue()
+    world.jira.fail = ("/rest", 503)
+    world.set_gh(lambda state: state.update(fail="issue list"))
+    assert world.cli("queue").returncode != 0
+
+
+def test_a_job_from_a_removed_tracker_is_skipped(world):
+    world.use_both()
+    key = world.jira.ticket()
+    job = world.create(key)
+    world.configure("")  # back to GitHub issues only
+    rows = world.queue()
+    assert ("skip", key, job, "intake", "its tracker, Jira, is not in [tracker].kind") in rows

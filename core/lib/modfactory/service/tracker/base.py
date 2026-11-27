@@ -240,3 +240,10 @@ class OneTracker:
     @property
     def unread(self) -> set[str]:
         return set()
+
+    def reason(self, kind: str) -> str:
+        return ""
+
+    def unreadable(self, tracker: Any, error: Exception) -> None:
+        """One tracker that cannot be read stops the command, as it always has."""
+        raise error
