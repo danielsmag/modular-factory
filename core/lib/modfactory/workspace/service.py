@@ -21,7 +21,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from typing import TextIO
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from .. import activity
 from ..config import Config
@@ -154,9 +154,73 @@ def solo(repo: Path) -> Workspace:
     return Workspace(resolved / FILE, [Project(resolved)])
 
 
+# One route's answer: status, body and content type.
+Reply = tuple[HTTPStatus, bytes | str, str]
+# A route reads the workspace, the path's named groups and the query string.
+Route = tuple[re.Pattern[str], Callable[[Workspace, re.Match[str], dict[str, list[str]]], Reply]]
+JSON: str = "application/json"
+NOT_FOUND: Reply = (HTTPStatus.NOT_FOUND, "not found", "text/plain")
+
+
+def json_reply(body: object, status: HTTPStatus = HTTPStatus.OK) -> Reply:
+    return status, json.dumps(body), JSON
+
+
+def dispatch(routes: list[Route], workspace: Workspace, path: str, query: dict[str, list[str]]) -> Reply:
+    """The answer of the first route whose pattern matches the whole path. 404 when none does."""
+    for pattern, answer in routes:
+        found: re.Match[str] | None = pattern.fullmatch(path)
+        if found:
+            return answer(workspace, found, query)
+    return NOT_FOUND
+
+
+def _routes(page: bytes, cache: QueueCache) -> list[Route]:
+    """Every page and JSON route the dashboard answers. Each one only reads."""
+
+    def index(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        return HTTPStatus.OK, page, "text/html"
+
+    def projects(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        return json_reply(workspace.snapshot())
+
+    def queue(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        return json_reply(cache.get())
+
+    def issue(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        project: Project | None = workspace.project(found["project"])
+        if project is None or not ISSUE_KEY.fullmatch(found["ref"]):
+            return NOT_FOUND
+        status, body = issue_response(project, found["ref"])
+        return json_reply(body, status)
+
+    def activity(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        project: Project | None = workspace.project(found["project"])
+        body: dict[str, object] | None = job_activity_response(project, found["job"]) if project else None
+        return NOT_FOUND if body is None else json_reply(body)
+
+    def job_file(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        project: Project | None = workspace.project(found["project"])
+        if project is None:
+            return NOT_FOUND
+        root: Path = project.jobs_dir.resolve()
+        target: Path = (root / found["path"]).resolve()
+        if target.is_relative_to(root) and target.is_file() and target.suffix in SERVED:
+            return HTTPStatus.OK, target.read_bytes(), SERVED[target.suffix]
+        return NOT_FOUND
+
+    return [
+        (re.compile(r"/(?:index\.html)?"), index),
+        (re.compile(r"/projects\.json"), projects),
+        (re.compile(r"/queue\.json"), queue),
+        (re.compile(r"/projects/(?P<project>[^/]+)/issues/(?P<ref>.+)"), issue),
+        (re.compile(r"/projects/(?P<project>[^/]+)/jobs/(?P<job>.+)/activity"), activity),
+        (re.compile(r"/projects/(?P<project>[^/]+)/jobs/(?P<path>.+)"), job_file),
+    ]
+
+
 def _handler(load: Callable[[], Workspace]) -> type[BaseHTTPRequestHandler]:
-    page: bytes = dashboard_page()
-    cache: QueueCache = QueueCache(load)
+    routes: list[Route] = _routes(dashboard_page(), QueueCache(load))
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "mfactory-workspace"
@@ -182,50 +246,12 @@ def _handler(load: Callable[[], Workspace]) -> type[BaseHTTPRequestHandler]:
             if host not in ("127.0.0.1", "localhost", "[::1]"):
                 self.send("forbidden", "text/plain", HTTPStatus.FORBIDDEN)
                 return
-            path: str = unquote(urlsplit(self.path).path)
+            parts = urlsplit(self.path)
             try:
-                workspace: Workspace = load()
-                if path in ("/", "/index.html"):
-                    self.send(page, "text/html")
-                    return
-                if path == "/projects.json":
-                    self.send(json.dumps(workspace.snapshot()), "application/json")
-                    return
-                if path == "/queue.json":
-                    self.send(json.dumps(cache.get()), "application/json")
-                    return
-                if path.startswith("/projects/"):
-                    rest: str = path.removeprefix("/projects/")
-                    issue_ident, issue_separator, issue_ref = rest.partition("/issues/")
-                    if issue_separator and "/" not in issue_ident:
-                        issue_project: Project | None = workspace.project(issue_ident)
-                        if issue_project is None or not ISSUE_KEY.fullmatch(issue_ref):
-                            self.send("not found", "text/plain", HTTPStatus.NOT_FOUND)
-                            return
-                        status: HTTPStatus
-                        issue_body: dict[str, object]
-                        status, issue_body = issue_response(issue_project, issue_ref)
-                        self.send(json.dumps(issue_body), "application/json", status)
-                        return
-                    ident, separator, job_path = rest.partition("/jobs/")
-                    project: Project | None = workspace.project(ident) if separator else None
-                    if project is not None and job_path.endswith("/activity"):
-                        body: dict[str, object] | None = job_activity_response(project, job_path[: -len("/activity")])
-                        if body is None:
-                            self.send("not found", "text/plain", HTTPStatus.NOT_FOUND)
-                            return
-                        self.send(json.dumps(body), "application/json")
-                        return
-                    if project is not None:
-                        root: Path = project.jobs_dir.resolve()
-                        target: Path = (root / job_path).resolve()
-                        if target.is_relative_to(root) and target.is_file() and target.suffix in SERVED:
-                            self.send(target.read_bytes(), SERVED[target.suffix])
-                            return
+                status, body, kind = dispatch(routes, load(), unquote(parts.path), parse_qs(parts.query))
             except FactoryError as error:
-                self.send(json.dumps({"error": str(error)}), "application/json", HTTPStatus.INTERNAL_SERVER_ERROR)
-                return
-            self.send("not found", "text/plain", HTTPStatus.NOT_FOUND)
+                status, body, kind = json_reply({"error": str(error)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            self.send(body, kind, status)
 
     return Handler
 
