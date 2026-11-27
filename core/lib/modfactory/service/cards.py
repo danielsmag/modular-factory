@@ -30,7 +30,7 @@ class Cards:
         says elsewhere. `reply`: a person's move answers the step, with `(outcome, text, login, comment id)`.
         `stray`: a person's move that is no answer, with `(the move, why)`.
         """
-        expected: str | None = self.tracker.status_for(name)
+        expected: str | None = self.tracker.of(job["issue"]).status_for(name)
         if expected is None or status is None or _same(status, expected):
             return "ok", None
         left: object = (job.get("board") or {}).get("status")
@@ -59,21 +59,22 @@ class Cards:
         if step.get("replies") == "tool":
             return "stray", (move, f"`{name}` is answered in the coding tool only: {commands}")
         if not self._may_reply(job, step, login):
-            return "stray", (move, f"Only {self._audience(job, step.get('who', 'maintainer'))} "
+            return "stray", (move, f"Only {self._audience(job, self._who_of(job, step))} "
                                    f"may answer `{name}`.")
-        outcomes: list[str] = board.drag_outcomes(self.cfg.steps, self.tracker.status_for, name, to)
+        tracker = self.tracker.of(job["issue"])
+        outcomes: list[str] = board.drag_outcomes(self.cfg.steps, tracker.status_for, name, to)
         if len(outcomes) > 1:
             return "stray", (move, f"`{to}` could mean {' or '.join(outcomes)}, so answer in a comment "
                                    f"instead: {commands}")
         if not outcomes:
-            columns: str = self._drag_choices(name, step)
+            columns: str = self._drag_choices(job, name, step)
             how: str = f"Move the card to {columns}, or comment: {commands}" if columns else f"Comment: {commands}"
             return "stray", (move, f"`{to}` is not an answer to `{name}`. {how}")
         outcome: str = outcomes[0]
         text, comment_id = self._drag_words(job, login)
         if not text and outcome in NEEDS_TEXT:
             if outcome == "REJECT":
-                text = f"Moved the card to `{to}` on the {self.tracker.label} board."
+                text = f"Moved the card to `{to}` on the {tracker.label} board."
             elif not (outcome == "FEEDBACK" and name == self.cfg["run"]["escalate_to"]):
                 return "stray", (move, f"{outcome} needs words: say them in a comment, then move the card to "
                                        f"`{to}` again. Or comment `/mfactory {outcome.lower()} <your words>`.")
@@ -89,13 +90,14 @@ class Cards:
                 return comment["body"].strip(), comment["id"]
         return "", None
 
-    def _drag_choices(self, name: str, step: dict[str, Any]) -> str:
-        """The statuses a person may move the card to, each with the outcome it means. Empty for none."""
-        if not self.tracker.drag_answers:
+    def _drag_choices(self, job: dict[str, Any], name: str, step: dict[str, Any]) -> str:
+        """The statuses a person may move the job's card to, each with the outcome it means. Empty for none."""
+        tracker = self.tracker.of(job["issue"])
+        if not tracker.drag_answers:
             return ""
         escalate: str = self.cfg["run"]["escalate_to"]
         shown: list[str] = []
-        for status, outcomes in board.drags(self.cfg.steps, self.tracker.status_for, name).items():
+        for status, outcomes in board.drags(self.cfg.steps, tracker.status_for, name).items():
             if len(outcomes) != 1 or outcomes[0] == "ANSWER":
                 continue  # ambiguous, or a step a plain comment already answers
             outcome: str = outcomes[0]
@@ -110,11 +112,12 @@ class Cards:
         self._place(job, name)
         if (job.get("board") or {}).get("warning"):
             return
+        tracker = self.tracker.of(job["issue"])
         moved: str = "This card was moved" if move.get("by") is None else (
-            f"{self.tracker.mention(move['by']['login'], move['by'].get('name'))} moved this card")
-        self.tracker.comment(job["issue"], (
+            f"{tracker.mention(move['by']['login'], move['by'].get('name'))} moved this card")
+        tracker.comment(job["issue"], (
             f"{NOTE_HEADING}\n\n{moved} to `{move['to']}`. Job `{job['id']}` is at step "
-            f"`{name}`, so the card is back in `{self.tracker.status_for(name)}`.\n\n{why}"))
+            f"`{name}`, so the card is back in `{tracker.status_for(name)}`.\n\n{why}"))
 
     def _settle_card(self, job: dict[str, Any], name: str, kind: str, data: Any) -> None:
         """Act on a card that is out of place and answers nothing: follow the mapping, or move it back."""
@@ -135,7 +138,7 @@ class Cards:
         active: list[dict[str, Any]] = [
             j for j in self.store.all()
             if j["step"] not in graph.END_STATES and j["step"] in self.cfg.steps
-            and self.tracker.status_for(j["step"]) is not None]
+            and self.tracker.of(j["issue"]).status_for(j["step"]) is not None]
         if not active:
             return set()
         where: dict[Any, str] = self.tracker.statuses([j["issue"] for j in active])
@@ -158,12 +161,12 @@ class Cards:
         """
         jobs: list[dict[str, Any]] = [j for j in self.store.all()
                                       if j["step"] not in graph.END_STATES and j["step"] in self.cfg.steps]
-        mapped: list[Any] = [j["issue"] for j in jobs if self.tracker.status_for(j["step"]) is not None]
+        mapped: list[Any] = [j["issue"] for j in jobs if self.tracker.of(j["issue"]).status_for(j["step"]) is not None]
         where: dict[Any, str] = self.tracker.statuses(mapped) if mapped else {}
         fine: bool = True
         for j in jobs:
             head: str = f"{self.tracker.ref(j['issue'])}  {j['id']}  {j['step']}"
-            expected: str | None = self.tracker.status_for(j["step"])
+            expected: str | None = self.tracker.of(j["issue"]).status_for(j["step"])
             current: str | None = where.get(j["issue"])
             if expected is None:
                 self.say(f"skip   {head}  no status for this step")

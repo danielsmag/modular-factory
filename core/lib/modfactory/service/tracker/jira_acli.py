@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 from typing import Any
 
-from ... import board
+from ... import board, config
 from ...util import Refused, run
 from . import adf
 from .base import Key
@@ -290,7 +290,7 @@ class AcliJiraTracker(JiraTracker):
         warn(f"Jira through acli: a moved card is not an answer, and {LIMITS}")
         needy: list[str] = [name for name, step in self.steps.items()
                             if step.get("type") == "human" and step.get("enabled", True)
-                            and step.get("who", "maintainer") == "maintainer"]
+                            and config.who_for(step, "jira") == "maintainer"]
         if needy and not self.maintainers:
             warn("Jira through acli cannot tell who may be assigned an issue: set [tracker.jira].maintainers, "
                  f"or only the operator can answer {', '.join(needy)}")

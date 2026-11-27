@@ -1,11 +1,15 @@
 """One project that takes jobs from GitHub issues and a Jira board at once."""
 
+import json
+
 import pytest
 from conftest import JIRA_COLUMNS
 from modfactory import config
 from modfactory.service import tracker as trackers
 from modfactory.service.tracker import GitHubTracker, JiraTracker, Trackers
-from modfactory.util import ConfigError, Refused
+from modfactory.util import MARKER, ConfigError, Refused
+from modfactory.workspace import jobs as workspace_jobs
+from modfactory.workspace.project import Project
 
 BOTH = """
 [tracker]
@@ -216,3 +220,121 @@ def test_board_member_and_members(world):
     assert found.board_member() is found.member("jira")
     with pytest.raises(Refused, match="gitlab"):
         found.member("gitlab")
+
+
+# ---- GitHub and Jira jobs side by side --------------------------------------------
+
+SPEC_APPROVAL = "[steps.spec-approval]\nenabled = true\n"
+
+
+def side_by_side(world, until="spec-approval", extra=SPEC_APPROVAL):
+    """A job from a GitHub issue and one from a Jira card, both played to `until`."""
+    world.use_both(extra=extra)
+    number, key = world.issue("On GitHub"), world.jira.ticket("In Jira")
+    github_job, jira_job = world.create(number), world.create(key)
+    world.play(github_job, until)
+    world.play(jira_job, until)
+    return github_job, number, jira_job, key
+
+
+def test_github_and_jira_jobs_run_side_by_side(world):
+    github_job, number, jira_job, key = side_by_side(world)
+    assert world.job(github_job)["step"] == world.job(jira_job)["step"] == "spec-approval"
+    assert world.comments(number)[-1].startswith(f"{MARKER}\n### Factory: approve the spec before it is built")
+    assert "factory:needs-human" in world.labels(number)
+    assert world.jira.status(key) == "Spec approval"
+    assert any("approve the spec before it is built" in text for text in world.jira.comments(key))
+
+
+def test_each_job_reads_replies_from_its_own_tracker(world):
+    github_job, number, jira_job, key = side_by_side(world)
+    world.comment(number, "/mfactory approve", "maintainer")
+    assert world.next(github_job)[0] == f"{github_job} #{number}: spec-approval APPROVE -> build"
+    assert world.next(jira_job)[0].startswith("wait ")
+    world.jira.drag(key, "Build", "maint")
+    assert world.next(jira_job)[0] == f"{jira_job} {key}: spec-approval APPROVE -> build"
+
+
+def test_pull_request_rules_follow_the_job(world):
+    github_job, number, jira_job, key = side_by_side(world, until="ready-to-merge", extra="")
+    assert world.job(github_job)["step"] == world.job(jira_job)["step"] == "ready-to-merge"
+    titles = {pr["headRefName"]: pr["title"] for pr in world.gh["prs"].values()}
+    assert f"[{key}]" in titles[world.job(jira_job)["branch"]]
+    assert key in world.job(jira_job)["branch"]
+    assert "[" not in titles[world.job(github_job)["branch"]]
+
+
+def test_a_jira_pull_request_still_starts_with_refs_when_github_closes(world):
+    world.use_both()
+    path = world.repo / "factory.toml"
+    path.write_text(path.read_text().replace("[project]\n", '[project]\nissue_link = "closes"\n', 1))
+    key = world.jira.ticket()
+    job = world.create(key)
+    world.play(job, until="build")
+    world.build(job)
+
+    def wrong_body(state):
+        for pr in state["prs"].values():
+            pr["body"] = "Closes it"
+    world.set_gh(wrong_body)
+    with pytest.raises(Refused, match=f"body must start with `Refs {key}`"):
+        world.done(job)
+
+
+def test_agent_issue_line_names_the_tracker_only_with_two(world):
+    world.use_both()
+    key, number = world.jira.ticket(), world.issue()
+    assert f"Issue: {key} (Jira)." in "\n".join(world.next(world.create(key)))
+    assert f"Issue: #{number} (GitHub)." in "\n".join(world.next(world.create(number)))
+
+
+def test_jobs_and_index_record_their_tracker(world):
+    github_job, _, jira_job, _ = side_by_side(world, until="intake", extra="")
+    assert world.job(github_job)["tracker"] == "github"
+    assert world.job(jira_job)["tracker"] == "jira"
+    index = json.loads((world.repo / ".factory" / "jobs" / "index.json").read_text())
+    assert [entry["kind"] for entry in index["trackers"]] == ["github", "jira"]
+    assert index["trackers"][1]["enqueue"].startswith("Move a card to `Ready for factory`")
+    assert index["tracker"]["kind"] == "github"
+
+
+def test_people_tables_filter_each_tracker(world):
+    world.use_both(extra='[run]\nauthors = { github = ["alice"] }\n')
+    mine, other = world.issue("By alice", author="alice"), world.issue("By bob", author="bob")
+    key = world.jira.ticket("By bob, in Jira", reporter="bob")
+    fresh = [row[1] for row in world.queue() if row[0] == "new"]
+    assert mine in fresh and key in fresh
+    assert other not in fresh
+
+
+def test_jira_jobs_in_flight_survive_adding_github(world):
+    world.use_jira(extra=SPEC_APPROVAL)
+    key = world.jira.ticket()
+    job = world.create(key)
+    world.play(job, until="spec-approval")
+    path = world.dir(job) / "job.json"
+    old = json.loads(path.read_text())
+    old.pop("tracker", None)  # a job from before both trackers
+    path.write_text(json.dumps(old))
+    world.use_both(extra=SPEC_APPROVAL)
+    assert ("wait", key, job, "spec-approval") == world.queue()[0][:4]
+    world.jira.drag(key, "Build", "maint")
+    assert world.next(job)[0] == f"{job} {key}: spec-approval APPROVE -> build"
+
+
+def test_the_workspace_passes_both_trackers_to_the_page(world):
+    world.use_both()
+    world.create(world.jira.ticket())
+    [project] = workspace_jobs.build_snapshot([Project(world.repo)], lambda p: "app")["projects"]
+    assert [entry["kind"] for entry in project["trackers"]] == ["github", "jira"]
+    assert project["jobs"][0]["tracker"] == "jira"
+
+
+def test_an_older_index_still_gives_the_page_its_one_tracker(world):
+    world.start(until="spec")
+    path = world.repo / ".factory" / "jobs" / "index.json"
+    old = json.loads(path.read_text())
+    del old["trackers"]
+    path.write_text(json.dumps(old))
+    [project] = workspace_jobs.build_snapshot([Project(world.repo)], lambda p: "app")["projects"]
+    assert [entry["kind"] for entry in project["trackers"]] == ["github"]

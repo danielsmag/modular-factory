@@ -130,7 +130,11 @@ class Store:
             "concurrency": cfg["run"]["concurrency"],
             "labels": cfg["labels"],
             # Where jobs come from, for the page's wording. Read from factory.toml; the tracker is not asked.
-            "tracker": {"kind": tracker.kind, "label": tracker.label, "enqueue": tracker.enqueue_hint()},
+            # `tracker` is the first, for dashboards older than two trackers.
+            "tracker": {"kind": tracker.primary.kind, "label": tracker.primary.label,
+                        "enqueue": tracker.primary.enqueue_hint()},
+            "trackers": [{"kind": member.kind, "label": member.label, "enqueue": member.enqueue_hint()}
+                         for member in tracker.members],
             "plan_usage": plan_usage.read(),
             "jobs": [dict(job, files=self.files(job["id"])) for job in self.all()],
         }
