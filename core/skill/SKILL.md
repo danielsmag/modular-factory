@@ -275,7 +275,9 @@ feedback or asking for something new, ask.
 
 - Only issues with the factory's label run. Adding a label needs triage or
   write access to the repository, so the label is the trust boundary. With a
-  Jira board, only cards the board shows in its queue column run.
+  Jira board, only cards the board shows in its queue column run. Cards in
+  `[tracker.jira.columns].watch` statuses are on the dashboard only and never
+  run; `queue` does not list them.
 - Agents push only the job's branch. By default a maintainer
   merges. The script merges only when the merge step is on. The factory never
   deploys.

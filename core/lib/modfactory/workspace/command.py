@@ -47,6 +47,7 @@ def workspace_command(args: argparse.Namespace) -> int:
         rows: list[tuple[str, str, str, str, str, str]]
         errors: list[str]
         rows, _metas, errors = group.queue(args.concurrency)
+        rows = [row for row in rows if row[1] != "watch"]  # watched cards are for the dashboard, never run
         for row in rows:
             print("  ".join(row))
         if not rows and not errors:

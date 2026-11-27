@@ -239,6 +239,7 @@ all = ["all"]
 #
 # [tracker.jira.columns]
 # queue = "Ready for factory"
+# watch = ["Backlog"]          # shown on the dashboard only, never built
 # intake = "Intake"
 # ask-author = "Needs info"
 # spec = "Spec"

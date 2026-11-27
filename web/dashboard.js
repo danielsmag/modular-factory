@@ -188,13 +188,13 @@ function queueMatches(row) {
   const labels = Array.isArray(row.labels) ? row.labels : [];
   return [row.project, row.projectName, row.title, row.note, issueRef(row.issue), row.action, row.job, row.step, row.author, ...labels].some((value) => String(value || "").toLowerCase().includes(q));
 }
-function queueCards(rows, jobList) {
+function queueCards(rows, jobList, actions = ["new", "hold"]) {
   const ids = new Set(jobList.map((job) => job.id));
   const issues = new Set(jobList.map((job) => String(job.issue)));
   const seen = new Set();
   const out = [];
   for (const row of rows) {
-    if (row.action !== "new" && row.action !== "hold") continue;
+    if (!actions.includes(row.action)) continue;
     if (row.job && row.job !== "-" && ids.has(row.job)) continue;
     if (issues.has(String(row.issue))) continue;
     const key = String(row.issue);
@@ -328,11 +328,11 @@ function unionColumns(projects, allJobs) {
   if (stray.length) add({ id: "other", label: "Other", cls: "", steps: stray });
   return merged;
 }
-function queueFor(projects) {
+function queueFor(projects, actions) {
   const rows = [];
   projects.forEach((project) => {
     const mine = state.queueRows.filter((row) => row.project === project.id);
-    queueCards(mine, project.jobs || []).forEach((row) => {
+    queueCards(mine, project.jobs || [], actions).forEach((row) => {
       const copy = Object.assign({}, row);
       copy.projectName = projectLabel(project);
       rows.push(copy);
@@ -348,10 +348,14 @@ function boardColumns(all) {
     : unionColumns(projects, all);
   const queued = queueFor(projects);
   if (queued.length) cols.unshift({ id: "queue", label: "Queue", cls: "", steps: [], queue: queued });
+  // Cards in [tracker.jira.columns].watch statuses: shown as coming up, never built.
+  const watched = queueFor(projects, ["watch"]);
+  if (watched.length) cols.unshift({ id: "watching", label: "Watching", cls: "", steps: [], queue: watched });
   return cols;
 }
 function columnWho(col) {
   if (col.id === "queue") return "not a job yet";
+  if (col.id === "watching") return "never built";
   if (col.id === "needs-you" || col.id === "other" || col.id === "done") return col.steps.join(" · ");
   return col.steps.slice(1).join(" · ");
 }
@@ -1198,7 +1202,7 @@ function queueCard(row) {
     },
   },
     el("div", { class: "card-top" },
-      el("span", { class: "num", text: who + (row.action || "new") }),
+      el("span", { class: "num", text: who + (row.action === "watch" ? row.note : row.action || "new") }),
       el("span", { class: "flag", text: issueRef(row.issue) })),
     el("p", { class: "feature", text: row.title || row.note || ("issue " + issueRef(row.issue)) }),
     el("div", { class: "links" }, link(row.issue_url, "issue " + issueRef(row.issue))),

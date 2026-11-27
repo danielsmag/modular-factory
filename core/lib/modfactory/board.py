@@ -1,6 +1,7 @@
 """The pipeline on a board: which status each step's card sits in.
 
-`[tracker.jira.columns]` maps a step, an end state or `queue` to a status name. Everything here is
+`[tracker.jira.columns]` maps a step, an end state or `queue` to a status name, and may list `watch`
+statuses, whose cards are shown on the dashboard and never built. Everything here is
 read from that table and the steps of factory.toml, so no step and no column is named in code.
 """
 
@@ -10,6 +11,7 @@ from typing import Any
 from . import graph
 
 QUEUE = "queue"
+WATCH = "watch"
 
 
 def _names(value: object) -> list[str] | None:
@@ -24,6 +26,11 @@ def _names(value: object) -> list[str] | None:
 def queue_statuses(columns: dict[str, Any]) -> list[str]:
     """The statuses new jobs are picked from."""
     return _names(columns.get(QUEUE)) or []
+
+
+def watch_statuses(columns: dict[str, Any]) -> list[str]:
+    """The statuses whose cards the dashboard shows and the factory never builds."""
+    return _names(columns.get(WATCH)) or []
 
 
 def status_for(columns: dict[str, Any], step: str) -> str | None:
@@ -42,16 +49,31 @@ def problems(steps: dict[str, Any], columns: object, label: str, needs_queue: bo
     known: list[str] = [*steps, *sorted(graph.END_STATES)]
     for key, value in columns.items():
         where: str = f"[{label}].{key}"
-        if key == QUEUE:
+        if key in (QUEUE, WATCH):
             if _names(value) is None:
                 out.append(f"{where} must be a status name, or a list of them")
         elif key not in known:
             out.append(f"{where} is not a step. Steps: {', '.join(steps)}; end states: "
-                       f"{', '.join(sorted(graph.END_STATES))}; and {QUEUE}")
+                       f"{', '.join(sorted(graph.END_STATES))}; {QUEUE}; and {WATCH}")
         elif not isinstance(value, str) or not value.strip():
             out.append(f"{where} must be a status name")
+    out += _watch_overlaps(columns, label)
     if needs_queue and QUEUE not in columns:
         out.append(f"[{label}].{QUEUE} is missing: the status new jobs are picked from")
+    return out
+
+
+def _watch_overlaps(columns: dict[str, Any], label: str) -> list[str]:
+    """A watched status that new jobs are picked from, or that a job's card moves to, would be built or moved."""
+    out: list[str] = []
+    for status in watch_statuses(columns):
+        for key, value in columns.items():
+            if key == WATCH:
+                continue
+            names: list[str] = (_names(value) or []) if key == QUEUE else [value] if isinstance(value, str) else []
+            if any(_same(status, name) for name in names):
+                out.append(f"[{label}].{WATCH}: `{status}` is also [{label}].{key}, so its cards would not "
+                           "only be watched. Pick one")
     return out
 
 
