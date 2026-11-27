@@ -35,6 +35,7 @@ report_problems = false   # true opens a GitHub issue (without the queue label) 
 pick = "all"              # "mine": only issues the operator opened or is assigned to
 authors = []              # also pick issues these logins opened; "@me" is the operator
 assignees = []            # also pick issues assigned to these logins; "@me" is the operator
+# With two trackers, name people per tracker: authors = { github = ["alice"], jira = ["712020:..."] }
 
 [workspace]
 concurrency = 3           # new and resume rows across every project; workspace.toml or --concurrency overrides
@@ -44,9 +45,9 @@ commands = []             # worktree cwd; FACTORY_CHECKOUT is the main checkout;
 timeout_minutes = 30
 
 [tracker]
-kind = "github"           # where jobs come from and where people reply: "github" or "jira"
+kind = "github"           # where jobs come from and where people reply: "github", "jira", or ["github", "jira"]
 
-# Read only with kind = "jira". Pull requests stay on GitHub.
+# Read when kind includes "jira". Pull requests stay on GitHub.
 [tracker.jira]
 site = ""                 # the Jira site, such as https://acme.atlassian.net
 board = 0                 # the kanban board's id; its saved filter scopes the queue

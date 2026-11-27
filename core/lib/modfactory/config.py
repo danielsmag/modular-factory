@@ -3,7 +3,9 @@
 import json
 import re
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from . import board, graph
 from .util import CORE, ConfigError, Refused, adapters_dir
@@ -386,6 +388,28 @@ def a_login_list(value: object) -> str | None:
 
 
 TRACKER_KINDS = ("github", "jira")
+KIND_RULE = 'must be "github", "jira", or a list of them, such as ["github", "jira"]'
+
+
+def tracker_kinds(raw: object) -> list[str]:
+    """The trackers `[tracker].kind` names, in order: one name, or a list of distinct names. Empty for junk."""
+    names: list[object]
+    if isinstance(raw, str):
+        names = [raw]
+    elif isinstance(raw, list):
+        names = list(raw)
+    else:
+        return []
+    kinds: list[str] = [name for name in names if isinstance(name, str) and name in TRACKER_KINDS]
+    if not kinds or len(kinds) != len(names) or len(set(kinds)) != len(kinds):
+        return []
+    return kinds
+
+
+def a_tracker_kind(value: object) -> str | None:
+    return None if tracker_kinds(value) else KIND_RULE
+
+
 ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # A Jira site: https, or plain http for a server on this machine.
 SITE = re.compile(r"https://[A-Za-z0-9.-]+(?::\d+)?/?|http://(?:127\.0\.0\.1|localhost)(?::\d+)?/?")
@@ -445,6 +469,54 @@ def a_jira_account_list(value: object) -> str | None:
                                        for item in value):
         return None
     return 'must be a list of Jira account ids or "@me"'
+
+
+# With two trackers, people are named per tracker: a GitHub login and a Jira account id can look the same.
+PEOPLE_CHECKS = {"github": a_login_list, "jira": a_jira_account_list}
+WHO_CHECKS = {"github": a_who, "jira": a_jira_who}
+
+
+def people_for(value: object, kind: str) -> list[str]:
+    """The people a list, or a table of lists per tracker, names for one tracker. Empty when it names none."""
+    if isinstance(value, dict):
+        value = value.get(kind)
+    return [str(item) for item in value] if isinstance(value, list) else []
+
+
+def who_for(step: dict[str, Any], kind: str) -> str | list[str]:
+    """Who a human step waits for on one tracker: a role, or the people named for that tracker."""
+    who: object = step.get("who", "maintainer")
+    if isinstance(who, dict):
+        who = who.get(kind, "maintainer")
+    if isinstance(who, list):
+        return [str(item) for item in who]
+    return who if isinstance(who, str) else "maintainer"
+
+
+def _per_tracker_problems(label: str, key: str, value: object, kinds: list[str],
+                          checks: dict[str, Callable[[object], str | None]], every: bool) -> list[str]:
+    """A people list as a table per tracker: `key = { github = [...], jira = [...] }`.
+
+    `every` asks for an entry per tracker, for a step that must know whom to ask on each.
+    """
+    example: str = f"{key} = {{ {', '.join(f'{kind} = [...]' for kind in kinds)} }}"
+    if isinstance(value, str) and value in WHO_WORDS and every:
+        return []
+    if value == [] and not every:
+        return []  # nobody named, as in the defaults: no filter on either tracker
+    if not isinstance(value, dict):
+        return [f"[{label}].{key} must name people per tracker when the project has two: {example} "
+                f"(got {json.dumps(value)})"]
+    out: list[str] = []
+    for name, entry in value.items():
+        if name not in kinds:
+            out.append(f"[{label}].{key}.{name} is not a tracker of this project. Trackers: {', '.join(kinds)}")
+        elif (problem := checks[name](entry)):
+            out.append(f"[{label}].{key}.{name} {problem} (got {json.dumps(entry)})")
+    missing: list[str] = [kind for kind in kinds if kind not in value]
+    if every and missing:
+        out.append(f"[{label}].{key} must name every tracker: {', '.join(missing)} is missing ({example})")
+    return out
 
 
 TABLES = {
@@ -533,21 +605,36 @@ def check(cfg):
     if d.get("schema") != SCHEMA:
         out.append(f"schema = {d.get('schema')!r}, but this factory reads schema {SCHEMA}. "
                    "Run `mfactory upgrade`, or set schema to match.")
-    # People are named by GitHub login, or by Jira account id when Jira is the tracker.
-    uses_jira: bool = isinstance(d.get("tracker"), dict) and d["tracker"].get("kind") == "jira"
-    tables = TABLES if not uses_jira else TABLES | {
-        "run": TABLES["run"] | {"authors": a_jira_account_list, "assignees": a_jira_account_list}}
-    human_keys = STEP_KEYS["human"] | ({"who": a_jira_who} if uses_jira else {})
+    # People are named by GitHub login, or by Jira account id when Jira is the tracker. With both
+    # trackers, each list is a table per tracker, checked below.
+    kinds: list[str] = tracker_kinds(d["tracker"].get("kind")) if isinstance(d.get("tracker"), dict) else []
+    uses_jira: bool = "jira" in kinds
+    both: bool = len(kinds) > 1
+    def skip(value: object) -> str | None:
+        """Checked per tracker below."""
+        return None
+
+    run_people: dict[str, Callable[[object], str | None]] = (
+        {"authors": skip, "assignees": skip} if both
+        else {"authors": a_jira_account_list, "assignees": a_jira_account_list} if uses_jira else {})
+    tables = TABLES | {"run": TABLES["run"] | run_people}
+    human_keys = STEP_KEYS["human"] | ({"who": skip} if both else {"who": a_jira_who} if uses_jira else {})
     for name, spec in tables.items():
         test_table(name, d.get(name, {}), spec)
+    run_table: object = d.get("run")
+    if both and isinstance(run_table, dict):
+        for key in ("authors", "assignees"):
+            if key in run_table:
+                out.extend(_per_tracker_problems("run", key, run_table[key], kinds, PEOPLE_CHECKS, every=False))
     if cfg.sources.get(("workspace", "concurrency")) == FILE:
         out.append("[workspace].concurrency is the cap across projects. Set it in workspace.toml, "
                    "or pass --concurrency to `mfactory workspace queue`.")
-    out.extend(_branch_pattern_gaps(d.get("project"), d.get("steps"), _KEY_SAMPLE if uses_jira else ""))
+    for tag in ([""] if not uses_jira else [_KEY_SAMPLE] if not both else ["", _KEY_SAMPLE]):
+        out.extend(_branch_pattern_gaps(d.get("project"), d.get("steps"), tag))
 
     # the tracker
     tracker = d.get("tracker", {})
-    test_table("tracker", tracker, {"kind": one_of(*TRACKER_KINDS), "jira": lambda value: None})
+    test_table("tracker", tracker, {"kind": a_tracker_kind, "jira": lambda value: None})
     jira = tracker.get("jira", {}) if isinstance(tracker, dict) else {}
     test_table("tracker.jira", jira, JIRA_KEYS)
     if isinstance(tracker, dict) and isinstance(jira, dict):
@@ -562,7 +649,7 @@ def check(cfg):
             if not jira.get("board"):
                 out.append("[tracker.jira].board is missing: the id of the kanban board, "
                            "the number in its address")
-            if isinstance(d.get("project"), dict) and d["project"].get("issue_link") == "closes":
+            if not both and isinstance(d.get("project"), dict) and d["project"].get("issue_link") == "closes":
                 out.append('[project].issue_link = "closes" needs GitHub issues: a pull request cannot '
                            'close a Jira issue. Use issue_link = "refs".')
 
@@ -596,6 +683,8 @@ def check(cfg):
         own_keys = human_keys if step["type"] == "human" else STEP_KEYS[step["type"]]
         spec = STEP_COMMON | own_keys | {"on": lambda v: None}
         test_table(label, step, spec)
+        if both and step["type"] == "human" and "who" in step:
+            out.extend(_per_tracker_problems(label, "who", step["who"], kinds, WHO_CHECKS, every=True))
         role_name: str = graph.role(name, step) if step["type"] == "agent" else ""
         if role_name == "custom" and not step.get("instructions") and not step.get("instructions_file"):
             out.append(f"[{label}].instructions is missing: say what this step's agent must do")
