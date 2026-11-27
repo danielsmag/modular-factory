@@ -56,6 +56,81 @@ def test_one_missing_credential_is_enough_to_fall_back(world):
     assert trackers.make(config.load(world.repo)).via == "acli"
 
 
+def test_a_file_email_is_enough_for_rest_when_the_token_is_set(world):
+    world.use_acli(settings='project = "PROJ"\nemail = "operator@example.test"')
+    world.monkeypatch.setenv("JIRA_API_TOKEN", "jira-token-for-tests")
+    found = trackers.make(config.load(world.repo))
+    assert found.via == "rest"
+    assert found.operator() == "op"
+    assert world.acli_calls() == []
+
+
+def test_a_file_email_wins_over_the_environment(world):
+    world.use_acli(settings='project = "PROJ"\nemail = "operator@example.test"')
+    world.monkeypatch.setenv("JIRA_EMAIL", "other@example.test")
+    world.monkeypatch.setenv("JIRA_API_TOKEN", "jira-token-for-tests")
+    found = trackers.make(config.load(world.repo))
+    assert found.via == "rest"
+    assert found.operator() == "op"
+
+
+def test_space_around_a_file_email_is_stripped(world):
+    world.use_acli(settings='project = "PROJ"\nemail = " operator@example.test "')
+    world.monkeypatch.setenv("JIRA_API_TOKEN", "jira-token-for-tests")
+    assert trackers.make(config.load(world.repo)).operator() == "op"
+
+
+def test_a_file_email_without_a_token_falls_back_to_acli(world):
+    world.use_acli(settings='project = "PROJ"\nemail = "operator@example.test"')
+    assert trackers.make(config.load(world.repo)).via == "acli"
+
+
+def test_the_token_file_wins_over_the_environment(world):
+    (world.repo / "jira-token").write_text("jira-token-for-tests\n")
+    world.use_jira(settings='token_file = "jira-token"')
+    world.monkeypatch.setenv("JIRA_API_TOKEN", "a-wrong-token")
+    found = trackers.make(config.load(world.repo))
+    assert found.via == "rest"
+    assert found.operator() == "op"
+
+
+def test_the_token_is_read_from_dotenv_when_the_environment_has_none(world):
+    world.monkeypatch.delenv("JIRA_API_TOKEN")
+    (world.repo / ".env").write_text("JIRA_API_TOKEN=jira-token-for-tests\n")
+    world.use_jira()
+    found = trackers.make(config.load(world.repo))
+    assert found.via == "rest"
+    assert found.operator() == "op"
+
+
+def test_dotenv_accepts_export_and_quotes(world):
+    world.monkeypatch.delenv("JIRA_API_TOKEN")
+    (world.repo / ".env").write_text('export JIRA_API_TOKEN="jira-token-for-tests"\n')
+    world.use_jira()
+    assert trackers.make(config.load(world.repo)).operator() == "op"
+
+
+def test_the_environment_token_wins_over_dotenv(world):
+    (world.repo / ".env").write_text("JIRA_API_TOKEN=a-wrong-token\n")
+    world.use_jira()
+    assert trackers.make(config.load(world.repo)).operator() == "op"
+
+
+def test_a_missing_token_file_is_refused_instead_of_falling_back_to_acli(world):
+    world.use_acli(settings='project = "PROJ"\ntoken_file = ".secrets/missing"')
+    with pytest.raises(Refused, match=r"\.secrets/missing"):
+        trackers.make(config.load(world.repo))
+
+
+def test_a_token_file_with_two_lines_is_refused_without_the_token(world):
+    (world.repo / "jira-token").write_text("jira-token-for-tests\nalso-secret\n")
+    world.use_jira(settings='token_file = "jira-token"')
+    with pytest.raises(Refused) as caught:
+        trackers.make(config.load(world.repo))
+    assert "jira-token-for-tests" not in str(caught.value)
+    assert "also-secret" not in str(caught.value)
+
+
 def test_without_credentials_or_acli_the_error_names_both_ways_in(world):
     world.use_jira()
     world.monkeypatch.delenv("JIRA_API_TOKEN")

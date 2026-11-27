@@ -225,8 +225,11 @@ all = ["all"]
 #
 # Jobs come from GitHub issues with the `factory` label. To take them from a
 # Jira kanban board instead, map each step to a status of the board. The
-# account and its API token come from JIRA_EMAIL and JIRA_API_TOKEN. Without
-# them the factory uses the Atlassian CLI, acli, and then needs `project`.
+# account email may be set below, or it comes from JIRA_EMAIL. The API token
+# comes from token_file, or from JIRA_API_TOKEN, or from that key in .env.
+# Never put the token itself in this file. Without an email and a token the
+# factory uses the Atlassian CLI, acli, and then needs `project`. A
+# factory.toml shared by a team leaves email and token_file empty.
 # `mfactory tracker suggest` prints the board and the columns for your steps.
 # https://danielsmag.github.io/modular-factory/docs/configuration.html#tracker-a-jira-board
 #
@@ -236,6 +239,8 @@ all = ["all"]
 # [tracker.jira]
 # site = "https://acme.atlassian.net"
 # board = 1234
+# email = "you@example.com"     # optional. Empty: JIRA_EMAIL
+# token_file = ".secrets/jira"  # optional. One line, the token only. Do not commit that file
 #
 # [tracker.jira.columns]
 # queue = "Ready for factory"

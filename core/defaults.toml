@@ -51,10 +51,13 @@ kind = "github"           # where jobs come from and where people reply: "github
 site = ""                 # the Jira site, such as https://acme.atlassian.net
 board = 0                 # the kanban board's id; its saved filter scopes the queue
 jql = ""                  # optional, ANDed with the board's filter
-email_env = "JIRA_EMAIL"         # environment variables that hold the account and its API token.
-token_env = "JIRA_API_TOKEN"     # Never put the values themselves in factory.toml
+email = ""                       # the account address. Empty: read email_env
+email_env = "JIRA_EMAIL"         # read when email is empty
+token_env = "JIRA_API_TOKEN"     # process environment, then .env, unless token_file is set
+token_file = ""                  # path to a one-line token file. Empty: token_env, then .env.
+                                 # Never put the token value itself in factory.toml
 issue_type = "Task"       # the type of an issue the factory files itself
-via = "auto"              # "rest", "acli", or "auto": REST when its credentials are set, else the Atlassian CLI
+via = "auto"              # "rest", "acli", or "auto": REST when the email and the token are found, else acli
 project = ""              # the project's key; needed with acli, which cannot read the board's filter
 maintainers = []          # Jira account ids; empty means anyone who can be assigned the issue
 # [tracker.jira.columns] maps a step, an end state or `queue` to a Jira status. It has no default.

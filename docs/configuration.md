@@ -907,12 +907,24 @@ rejected = "Rejected"
 failed = "Failed"
 ```
 
-The account and its API token come from the environment, never from `factory.toml`:
+The account email may be set in `factory.toml`. The API token never is. It comes from a file, the process environment, or `.env` next to `factory.toml`.
+
+```toml
+[tracker.jira]
+email = "you@example.com"       # optional. Empty: read email_env
+token_file = ".secrets/jira"    # optional. One line, the token only
+```
 
 ```bash
-export JIRA_EMAIL="you@example.com"
 export JIRA_API_TOKEN="..."
+# export JIRA_EMAIL="you@example.com"   # used when email above is empty
 ```
+
+When `token_file` is empty, the token is the variable named by `token_env` (default `JIRA_API_TOKEN`) in the process environment. If that variable is unset, the same key is read from `.env`. `.env` is read for that one key. It is not loaded into the environment. `export JIRA_API_TOKEN="..."` and matching quotes are accepted. `$` inside the value is not expanded.
+
+`token_file` is a path relative to the repository, an absolute path, or a path starting with `~`. The file holds the token on one line. A missing, empty, or multi-line file is an error. When `token_file` is set, the environment and `.env` are not read for the token.
+
+A `factory.toml` committed for a team leaves `email` and `token_file` empty, so each operator uses `JIRA_EMAIL` and `JIRA_API_TOKEN`, or a private `.env`. Do not commit `.env` or the token file.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -920,7 +932,9 @@ export JIRA_API_TOKEN="..."
 | `[tracker.jira] site` | | The Jira Cloud site. `https://` only. |
 | `[tracker.jira] board` | | The kanban board's id: the number in its address. Its saved filter scopes the queue. |
 | `[tracker.jira] jql` | `""` | Narrows the queue further, ANDed with the board's filter. A filter only: no `ORDER BY`. `assignee = currentUser()` keeps the queue to cards assigned to the operator. |
-| `[tracker.jira] email_env`, `token_env` | `JIRA_EMAIL`, `JIRA_API_TOKEN` | Names of the environment variables that hold the account and its API token. They are sent only to `site`. |
+| `[tracker.jira] email` | `""` | The account email. Empty: read `email_env`. |
+| `[tracker.jira] email_env`, `token_env` | `JIRA_EMAIL`, `JIRA_API_TOKEN` | Names of the environment variables. `email_env` is read when `email` is empty. `token_env` is read when `token_file` is empty, and then in `.env`. Sent only to `site`. |
+| `[tracker.jira] token_file` | `""` | Path to a file that holds the token on one line. When set, this file is the token, and the environment and `.env` are not read. |
 | `[tracker.jira] issue_type` | `Task` | The type of an issue the factory files itself (`mfactory file`, `report_problems`, a failed verify). |
 | `[tracker.jira] maintainers` | `[]` | Jira account ids that may answer a `maintainer` step. Empty: anyone who can be assigned the issue. |
 | `[tracker.jira] via` | `auto` | `rest`, `acli`, or `auto`. See [Reaching Jira](#reaching-jira-rest-or-acli). |
@@ -1019,8 +1033,9 @@ a card that is where the factory left it and no longer where the mapping says.
 
 ### Reaching Jira: REST or acli
 
-The factory reaches Jira through its REST API, with the account and token from the environment. When they
-are not there, it falls back to the Atlassian CLI, [`acli`](https://developer.atlassian.com/cloud/acli/),
+The factory reaches Jira through its REST API. The email comes from `email` or `email_env`. The token comes
+from `token_file`, or from `token_env` in the environment, or from that key in `.env`. When either is missing,
+it falls back to the Atlassian CLI, [`acli`](https://developer.atlassian.com/cloud/acli/),
 which signs in on its own:
 
 ```bash
@@ -1029,7 +1044,7 @@ acli jira auth login --web
 
 | `via` | Meaning |
 | --- | --- |
-| `auto` (default) | REST while both `JIRA_EMAIL` and `JIRA_API_TOKEN` are set. Otherwise acli, when it is installed. |
+| `auto` (default) | REST while the email and the token are both found. Otherwise acli, when it is installed. A `token_file` that is missing or unusable is an error, not a fallback. |
 | `rest` | REST only. Missing credentials are an error. |
 | `acli` | acli only, also when the credentials are set. |
 
