@@ -62,7 +62,8 @@ def board_view(client: Client, board_id: int, days: int = 14, limit: int = 300) 
         columns.append({"name": str(column.get("name") or ""), "cards": []})
         for status in column.get("statuses") or []:
             column_of.setdefault(str(status.get("id")), index)
-    jql: str = "sprint in openSprints()" if kind == "scrum" else f"statusCategory != Done OR updated >= -{days}d"
+    # One clause, in parentheses, so it reads the same however Jira joins it to the board's own filter.
+    jql: str = "sprint in openSprints()" if kind == "scrum" else f"(statusCategory != Done OR updated >= -{days}d)"
     rows, total = client.pages_with_total("GET", f"/rest/agile/1.0/board/{board_id}/issue", "issues",
                                           limit=limit, jql=jql, fields=CARD_FIELDS)
     read: list[Any] = rows[:limit]

@@ -29,6 +29,7 @@ from ..config import load as load_config
 from ..service import tracker as trackers
 from ..service.gh import GitHub
 from ..service.tracker.base import key_kind
+from ..service.tracker.jira_api import Client
 from ..util import FactoryError, Refused, dashboard_page, user_dir
 from . import feeds
 from .paths import FILE, SERVED
@@ -44,8 +45,9 @@ ISSUE_KEY: re.Pattern[str] = re.compile(r"[1-9][0-9]{0,9}|[A-Za-z][A-Za-z0-9_]{1
 BOARD_ID: re.Pattern[str] = re.compile(r"[1-9][0-9]{0,9}")
 JIRA_OFF: str = ('Jira is off for this project. Add "jira" to [tracker] kind and set [tracker.jira] site '
                  "and board in factory.toml.")
-ACLI_ONLY: str = ("Jira boards are read through Jira's REST API. Set {email} and {token} in the shell that "
-                  "starts the dashboard, then run `mfactory start dashboard` again.")
+NO_CREDENTIALS: str = ("Jira boards are read through Jira's REST API, with the account and token in the "
+                       "dashboard's environment. Set {names} in a shell, then run `mfactory stop` and "
+                       "`mfactory start dashboard` from it.")
 
 
 def _web_url(value: object) -> str | None:
@@ -179,34 +181,39 @@ class Feeds:
         self.cache: feeds.FeedCache = feeds.FeedCache(ttl=60, error_ttl=15)
         self.slow: feeds.FeedCache = feeds.FeedCache(ttl=600, error_ttl=15)
 
-    def _jira(self, project: Project) -> tuple[Any, int] | str:
-        """The project's Jira tracker and its board, or why there is none to read."""
+    def _jira(self, project: Project) -> tuple[Client, int] | str:
+        """A REST client for the project's Jira site and its board, or why there is none to read.
+
+        Boards are read through REST whenever the account and token are set, whatever `via` says: the
+        Atlassian CLI cannot read a board, and the dashboard's own environment is the one that counts.
+        """
         cfg: Config = load_config(project.path)
         if "jira" not in config.tracker_kinds(cfg["tracker"]["kind"]):
             return JIRA_OFF
-        tracker: Any = trackers.make(cfg).member("jira")
-        if tracker.via != "rest":
-            settings: dict[str, Any] = cfg["tracker"]["jira"]
-            return ACLI_ONLY.format(email=settings["email_env"], token=settings["token_env"])
-        return tracker, int(cfg["tracker"]["jira"].get("board") or 0)
+        settings: dict[str, Any] = cfg["tracker"]["jira"]
+        missing: list[str] = [settings[key] for key in ("email_env", "token_env") if not os.environ.get(settings[key])]
+        if missing:
+            return NO_CREDENTIALS.format(names=" and ".join(missing))
+        client: Client = Client(str(settings["site"]), settings["email_env"], settings["token_env"])
+        return client, int(settings.get("board") or 0)
 
     def jira_boards(self, project: Project, label: str, fresh: bool) -> Reply:
-        found: tuple[Any, int] | str = self._jira(project)
+        found: tuple[Client, int] | str = self._jira(project)
         if found == JIRA_OFF:
             return json_reply({"off": JIRA_OFF})
         if isinstance(found, str):
             return json_reply({"site": None, "configured": None, "boards": [], "note": found})
-        tracker, board = found
+        client, board = found
         return self._answer("Could not list the Jira boards", lambda: self.slow.get(
-            (label, "jira", "boards"), lambda: feeds.jira_boards(tracker.api, board), fresh))
+            (label, "jira", "boards"), lambda: feeds.jira_boards(client, board), fresh))
 
     def jira_board(self, project: Project, label: str, board_id: int, fresh: bool) -> Reply:
-        found: tuple[Any, int] | str = self._jira(project)
+        found: tuple[Client, int] | str = self._jira(project)
         if isinstance(found, str):
             return json_reply({"off": found}) if found == JIRA_OFF else json_reply({"note": found})
-        tracker, _ = found
+        client, _ = found
         return self._answer(f"Could not load board {board_id} from Jira", lambda: self.cache.get(
-            (label, "jira", board_id), lambda: feeds.jira_board(tracker.api, board_id), fresh))
+            (label, "jira", board_id), lambda: feeds.jira_board(client, board_id), fresh))
 
     def github_issues(self, project: Project, label: str, fresh: bool) -> Reply:
         gh: GitHub = GitHub(project.path)
@@ -227,8 +234,8 @@ class Feeds:
             return json_reply(read())
         except (FactoryError, subprocess.SubprocessError, OSError, ValueError) as error:
             lines: list[str] = str(error).strip().splitlines()
-            return json_reply({"error": f"{what}: {lines[-1] if lines else type(error).__name__}"},
-                              HTTPStatus.BAD_GATEWAY)
+            why: str = activity.redact(lines[-1]) if lines else type(error).__name__
+            return json_reply({"error": f"{what}: {why}"}, HTTPStatus.BAD_GATEWAY)
 
 
 def solo(repo: Path) -> Workspace:

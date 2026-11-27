@@ -15,7 +15,8 @@ from modfactory.service.tracker.jira_api import Client
 from modfactory.util import Refused
 from modfactory.workspace import feeds
 from modfactory.workspace.project import Project
-from modfactory.workspace.service import DashboardServer, issue_response, one_handler
+from modfactory.workspace.queue import collect_queue
+from modfactory.workspace.service import DashboardServer, Feeds, issue_response, one_handler
 
 TODAY = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
 
@@ -261,9 +262,61 @@ def test_acli_only_says_boards_need_rest(world, base):
 def test_missing_jira_credentials_name_the_variables(world, base, monkeypatch):
     two_boards(world)
     monkeypatch.delenv("JIRA_EMAIL")
-    status, body, _ = get(f"{base}/projects/{world.repo.name}/jira/boards/7")
-    assert status == 502 and "JIRA_EMAIL" in json.loads(body)["error"]
+    for path in ("/jira/boards", "/jira/boards/7"):
+        status, body, _ = get(f"{base}/projects/{world.repo.name}{path}")
+        note = json.loads(body)["note"]
+        assert status == 200 and "JIRA_EMAIL" in note and "JIRA_API_TOKEN" not in note, path
+        assert "`mfactory stop`" in note and "acli" not in note, path
     assert get(f"{base}/projects/{world.repo.name}/github/issues")[0] == 200
+
+
+def test_boards_list_through_rest_whenever_both_variables_are_set(world, base):
+    two_boards(world)
+    world.use_both(settings='via = "acli"\nproject = "PROJ"')  # acli for jobs; the variables are still set
+    status, body, _ = get(f"{base}/projects/{world.repo.name}/jira/boards")
+    assert status == 200 and [board["id"] for board in json.loads(body)["boards"]] == [7, 8]
+
+
+def test_error_text_sent_to_the_page_is_redacted():
+    def leak():
+        raise Refused("Jira said: token ghp_abcdefghijklmnop1234 was refused")
+    status, body, _ = Feeds._answer("Could not load board 7 from Jira", leak)
+    assert status == 502
+    assert json.loads(body)["error"] == "Could not load board 7 from Jira: Jira said: token [redacted] was refused"
+
+
+def test_workspace_problem_lines_are_redacted(tmp_path):
+    repo = tmp_path / "app"
+    binary = repo / ".factory" / "bin" / "mfactory"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("#!/bin/sh\necho '[]'\necho 'problem: Jira: refused ghp_abcdefghijklmnop1234' >&2\n")
+    binary.chmod(0o755)
+    _, _, errors = collect_queue([Project(repo)], lambda project: "app", None)
+    assert errors == ["app: Jira: refused [redacted]"]
+
+
+class Recorder:
+    """A Jira client that answers from memory and keeps the board query it was sent."""
+
+    site = "https://acme.atlassian.net"
+
+    def __init__(self):
+        self.jql = None
+
+    def get(self, path, **params):
+        if path.endswith("/configuration"):
+            return {"columnConfig": {"columns": [{"name": "To Do", "statuses": [{"id": "1"}]}]}}
+        return {"id": 7, "name": "Board", "type": "kanban"}
+
+    def pages_with_total(self, method, path, key, body=None, limit=None, **params):
+        self.jql = params["jql"]
+        return [], 0
+
+
+def test_the_kanban_query_is_one_clause():
+    found = Recorder()
+    jira_tracker.board_view(found, 7)
+    assert found.jql == "(statusCategory != Done OR updated >= -14d)"
 
 
 def test_a_board_the_account_cannot_see_is_a_502(world, base):

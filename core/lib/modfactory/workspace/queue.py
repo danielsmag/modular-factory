@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from subprocess import CompletedProcess
 from typing import TypeAlias
 
+from ..activity import redact
 from ..util import Refused, run
 from .concurrency import QueueRow, cap_rows, default_concurrency, parse_concurrency
 from .project import Project
@@ -123,7 +124,7 @@ def collect_queue(
             rows.append((label, action, issue, job, step, note))
             metas.append(meta)
         # A project with two trackers still answers when one of them could not be read, and says which.
-        errors += [f"{label}: {line.removeprefix('problem: ').strip()}"
+        errors += [f"{label}: {redact(line.removeprefix('problem: ').strip())}"
                    for line in (result.stderr or "").splitlines() if line.startswith("problem: ")]
     if limit is not None:
         rows = cap_rows(rows, limit)
