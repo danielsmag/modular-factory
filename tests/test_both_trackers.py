@@ -493,3 +493,15 @@ def test_a_github_outage_does_not_stop_jira_jobs(world):
     assert res.returncode == 0, res.stderr
     assert f"new  {key}  -  -  In Jira" in res.stdout.splitlines()
     assert "problem: GitHub:" in res.stderr
+
+
+def test_watched_jira_cards_show_with_both_trackers_and_never_run(world):
+    world.use_both(columns=JIRA_COLUMNS + 'watch = "Backlog"\n')
+    number = world.issue("On GitHub")
+    coming = world.jira.ticket("Coming up", status="Backlog")
+    res = world.cli("queue", "--json")
+    assert res.returncode == 0, res.stderr
+    rows = {row["issue"]: row for row in json.loads(res.stdout)}
+    assert rows[number]["action"] == "new"
+    assert rows[coming]["action"] == "watch" and rows[coming]["title"] == "Coming up"
+    assert coming not in world.cli("queue").stdout

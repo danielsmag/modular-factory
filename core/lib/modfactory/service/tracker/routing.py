@@ -116,6 +116,18 @@ class Trackers:
         return next((problem.removeprefix(f"{label}: ") for problem in self.problems
                      if problem.startswith(f"{label}: ")), "")
 
+    def watched(self) -> list[dict[str, Any]]:
+        """Every tracker's watched issues, for the dashboard. A tracker that cannot be read shows none."""
+        found: list[dict[str, Any]] = []
+        for tracker in self.members:
+            if tracker.kind in self.unread:
+                continue
+            try:
+                found += tracker.watched()
+            except FactoryError as error:
+                self._unreadable(tracker, error)
+        return found
+
     def withdrawn(self, key: Key, queued: set[Key]) -> str | None:
         return self.of(key).withdrawn(key, queued)
 
