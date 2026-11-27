@@ -13,7 +13,7 @@ steps, the commands that prove a build works, which model and effort each step
 uses, how often a step may send work back, and which of the project's own
 skills each agent reads.
 
-![The dashboard's board view, showing made-up sample jobs](docs/dashboard-board.png?v=2)
+![The dashboard's board view: Jira boards, GitHub issues and the factory's jobs, all made up](docs/dashboard-board.png?v=3)
 
 > **Status: not yet run inside a real tool.** The pipeline is covered by
 > automated tests that play the orchestrator and the agents against a
@@ -70,9 +70,11 @@ You answer there with a comment, such as `/mfactory changes Use the existing
 Money type`, or in your tool. Nothing else waits for it: other jobs keep
 running.
 
-Jobs can come from a Jira kanban board instead of GitHub issues: the board's
-queue column is the queue, every step's card sits in a column, and people
-reply in Jira comments or by moving the card. See
+Jobs can come from a Jira kanban board instead of, or as well as, GitHub
+issues: the board's queue column is the queue, every step's card sits in a
+column, and people reply in Jira comments or by moving the card. With
+`kind = ["github", "jira"]` both queues feed one project, and each job talks
+on its own tracker. See
 [Tracker: a Jira board](docs/configuration.md#tracker-a-jira-board).
 
 ## The pipeline is a graph you can read and change
@@ -245,12 +247,24 @@ mfactory stop
 
 The page comes with the global install (`install.sh --global`), not with each
 project. `.factory/bin/mfactory dashboard` hands off to the global `mfactory`.
-It serves a read-only page on your machine: jobs by step, with a Now panel of
-the agents still on the current step, queued issues that are not jobs yet, the
-pipeline, what each job wrote, an overview with the job table, and the merged
-configuration with the source of each value. A queued issue opens its body and
-comments. It changes nothing;
-approvals and feedback go through `/mfactory` or an issue comment.
+It serves a read-only page on your machine. Its Board has three blocks:
+
+- **Jira**: the Jira boards you choose, one or several, each drawn with its
+  columns and cards. A picker lists every board your Jira account can see; the
+  project's own board is shown until you choose.
+- **GitHub issues**: each repository's open issues, newest first, with All,
+  Assigned to me and Not in the factory.
+- **Factory**: jobs by step, with a Now panel of the agents still on the
+  current step and the queued issues that are not jobs yet.
+
+A card or an issue that is a factory job carries the job's chip. Each block
+folds, and the browser remembers the boards you chose and what you folded. The
+page also has the pipeline, what each job wrote, an overview with the job
+table, and the merged configuration with the source of each value. An issue
+opens its body and comments. It changes nothing; approvals and feedback go
+through `/mfactory` or an issue comment. The Jira block reads Jira's REST API,
+with the account email and token the factory uses. If they come from
+`JIRA_EMAIL` and `JIRA_API_TOKEN`, start the dashboard from a shell that has them.
 
 ![The dashboard's pipeline view, showing made-up sample jobs](docs/dashboard-pipeline.png?v=2)
 

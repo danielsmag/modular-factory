@@ -14,6 +14,7 @@ from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
 from ..queue import queue_json
+from ..service.tracker import Tracker
 from ..store import Store
 from ..util import ConfigError, FactoryError, Refused, find_repo, global_binary, has_dashboard_page, version
 from ..workspace import service as workspace_http
@@ -22,6 +23,12 @@ from .maintain import status, status_all, uninstall, upgrade_all, upgrade_everyt
 from .parser import parser
 
 DASHBOARD_COMMANDS: frozenset[str] = frozenset({"dashboard", "start", "stop"})
+
+
+def _problem_lines(factory: Factory) -> None:
+    """Each tracker that could not be read while the other was, on stderr, for people and the workspace."""
+    for problem in factory.tracker.problems:
+        print(f"problem: {problem}", file=sys.stderr)
 
 
 def _stale_note(cfg, out: TextIO = sys.stdout) -> None:
@@ -73,15 +80,16 @@ def _tracker_suggest(cfg: Any, as_json: bool) -> None:
 
 def _tracker_show(factory: Factory, as_json: bool) -> int:
     """`mfactory tracker show`: each step, its status and its board column. 1 when the board has a problem."""
-    report: dict[str, Any] | None = factory.tracker.board_report()
-    if report is None:
-        print(f"{factory.tracker.label} issues have no board: {factory.tracker.queue_note()}")
+    board_tracker: Tracker | None = factory.tracker.board_member()
+    report: dict[str, Any] | None = board_tracker.board_report() if board_tracker else None
+    if board_tracker is None or report is None:
+        print(f"{factory.tracker.primary.label} issues have no board: {factory.tracker.queue_note()}")
         return 0
     wrong: bool = bool(report["problems"]) or any(row["problem"] for row in report["rows"])
     if as_json:
         print(json.dumps(report))
         return 1 if wrong else 0
-    print(f"{factory.tracker.label} board {report['board']} at {report['site']}")
+    print(f"{board_tracker.label} board {report['board']} at {report['site']}")
     email_from: str = str(report.get("email_from") or "")
     if email_from:
         print(f"account email from {email_from}, token from {report.get('token_from')}")
@@ -245,6 +253,7 @@ def run(args: argparse.Namespace) -> int:
             rows, issues = factory.queue_and_issues()
             watch_rows, watched = factory.watch_rows()
             print(json.dumps(queue_json(rows + watch_rows, issues + watched)))
+            _problem_lines(factory)
         elif command == "queue":
             _stale_note(cfg)
             _index_note(factory, sys.stdout)
@@ -253,6 +262,7 @@ def run(args: argparse.Namespace) -> int:
                 print("  ".join(str(cell) for cell in row))
             if not rows:
                 print(f"nothing to do: {factory.tracker.empty_note()} and no job is unfinished")
+            _problem_lines(factory)
         elif command == "create":
             job = factory.create(args.issue)
             print(f"created {job['id']} for {factory.tracker.ref(job['issue'])} at {job['step']}")
@@ -260,7 +270,8 @@ def run(args: argparse.Namespace) -> int:
             text: str = _stdin_text()
             if not text.strip():
                 raise Refused("the issue's text goes on stdin")
-            print(factory.tracker.create_issue(" ".join(args.title), text, queue=True))
+            target: Tracker = factory.tracker.member(args.tracker) if args.tracker else factory.tracker.primary
+            print(target.create_issue(" ".join(args.title), text, queue=True))
         elif command == "next":
             factory.next(args.job)
         elif command == "done":
@@ -284,8 +295,8 @@ def run(args: argparse.Namespace) -> int:
         elif command == "tracker" and args.tracker_what == "show":
             return _tracker_show(factory, args.json)
         elif command == "tracker":
-            if factory.tracker.board_report() is None:
-                print(f"{factory.tracker.label} issues have no board: nothing to move")
+            if factory.tracker.board_member() is None:
+                print(f"{factory.tracker.primary.label} issues have no board: nothing to move")
                 return 0
             return 0 if factory.sync_cards() else 1
     return 0

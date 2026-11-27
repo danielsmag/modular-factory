@@ -4,7 +4,9 @@
     python3 tests/sample_dashboard.py [--port 4747]
 
 It builds a throwaway repository in a temporary folder; nothing here touches
-GitHub or a real project.
+GitHub, Jira or a real project. The project takes jobs from GitHub issues and a
+Jira board at once: a stand-in for Jira, from tests/stub_jira.py, serves three
+made-up boards.
 """
 
 import argparse
@@ -20,7 +22,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "core" / "lib"))
+sys.path.insert(0, str(ROOT / "tests"))
 
+import stub_jira  # noqa: E402
 from modfactory.config import as_json as config_as_json  # noqa: E402
 from modfactory.config import load  # noqa: E402
 from modfactory.graph import as_json as graph_as_json  # noqa: E402
@@ -53,7 +57,39 @@ commands = ["npm run test:smoke"]
 
 [steps.gate]
 on = { FAIL = { max = 3 } }
+
+[tracker]
+kind = ["github", "jira"]
+
+[tracker.jira]
+site = "{site}"
+board = 7
+
+[tracker.jira.columns]
+queue = "Ready for factory"
+intake = "Intake"
+ask-author = "Needs info"
+spec = "Spec"
+spec-approval = "Spec approval"
+build = "Build"
+gate = "Checks"
+debug = "Debug"
+review = "Review"
+approve = "Approve"
+ready-to-merge = "Ready to merge"
+verify = "Verify"
+escalated = "Escalated"
+done = "Done"
+rejected = "Rejected"
+failed = "Failed"
 """
+# The factory's own board, as a team would lay it out: the factory's steps share one column.
+CLINIC_COLUMNS = [
+    ("Backlog", ["Backlog"]), ("Ready for factory", ["Ready for factory"]),
+    ("In progress", ["Intake", "Spec", "Build", "Checks", "Debug", "Review", "Approve", "Merging", "Verify"]),
+    ("Needs a person", ["Needs info", "Spec approval", "Ready to merge", "Ready to verify", "Escalated"]),
+    ("Done", ["Done", "Rejected", "Failed"]),
+]
 TITLES = [
     "Add dark mode to the settings page", "Export invoices as CSV", "Fix rounding of VAT on credit notes",
     "Show a history of reminders sent", "Let admins resend an invoice", "Paginate the patients list",
@@ -222,6 +258,72 @@ def stub_github(tmp: Path, issues: dict[str, dict[str, object]]) -> None:
     os.environ["GH_STATE"] = str(state_file)
 
 
+def sample_jira(now: datetime) -> tuple[stub_jira.FakeJira, str]:
+    """A stand-in for Jira with three boards and made-up cards. Returns it and the key of the card a job builds."""
+    jira = stub_jira.FakeJira()
+    jira.board_name = "Clinic app"
+    jira.columns = CLINIC_COLUMNS
+    jira.users.update({"ana": "Ana Lima", "kofi": "Kofi Mensah", "lena": "Lena Fischer"})
+    today: str = now.strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+    recent: str = (now - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+    jira.add_board(8, "Platform", "PLAT", kind="scrum", columns=["To Do", "In Progress", "In Review", "Done"])
+    jira.add_board(9, "Support desk", "SUP", columns=["Open", "Waiting on clinic", "Solved"])
+    for title, status, who, priority, kind, labels in [
+        ("Let patients book appointments online", "Backlog", None, "Medium", "Story", ["booking"]),
+        ("Add a clinic switcher to the header", "Ready for factory", "ana", "Medium", "Task", ["ui"]),
+        ("Send appointment reminders by SMS", "Build", "op", "High", "Story", ["reminders"]),
+    ]:
+        jira.ticket(title, status=status, assignee=who, priority=priority, kind=kind, labels=labels, updated=recent)
+    building: str = jira.ticket("Show waiting time on the lobby screen", status="Review", assignee="op",
+                                priority="Medium", kind="Story", updated=recent)
+    jira.ticket("Export invoices to Xero", status="Spec approval", assignee="kofi", priority="High", kind="Story",
+                labels=["billing"], updated=today)
+    jira.ticket("Fix the time zone of reminder emails", status="Done", assignee="lena", priority="Highest",
+                kind="Bug", updated=today)
+    for title, status, who, priority, kind, sprint in [
+        ("Upgrade Postgres to 17", "In Progress", "lena", "High", "Task", True),
+        ("Rotate the payment provider's API keys", "To Do", "kofi", "Highest", "Task", True),
+        ("Move CI to bigger runners", "In Review", "ana", "Medium", "Task", True),
+        ("Retire the old metrics stack", "To Do", None, "Low", "Task", False),
+    ]:
+        jira.ticket(title, status=status, assignee=who, priority=priority, kind=kind, project="PLAT", sprint=sprint,
+                    updated=recent)
+    for title, status, who in [("A clinic cannot log in after the password reset", "Open", "ana"),
+                               ("Invoice PDF shows the wrong logo", "Waiting on clinic", "kofi")]:
+        jira.ticket(title, status=status, assignee=who, priority="High", kind="Bug", project="SUP", updated=recent)
+    return jira, building
+
+
+def from_jira(jobs_dir: Path, number: int, jira: stub_jira.FakeJira, key: str) -> None:
+    """Make sample job `number` one that came from a Jira card."""
+    for job_file in jobs_dir.glob(f"{number:03d}-*/job.json"):
+        job: dict[str, object] = json.loads(job_file.read_text())
+        job.update(issue=key, tracker="jira", issue_url=f"{jira.url}/browse/{key}", author="op",
+                   author_name="Olivia Operator")
+        job_file.write_text(json.dumps(job, indent=1) + "\n")
+        (job_file.parent / "issue.md").write_text(f"# Issue {key}: {job['title']}\n\n## Body\n\n> Please add this.\n")
+
+
+def more_issues(now: datetime) -> dict[str, dict[str, object]]:
+    """Open GitHub issues that are not queued: two the factory is building, and some it is not."""
+    found: dict[str, dict[str, object]] = {}
+    for number, title, author, labels, assignees, hours_ago in [
+        (45, "Archive clinics that closed", "mira", ["factory"], [], 30),
+        (47, "Add dark mode to the settings page", "tomas", ["factory"], [], 40),
+        (60, "Crash when a patient has no email address", "ines", ["bug"], ["operator"], 5),
+        (61, "Docs: how to add a practitioner", "kofi", ["docs"], [], 52),
+        (62, "Dark mode for the calendar view", "lena", ["enhancement", "ui"], ["mira"], 75),
+    ]:
+        updated: datetime = now - timedelta(hours=hours_ago)
+        found[str(number)] = {
+            "number": number, "title": title, "state": "OPEN",
+            "url": f"https://github.com/acme/clinic-invoices/issues/{number}", "author": {"login": author},
+            "labels": [{"name": name} for name in labels], "assignees": [{"login": login} for login in assignees],
+            "createdAt": stamp(updated - timedelta(days=3)), "updatedAt": stamp(updated), "body": "", "comments": [],
+        }
+    return found
+
+
 def publish(repo: Path, jobs_dir: Path, queue: list[dict[str, object]]) -> None:
     """Write the files the dashboard reads, and a stub CLI that prints the sample queue."""
     cfg = load(repo)
@@ -245,6 +347,9 @@ def publish(repo: Path, jobs_dir: Path, queue: list[dict[str, object]]) -> None:
         "repo": repo.name,
         "tools": list(cfg.tools),
         "labels": labels if isinstance(labels, dict) else {},
+        "tracker": {"kind": "github", "label": "GitHub", "enqueue": "Label an issue `factory`"},
+        "trackers": [{"kind": "github", "label": "GitHub", "enqueue": "Label an issue `factory`"},
+                     {"kind": "jira", "label": "Jira", "enqueue": "Move a card to `Ready for factory` on board 7"}],
         "jobs": jobs,
     }
     (jobs_dir / "index.json").write_text(json.dumps(index, indent=1) + "\n")
@@ -266,7 +371,9 @@ def main():
         repo = Path(tmp) / "clinic-invoices"
         repo.mkdir()
         subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
-        (repo / "factory.toml").write_text(CONFIG)
+        jira, building = sample_jira(datetime.now(UTC))
+        os.environ["JIRA_EMAIL"], os.environ["JIRA_API_TOKEN"] = stub_jira.EMAIL, stub_jira.TOKEN
+        (repo / "factory.toml").write_text(CONFIG.replace("{site}", jira.url))
         jobs_dir = repo / ".factory" / "jobs"
         jobs_dir.mkdir(parents=True)
         if not args.empty:
@@ -276,6 +383,7 @@ def main():
             plan += [("spec-approval", 0, "maintainer", False), ("escalated", 1, "maintainer", True)]
             for number, (stop, days_ago, waiting, detour) in enumerate(plan, 1):
                 make(jobs_dir, number, TITLES[(number - 1) % len(TITLES)], stop, days_ago, rng, waiting, detour)
+            from_jira(jobs_dir, 16, jira, building)
         os.environ["FACTORY_HOME"] = str(Path(tmp) / "home")
         (Path(tmp) / "home").mkdir()
         resets = datetime.now(UTC) + timedelta(hours=2, minutes=10)
@@ -284,7 +392,7 @@ def main():
             "five_hour": {"used_percentage": 37.0, "resets_at": int(resets.timestamp())},
             "seven_day": {"used_percentage": 64.5, "resets_at": int((resets + timedelta(days=3)).timestamp())}}))
         queue, issues = sample_queue(datetime.now(UTC))
-        stub_github(Path(tmp), issues)
+        stub_github(Path(tmp), issues | more_issues(datetime.now(UTC)))
         publish(repo, jobs_dir, [] if args.empty else queue)
         serve_one(repo, args.port, open_browser=False)
 

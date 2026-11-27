@@ -169,7 +169,7 @@ class Scripted:
         follow_up = ""
         try:
             if step["on_failure"] == "issue":
-                url = self.tracker.create_issue(
+                url = self.tracker.of(job["issue"]).create_issue(
                     f"Fix: verification failed after #{job['pr']} ({job['title']})",
                     f"The factory merged #{job['pr']} for {self.tracker.ref(job['issue'])} as {sha}, and the "
                     f"check after {step['after']} failed. Find the cause and fix it.\n\n{detail}",

@@ -4,8 +4,9 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from .. import graph
+from .. import config, graph
 from ..util import Refused, body, now
+from .tracker.base import Tracker
 
 COMMAND = re.compile(r"\s*/(?:m)?factory[ \t]+([a-z][a-z-]*)\b[ \t]*(.*)", re.S)
 NEEDS_TEXT = {"CHANGES", "FEEDBACK", "REJECT", "ANSWER"}
@@ -57,10 +58,15 @@ class Humans:
     # ---- Asking ------------------------------------------------------------
 
     def _audience(self, job, who):
-        """Who `who` is for this job, with the author and the operator as the tracker shows people."""
-        mention = self.tracker.mention
-        operator: str = mention(self.tracker.operator()) if who == "operator" else ""
+        """Who `who` is for this job, with the author and the operator as the job's tracker shows people."""
+        tracker: Tracker = self.tracker.of(job["issue"])
+        mention = tracker.mention
+        operator: str = mention(tracker.operator()) if who == "operator" else ""
         return audience(who, mention(job["author"], job.get("author_name")), operator, mention)
+
+    def _who_of(self, job, step):
+        """Who the human step waits for on this job's tracker."""
+        return config.who_for(step, self.tracker.of(job["issue"]).kind)
 
     def _who(self, job):
         return self._audience(job, job["waiting"]["who"])
@@ -76,13 +82,14 @@ class Humans:
 
     def _ask(self, job, name, step):
         """Post the question where the person will see it, label the issue, and park the job."""
-        who: str | list[str] = step.get("who", "maintainer")
+        tracker: Tracker = self.tracker.of(job["issue"])
+        who: str | list[str] = self._who_of(job, step)
         open_pr: bool = bool(job["pr"] and not job["merge_sha"])
-        kind, number = ("pr", job["pr"]) if open_pr and self.tracker.pr_threads else ("issue", job["issue"])
+        kind, number = ("pr", job["pr"]) if open_pr and tracker.pr_threads else ("issue", job["issue"])
         tool_only: bool = step.get("replies") == "tool"
-        operator: str = self.tracker.operator() if who == "operator" else ""
+        operator: str = tracker.operator() if who == "operator" else ""
 
-        title: str = ask_title(who, step.get("ask") or "", self.tracker.mention)
+        title: str = ask_title(who, step.get("ask") or "", tracker.mention)
         parts = [f"### Factory: {title}", f"Step `{name}` of job `{job['id']}`."]
         if who == "operator" or isinstance(who, list):
             parts.append(f"Waiting for {self._audience(job, who)}.")
@@ -100,7 +107,7 @@ class Humans:
             how += [f"- {c}" for c in self._commands(job, step, slash=False)]
             if "ANSWER" in step["on"]:
                 how.append("- or answer in plain words")
-            columns: str = self._drag_choices(name, step)
+            columns: str = self._drag_choices(job, name, step)
             if columns:
                 how.append(f"- or move this card: {columns}")
         # Asked on the issue of a tracker that is not GitHub, the pull request is named by its address.
@@ -109,7 +116,7 @@ class Humans:
             how.append(f"- or merge {this_pr} to approve it as it is")
         elif open_pr and step.get("pr_ready"):
             how.append(f"- or merge {this_pr} yourself; the factory will continue from there")
-        text = "\n\n".join(parts)[:self.tracker.comment_limit] + "\n\n---\n" + "\n".join(how)
+        text = "\n\n".join(parts)[:tracker.comment_limit] + "\n\n---\n" + "\n".join(how)
 
         if step.get("pr_ready") and open_pr and (self.gh.pr(job["pr"], "isDraft") or {}).get("isDraft"):
             self.gh.call("pr", "ready", job["pr"])
@@ -132,11 +139,12 @@ class Humans:
     # ---- Reading replies ---------------------------------------------------
 
     def _may_reply(self, job, step, login):
-        who: str | list[str] = step.get("who", "maintainer")
+        tracker: Tracker = self.tracker.of(job["issue"])
+        who: str | list[str] = self._who_of(job, step)
         if who == "author":
-            return login == job["author"] or login == self.tracker.operator()
+            return login == job["author"] or login == tracker.operator()
         if who == "operator":
-            return login == self.tracker.operator()
+            return login == tracker.operator()
         if isinstance(who, list):
             return login in who
         return self.tracker.can_write(login, job["issue"])
@@ -150,7 +158,7 @@ class Humans:
         if step.get("replies") == "tool":
             return None
         threads = [("issue", job["issue"])]
-        if self.tracker.pr_threads and job["pr"] and not job["merge_sha"]:
+        if self.tracker.of(job["issue"]).pr_threads and job["pr"] and not job["merge_sha"]:
             threads.append(("pr", job["pr"]))
         for kind, number in threads:
             comments = self.gh.comments(number) if kind == "pr" else self.tracker.comments(number)
@@ -180,7 +188,7 @@ class Humans:
         if comment_id:
             job["consumed"].append(comment_id)
         reason, target = None, None
-        who: str = self.tracker.mention(login)
+        who: str = self.tracker.of(job["issue"]).mention(login)
         if outcome == "REJECT":
             (d / "rejection.md").write_text(f"REJECTED\n\nBy {who} at the {name} step.\n\n{text}\n")
             reason = f"Rejected by {who}: {text}"
@@ -226,7 +234,7 @@ class Humans:
         text = (text or "").strip()
         if outcome in NEEDS_TEXT and not text:
             raise Refused(f"{outcome} needs words: pass them on stdin")
-        login = self.tracker.operator()
+        login = self.tracker.of(job["issue"]).operator()
         if outcome == "ANSWER":
             self.tracker.comment(job["issue"], text, factory=False)  # so issue.md carries it
         self.say(self._apply_reply(job, outcome, text, login))

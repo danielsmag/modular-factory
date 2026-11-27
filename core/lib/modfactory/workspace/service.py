@@ -20,14 +20,18 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
-from typing import TextIO
-from urllib.parse import quote, unquote, urlsplit
+from typing import Any, TextIO
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from .. import activity
+from .. import activity, config
 from ..config import Config
 from ..config import load as load_config
 from ..service import tracker as trackers
+from ..service.gh import GitHub
+from ..service.tracker.base import key_kind
+from ..service.tracker.jira_api import Client, account_email, account_token
 from ..util import FactoryError, Refused, dashboard_page, user_dir
+from . import feeds
 from .paths import FILE, SERVED
 from .project import Project
 from .queue import QueueMeta
@@ -37,10 +41,18 @@ QUEUE_TTL_SECONDS: float = 15.0
 STATE_NAME: str = "dashboard.json"
 # An issue number, or a key such as PROJ-123 on a tracker that names its issues.
 ISSUE_KEY: re.Pattern[str] = re.compile(r"[1-9][0-9]{0,9}|[A-Za-z][A-Za-z0-9_]{1,31}-[1-9][0-9]{0,9}")
+# A Jira board's id.
+BOARD_ID: re.Pattern[str] = re.compile(r"[1-9][0-9]{0,9}")
+JIRA_OFF: str = ('Jira is off for this project. Add "jira" to [tracker] kind and set [tracker.jira] site '
+                 "and board in factory.toml.")
+NO_CREDENTIALS: str = ("Jira boards are read through Jira's REST API, and the dashboard found no {what}. "
+                       "Set {names} in a shell, then run `mfactory stop` and `mfactory start dashboard` from "
+                       "it. The email can also be [tracker.jira].email, and the token can be in the "
+                       "project's .env or [tracker.jira].token_file.")
 
 
 def _web_url(value: object) -> str | None:
-    return value if isinstance(value, str) and value.startswith("https://") else None
+    return feeds.web_url(value)
 
 
 def _text(value: object) -> str | None:
@@ -106,10 +118,21 @@ def issue_payload(raw: object) -> dict[str, object]:
     }
 
 
+def _reader(project: Project, ref: str) -> trackers.Tracker:
+    """The tracker that shows issue `ref`: the project's own, or GitHub for a number in a project without it.
+
+    Pull requests are always on GitHub, so the Board lists a repository's issues whatever its tracker.
+    """
+    tracker = trackers.for_repo(project.path)
+    if key_kind(ref) == "github" and all(member.kind != "github" for member in tracker.members):
+        return trackers.github_reader(project.path)
+    return tracker.of(ref)
+
+
 def issue_response(project: Project, ref: str) -> tuple[HTTPStatus, dict[str, object]]:
     """One issue of a project, read from its tracker on every call."""
-    tracker: trackers.Tracker = trackers.for_repo(project.path)
     try:
+        tracker: trackers.Tracker = _reader(project, ref)
         number: trackers.Key = tracker.key(ref)
     except FactoryError:
         return HTTPStatus.NOT_FOUND, {"error": f"{ref} is not an issue of this project"}
@@ -148,15 +171,181 @@ class QueueCache:
             return self._body
 
 
+class Feeds:
+    """The Board's Jira and GitHub blocks for each project, read through a short cache.
+
+    Each project's own settings say which Jira site to read and which environment variables hold the
+    account and its token. A failure is an answer too: the page shows it in that block only.
+    """
+
+    def __init__(self, timeout: float = 30) -> None:
+        self.cache: feeds.FeedCache = feeds.FeedCache(ttl=60, error_ttl=15)
+        self.slow: feeds.FeedCache = feeds.FeedCache(ttl=600, error_ttl=15)
+        # Seconds one `gh` command may take before the GitHub block says it did not answer.
+        self.timeout: float = timeout
+
+    def _jira(self, project: Project) -> tuple[Client, int] | str:
+        """A REST client for the project's Jira site and its board, or why there is none to read.
+
+        Boards are read through REST whenever an email and a token are found, whatever `via` says: the
+        Atlassian CLI cannot read a board. They are found as the factory finds them: the email in
+        factory.toml or `email_env`, the token in `token_file`, `token_env`, or the project's `.env`.
+        """
+        cfg: Config = load_config(project.path)
+        if "jira" not in config.tracker_kinds(cfg["tracker"]["kind"]):
+            return JIRA_OFF
+        settings: dict[str, Any] = cfg["tracker"]["jira"]
+        try:
+            email: str = account_email(settings)[0]
+            token: str = account_token(settings, project.path)[0]
+        except Refused as error:  # a token_file that cannot be read says which, never what it holds
+            return str(error)
+        missing: list[tuple[str, str]] = [pair for pair, found in (
+            (("account email", str(settings["email_env"])), email), (("API token", str(settings["token_env"])), token),
+        ) if not found]
+        if missing:
+            return NO_CREDENTIALS.format(what=" and no ".join(what for what, _ in missing),
+                                         names=" and ".join(name for _, name in missing))
+        client: Client = Client(str(settings["site"]), str(settings["email_env"]), str(settings["token_env"]),
+                                project.path, email=str(settings.get("email") or ""),
+                                token_file=str(settings.get("token_file") or ""))
+        return client, int(settings.get("board") or 0)
+
+    def jira_boards(self, project: Project, label: str, fresh: bool) -> Reply:
+        found: tuple[Client, int] | str = self._jira(project)
+        if found == JIRA_OFF:
+            return json_reply({"off": JIRA_OFF})
+        if isinstance(found, str):
+            return json_reply({"site": None, "configured": None, "boards": [], "note": found})
+        client, board = found
+        return self._answer("Could not list the Jira boards", lambda: self.slow.get(
+            (label, "jira", "boards"), lambda: feeds.jira_boards(client, board), fresh))
+
+    def jira_board(self, project: Project, label: str, board_id: int, fresh: bool) -> Reply:
+        found: tuple[Client, int] | str = self._jira(project)
+        if isinstance(found, str):
+            return json_reply({"off": found}) if found == JIRA_OFF else json_reply({"note": found})
+        client, _ = found
+        return self._answer(f"Could not load board {board_id} from Jira", lambda: self.cache.get(
+            (label, "jira", board_id), lambda: feeds.jira_board(client, board_id), fresh))
+
+    def github_issues(self, project: Project, label: str, fresh: bool) -> Reply:
+        gh: GitHub = GitHub(project.path, timeout=self.timeout)
+        reader: trackers.GitHubTracker = trackers.github_reader(project.path, timeout=self.timeout)
+
+        def me() -> str:
+            return self.slow.get((label, "github", "me"), reader.operator)
+
+        def repo_url() -> str | None:
+            return self.slow.get((label, "github", "repo"), gh.repo_url)
+        return self._answer("Could not load the issues from GitHub", lambda: self.cache.get(
+            (label, "github", "issues"), lambda: feeds.github_issues(gh, me, repo_url), fresh))
+
+    @staticmethod
+    def _answer(what: str, read: Callable[[], dict[str, Any]]) -> Reply:
+        """200 with what `read` returns, or 502 with why it failed. Never the failure's traceback."""
+        try:
+            return json_reply(read())
+        except (FactoryError, subprocess.SubprocessError, OSError, ValueError) as error:
+            lines: list[str] = str(error).strip().splitlines()
+            why: str = activity.redact(lines[-1]) if lines else type(error).__name__
+            return json_reply({"error": f"{what}: {why}"}, HTTPStatus.BAD_GATEWAY)
+
+
 def solo(repo: Path) -> Workspace:
     """One checkout, not written to a workspace file."""
     resolved: Path = repo.resolve()
     return Workspace(resolved / FILE, [Project(resolved)])
 
 
+# One route's answer: status, body and content type.
+Reply = tuple[HTTPStatus, bytes | str, str]
+# A route reads the workspace, the path's named groups and the query string.
+Route = tuple[re.Pattern[str], Callable[[Workspace, re.Match[str], dict[str, list[str]]], Reply]]
+JSON: str = "application/json"
+NOT_FOUND: Reply = (HTTPStatus.NOT_FOUND, "not found", "text/plain")
+
+
+def json_reply(body: object, status: HTTPStatus = HTTPStatus.OK) -> Reply:
+    return status, json.dumps(body), JSON
+
+
+def dispatch(routes: list[Route], workspace: Workspace, path: str, query: dict[str, list[str]]) -> Reply:
+    """The answer of the first route whose pattern matches the whole path. 404 when none does."""
+    for pattern, answer in routes:
+        found: re.Match[str] | None = pattern.fullmatch(path)
+        if found:
+            return answer(workspace, found, query)
+    return NOT_FOUND
+
+
+def _routes(page: bytes, cache: QueueCache, blocks: Feeds | None = None) -> list[Route]:
+    """Every page and JSON route the dashboard answers. Each one only reads."""
+    feed: Feeds = blocks or Feeds()
+
+    def fresh(query: dict[str, list[str]]) -> bool:
+        return query.get("fresh", [""])[0] == "1"
+
+    def jira_boards(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        project: Project | None = workspace.project(found["project"])
+        return NOT_FOUND if project is None else feed.jira_boards(project, found["project"], fresh(query))
+
+    def jira_board(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        project: Project | None = workspace.project(found["project"])
+        if project is None or not BOARD_ID.fullmatch(found["board"]):
+            return NOT_FOUND
+        return feed.jira_board(project, found["project"], int(found["board"]), fresh(query))
+
+    def github_issues(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        project: Project | None = workspace.project(found["project"])
+        return NOT_FOUND if project is None else feed.github_issues(project, found["project"], fresh(query))
+
+    def index(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        return HTTPStatus.OK, page, "text/html"
+
+    def projects(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        return json_reply(workspace.snapshot())
+
+    def queue(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        return json_reply(cache.get())
+
+    def issue(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        project: Project | None = workspace.project(found["project"])
+        if project is None or not ISSUE_KEY.fullmatch(found["ref"]):
+            return NOT_FOUND
+        status, body = issue_response(project, found["ref"])
+        return json_reply(body, status)
+
+    def activity(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        project: Project | None = workspace.project(found["project"])
+        body: dict[str, object] | None = job_activity_response(project, found["job"]) if project else None
+        return NOT_FOUND if body is None else json_reply(body)
+
+    def job_file(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        project: Project | None = workspace.project(found["project"])
+        if project is None:
+            return NOT_FOUND
+        root: Path = project.jobs_dir.resolve()
+        target: Path = (root / found["path"]).resolve()
+        if target.is_relative_to(root) and target.is_file() and target.suffix in SERVED:
+            return HTTPStatus.OK, target.read_bytes(), SERVED[target.suffix]
+        return NOT_FOUND
+
+    return [
+        (re.compile(r"/(?:index\.html)?"), index),
+        (re.compile(r"/projects\.json"), projects),
+        (re.compile(r"/queue\.json"), queue),
+        (re.compile(r"/projects/(?P<project>[^/]+)/issues/(?P<ref>.+)"), issue),
+        (re.compile(r"/projects/(?P<project>[^/]+)/jira/boards"), jira_boards),
+        (re.compile(r"/projects/(?P<project>[^/]+)/jira/boards/(?P<board>[^/]+)"), jira_board),
+        (re.compile(r"/projects/(?P<project>[^/]+)/github/issues"), github_issues),
+        (re.compile(r"/projects/(?P<project>[^/]+)/jobs/(?P<job>.+)/activity"), activity),
+        (re.compile(r"/projects/(?P<project>[^/]+)/jobs/(?P<path>.+)"), job_file),
+    ]
+
+
 def _handler(load: Callable[[], Workspace]) -> type[BaseHTTPRequestHandler]:
-    page: bytes = dashboard_page()
-    cache: QueueCache = QueueCache(load)
+    routes: list[Route] = _routes(dashboard_page(), QueueCache(load))
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "mfactory-workspace"
@@ -182,50 +371,12 @@ def _handler(load: Callable[[], Workspace]) -> type[BaseHTTPRequestHandler]:
             if host not in ("127.0.0.1", "localhost", "[::1]"):
                 self.send("forbidden", "text/plain", HTTPStatus.FORBIDDEN)
                 return
-            path: str = unquote(urlsplit(self.path).path)
+            parts = urlsplit(self.path)
             try:
-                workspace: Workspace = load()
-                if path in ("/", "/index.html"):
-                    self.send(page, "text/html")
-                    return
-                if path == "/projects.json":
-                    self.send(json.dumps(workspace.snapshot()), "application/json")
-                    return
-                if path == "/queue.json":
-                    self.send(json.dumps(cache.get()), "application/json")
-                    return
-                if path.startswith("/projects/"):
-                    rest: str = path.removeprefix("/projects/")
-                    issue_ident, issue_separator, issue_ref = rest.partition("/issues/")
-                    if issue_separator and "/" not in issue_ident:
-                        issue_project: Project | None = workspace.project(issue_ident)
-                        if issue_project is None or not ISSUE_KEY.fullmatch(issue_ref):
-                            self.send("not found", "text/plain", HTTPStatus.NOT_FOUND)
-                            return
-                        status: HTTPStatus
-                        issue_body: dict[str, object]
-                        status, issue_body = issue_response(issue_project, issue_ref)
-                        self.send(json.dumps(issue_body), "application/json", status)
-                        return
-                    ident, separator, job_path = rest.partition("/jobs/")
-                    project: Project | None = workspace.project(ident) if separator else None
-                    if project is not None and job_path.endswith("/activity"):
-                        body: dict[str, object] | None = job_activity_response(project, job_path[: -len("/activity")])
-                        if body is None:
-                            self.send("not found", "text/plain", HTTPStatus.NOT_FOUND)
-                            return
-                        self.send(json.dumps(body), "application/json")
-                        return
-                    if project is not None:
-                        root: Path = project.jobs_dir.resolve()
-                        target: Path = (root / job_path).resolve()
-                        if target.is_relative_to(root) and target.is_file() and target.suffix in SERVED:
-                            self.send(target.read_bytes(), SERVED[target.suffix])
-                            return
+                status, body, kind = dispatch(routes, load(), unquote(parts.path), parse_qs(parts.query))
             except FactoryError as error:
-                self.send(json.dumps({"error": str(error)}), "application/json", HTTPStatus.INTERNAL_SERVER_ERROR)
-                return
-            self.send("not found", "text/plain", HTTPStatus.NOT_FOUND)
+                status, body, kind = json_reply({"error": str(error)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            self.send(body, kind, status)
 
     return Handler
 

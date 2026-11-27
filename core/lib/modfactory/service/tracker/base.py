@@ -1,11 +1,34 @@
 """What the factory asks of a tracker: the place jobs come from and people reply in."""
 
+import re
 from typing import Any, Protocol
+
+from ...util import Refused
 
 # An issue's key, as the tracker names it: a number on GitHub.
 Key = int | str
 # Who a human step waits for: "author", "maintainer", "operator", or a list of logins.
 Who = str | list[str]
+# A Jira issue key, such as PROJ-123. GitHub numbers its issues.
+JIRA_KEY = re.compile(r"[A-Za-z][A-Za-z0-9_]*-[1-9][0-9]*")
+# Each tracker as people say it.
+LABELS = {"github": "GitHub", "jira": "Jira"}
+
+
+def key_kind(ref: object) -> str | None:
+    """Which tracker a key belongs to, by its shape: `12` or `#12` is GitHub's, `PROJ-123` is Jira's."""
+    text: str = str(ref).strip()
+    if text.lstrip("#").isdigit():
+        return "github"
+    if JIRA_KEY.fullmatch(text):
+        return "jira"
+    return None
+
+
+def left_kind(key: object, kind: str) -> str:
+    """Why a key cannot be routed: its tracker is not one of the project's."""
+    return (f"{key} is a {LABELS[kind]} issue, and [tracker].kind does not include {kind}, "
+            "so the factory cannot reach it")
 
 
 class Tracker(Protocol):
@@ -27,6 +50,8 @@ class Tracker(Protocol):
     links_by_title: bool
     # True when a person can answer a human step by moving the issue's card on a board.
     drag_answers: bool
+    # True when each step's card sits in a column of a board.
+    has_board: bool
 
     # -- keys
 
@@ -177,3 +202,52 @@ class Tracker(Protocol):
     def uninstall(self, say) -> None:
         """Delete what `install` created."""
         ...
+
+
+class OneTracker:
+    """What a single tracker shares with `routing.Trackers`, so a call site is written once for one or two.
+
+    A project with one tracker uses it as it is: `of` is the tracker itself, and nothing is unread.
+    """
+
+    kind: str
+    has_board: bool = False
+
+    def of(self, key: Key) -> Any:
+        """The tracker that holds `key`: this one, unless the key's shape says it is another tracker's."""
+        owner: str | None = key_kind(key)
+        if owner is not None and owner != self.kind:
+            raise Refused(left_kind(key, owner))
+        return self
+
+    @property
+    def members(self) -> list[Any]:
+        return [self]
+
+    @property
+    def primary(self) -> Any:
+        return self
+
+    def member(self, kind: str) -> Any:
+        if kind != self.kind:
+            raise Refused(f"this project takes no jobs from {LABELS.get(kind, kind)}: [tracker].kind is {self.kind}")
+        return self
+
+    def board_member(self) -> Any:
+        return self if self.has_board else None
+
+    @property
+    def problems(self) -> list[str]:
+        """The trackers that could not be read. One tracker raises instead, so this stays empty."""
+        return []
+
+    @property
+    def unread(self) -> set[str]:
+        return set()
+
+    def reason(self, kind: str) -> str:
+        return ""
+
+    def failed(self, tracker: Any, what: object, error: Exception) -> str:
+        """One tracker whose call for `what` fails stops the command, as it always has."""
+        raise error

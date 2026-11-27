@@ -8,6 +8,7 @@ import base64
 import json
 import re
 import threading
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -64,7 +65,10 @@ class FakeJira:
         self.assignable = {"op", "maint"}
         self.project = "PROJ"
         self.board_id = 7
+        self.board_name = "Factory board"
         self.columns = [(name, list(statuses)) for name, statuses in COLUMNS]
+        # Boards other than the factory's own, by id: name, type, project key and columns.
+        self.boards = {}
         names = [status for _, statuses in COLUMNS for status in statuses] + ["Archived"]
         self.statuses = {name: str(10000 + index) for index, name in enumerate(names)}
         self.workflow = None          # None: any status to any other. Else {from: [to, ...]}
@@ -105,15 +109,26 @@ class FakeJira:
         return str(self.next_id)
 
     def ticket(self, title="Add a thing", body="Please add it.", status="Ready for factory", reporter="alice",
-               assignee=None, labels=()):
+               assignee=None, labels=(), project=None, priority="Medium", kind="Task", sprint=False,
+               updated="2026-01-02T00:00:00.000+0000"):
         with self.lock:
             self.next_issue += 1
-            key = f"{self.project}-{self.next_issue}"
+            key = f"{project or self.project}-{self.next_issue}"
             self.issues[key] = {
                 "id": self._id(), "key": key, "summary": title, "description": document(body), "status": status,
                 "reporter": reporter, "assignee": assignee, "labels": list(labels), "comments": [],
-                "changelog": [], "created": "2026-01-01T00:00:00.000+0000", "updated": "2026-01-02T00:00:00.000+0000"}
+                "changelog": [], "created": "2026-01-01T00:00:00.000+0000", "updated": updated,
+                "priority": priority, "type": kind, "sprint": sprint}
             return key
+
+    def add_board(self, board_id, name, project, kind="kanban", columns=None):
+        """Another board the account can see, with its own project and columns."""
+        with self.lock:
+            self.boards[board_id] = {"name": name, "type": kind, "project": project,
+                                     "columns": [(column, [column]) for column in (columns or ["To Do", "Done"])]}
+            for _, statuses in self.boards[board_id]["columns"]:
+                for status in statuses:
+                    self.statuses.setdefault(status, str(10000 + len(self.statuses)))
 
     def comment(self, key, text, user, properties=()):
         with self.lock:
@@ -169,12 +184,15 @@ class FakeJira:
 
     def _issue(self, issue):
         assignee = issue["assignee"]
+        priority = issue.get("priority")
         return {"id": issue["id"], "key": issue["key"], "self": f"{self.url}/rest/api/3/issue/{issue['id']}",
                 "fields": {
                     "summary": issue["summary"], "description": issue["description"],
                     "status": self._status(issue["status"]), "reporter": self._user(issue["reporter"]),
                     "assignee": self._user(assignee) if assignee else None, "labels": issue["labels"],
-                    "created": issue["created"], "updated": issue["updated"]}}
+                    "created": issue["created"], "updated": issue["updated"],
+                    "priority": {"name": priority} if priority else None,
+                    "issuetype": {"name": issue.get("type") or "Task"}}}
 
     def _allowed(self, issue):
         """The statuses the workflow lets this issue move to."""
@@ -191,6 +209,15 @@ class FakeJira:
         jql = re.split(r"(?i)\s+order\s+by\s+", jql.strip())[0].strip()
         if not jql:
             return True
+        either, depth, start = [], 0, 0
+        for index, char in enumerate(jql):
+            depth += (char == "(") - (char == ")")
+            if depth == 0 and jql[index:index + 4].upper() == " OR ":
+                either.append(jql[start:index])
+                start = index + 4
+        either.append(jql[start:])
+        if len(either) > 1:
+            return any(self._matches(issue, part) for part in either)
         parts, depth, start = [], 0, 0
         for index, char in enumerate(jql):
             depth += (char == "(") - (char == ")")
@@ -217,7 +244,19 @@ class FakeJira:
             return issue["key"].rsplit("-", 1)[0] == found.group(1).upper()
         if found := re.fullmatch(r"(?i)labels = (\w+)", clause):
             return found.group(1) in issue["labels"]
+        if found := re.fullmatch(r"(?i)statusCategory (=|!=) Done", clause):
+            return (issue["status"] in DONE_CATEGORY) == (found.group(1) == "=")
+        if found := re.fullmatch(r"(?i)updated >= -(\d+)d", clause):
+            since = datetime.now(UTC) - timedelta(days=int(found.group(1)))
+            return datetime.strptime(issue["updated"], "%Y-%m-%dT%H:%M:%S.%f%z") >= since
+        if re.fullmatch(r"(?i)sprint in openSprints\(\)", clause):
+            return bool(issue.get("sprint"))
         raise Problem(400, f"stub jira: JQL it cannot read: {clause}")
+
+    def _boards(self):
+        """Every board, the factory's own first: its columns are `self.columns`, which tests may change."""
+        own = {"name": self.board_name, "type": "kanban", "project": self.project, "columns": self.columns}
+        return {self.board_id: own, **self.boards}
 
     def _page(self, rows, query, key, extra=None):
         start = int(query.get("startAt", ["0"])[0])
@@ -310,23 +349,30 @@ class FakeJira:
                 rows = [dict(entry, author=self._user(entry["author"])) for entry in issue["changelog"]]
                 return 200, self._page(rows, query, "values")
 
+        if method == "GET" and path == "/rest/agile/1.0/board":
+            rows = [{"id": ident, "name": board["name"], "type": board["type"],
+                     "location": {"projectKey": board["project"], "projectName": board["project"].title()}}
+                    for ident, board in sorted(self._boards().items())]
+            return 200, self._page(rows, query, "values")
         if found := re.fullmatch(r"/rest/agile/1\.0/board/(\d+)(?:/(issue|configuration))?", path):
-            if int(found.group(1)) != self.board_id or method != "GET":
+            board = self._boards().get(int(found.group(1)))
+            if board is None or method != "GET":
                 raise Problem(404, "The requested board cannot be viewed because it either does not exist "
                                    "or you do not have permission to view it.")
-            what = found.group(2)
+            ident, what = int(found.group(1)), found.group(2)
             if what is None:
-                return 200, {"id": self.board_id, "name": "Factory board", "type": "kanban",
-                             "location": {"projectKey": self.project, "projectName": "Project"}}
+                return 200, {"id": ident, "name": board["name"], "type": board["type"],
+                             "location": {"projectKey": board["project"], "projectName": "Project"}}
             if what == "configuration":
-                return 200, {"id": self.board_id, "name": "Factory board", "type": "kanban",
-                             "location": {"type": "project", "projectKeyOrId": self.project},
+                return 200, {"id": ident, "name": board["name"], "type": board["type"],
+                             "location": {"type": "project", "projectKeyOrId": board["project"]},
                              "columnConfig": {"columns": [
                                  {"name": name, "statuses": [{"id": self.statuses[s]} for s in statuses]}
-                                 for name, statuses in self.columns]}}
-            on_board = {status for _, statuses in self.columns for status in statuses}
+                                 for name, statuses in board["columns"]]}}
+            on_board = {status for _, statuses in board["columns"] for status in statuses}
             jql = query.get("jql", [""])[0]
             rows = [self._issue(issue) for issue in self.issues.values()
-                    if issue["status"] in on_board and self._matches(issue, jql)]
+                    if issue["status"] in on_board and issue["key"].rsplit("-", 1)[0] == board["project"]
+                    and self._matches(issue, jql)]
             return 200, self._page(rows, query, "issues")
         raise Problem(501, f"stub jira: unknown call {method} {path}")

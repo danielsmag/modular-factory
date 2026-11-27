@@ -3,12 +3,13 @@
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from . import graph
+from . import config, graph
 from .config import Config
 from .service import GitHub
-from .service.tracker import Key, Tracker
+from .service.tracker import Key, Tracker, Trackers
+from .service.tracker.base import LABELS, key_kind
 from .store import Store
-from .util import Refused, now
+from .util import FactoryError, Refused, now
 
 
 class _QueueHost(Protocol):
@@ -16,7 +17,7 @@ class _QueueHost(Protocol):
 
     cfg: Config
     gh: GitHub
-    tracker: Tracker
+    tracker: Tracker | Trackers
     store: Store
 
     def _write_issue_md(self, job: dict[str, Any], issue: dict[str, Any] | None = None) -> dict[str, Any]: ...
@@ -29,11 +30,16 @@ class _QueueHost(Protocol):
 
     def _audience(self, job: dict[str, Any], who: str | list[str]) -> str: ...
 
+    def _who_of(self, job: dict[str, Any], step: dict[str, Any]) -> str | list[str]: ...
+
     def _settle_cards(self) -> set[str]: ...
 
     def queue_and_issues(self) -> tuple[list[tuple[Any, ...]], list[dict[str, Any]]]: ...
 
     def _picks(self) -> Callable[[dict[str, Any]], bool]: ...
+
+    def _reply_note(self, job: dict[str, Any], step: dict[str, Any], tracker: Tracker,
+                    answered: bool) -> str: ...
 
 
 class Queue:
@@ -41,7 +47,7 @@ class Queue:
 
     cfg: Config
     gh: GitHub
-    tracker: Tracker
+    tracker: Tracker | Trackers
     store: Store
 
     def create(self: _QueueHost, number: object) -> dict[str, Any]:
@@ -67,7 +73,7 @@ class Queue:
         # A tracker whose logins are ids, not names, also gives the name people know the author by.
         named: dict[str, Any] = {"author_name": issue["author"]["name"]} if issue["author"].get("name") else {}
         job = {
-            "id": job_id, "number": n, "issue": key, "title": issue["title"],
+            "id": job_id, "number": n, "issue": key, "tracker": self.tracker.of(key).kind, "title": issue["title"],
             "issue_url": issue["url"], "author": issue["author"]["login"], **named,
             "step": None, "entered_at": None, "running_since": None, "running_order": None,
             "round": 0, "attempt": 0, "gate_failed": False, "taken": {}, "handoff": [],
@@ -89,28 +95,52 @@ class Queue:
         return job
 
     def _picks(self: _QueueHost) -> Callable[[dict[str, Any]], bool]:
-        """Which labeled issues `queue` offers as new jobs: `[run].pick`, `authors` and `assignees`.
+        """Which queued issues `queue` offers as new jobs: `[run].pick`, `authors` and `assignees`.
 
-        An issue passes when its author or any assignee is named. With nothing named, every issue passes.
+        An issue passes when its author or any assignee is named for its own tracker. A tracker with
+        nobody named lets every issue through. `@me` is the account running the factory on that tracker.
         """
         run: dict[str, Any] = self.cfg["run"]
         mine: list[str] = ["@me"] if run.get("pick") == "mine" else []
-        authors: list[str] = mine + list(run.get("authors") or [])
-        assignees: list[str] = mine + list(run.get("assignees") or [])
-        if not authors and not assignees:
-            return lambda issue: True
-        operator: str = self.tracker.operator() if "@me" in authors + assignees else ""
+        rules: dict[str, tuple[set[str], set[str]] | None] = {}
 
-        def logins(names: list[str]) -> set[str]:
-            return {operator if name == "@me" else name for name in names}
+        def rule(tracker: Tracker) -> tuple[set[str], set[str]] | None:
+            if tracker.kind not in rules:
+                authors: list[str] = mine + config.people_for(run.get("authors"), tracker.kind)
+                assignees: list[str] = mine + config.people_for(run.get("assignees"), tracker.kind)
+                operator: str = ""
+                if "@me" in authors + assignees:
+                    try:
+                        operator = tracker.operator()
+                    except FactoryError as error:
+                        self.tracker.failed(tracker, "@me", error)  # `@me` then names nobody on that tracker
 
-        by: set[str] = logins(authors)
-        to: set[str] = logins(assignees)
+                def logins(names: list[str]) -> set[str]:
+                    return {operator if name == "@me" else name for name in names}
+                rules[tracker.kind] = (logins(authors), logins(assignees)) if authors or assignees else None
+            return rules[tracker.kind]
 
         def picks(issue: dict[str, Any]) -> bool:
+            named: tuple[set[str], set[str]] | None = rule(self.tracker.of(issue["number"]))
+            if named is None:
+                return True
+            by, to = named
             assigned: set[str] = {a["login"] for a in issue.get("assignees") or []}
             return issue["author"]["login"] in by or bool(assigned & to)
         return picks
+
+    def _reply_note(self: _QueueHost, job: dict[str, Any], step: dict[str, Any], tracker: Tracker,
+                    answered: bool) -> str:
+        """`a reply is waiting`, who a parked job waits for, or why its tracker could not say."""
+        if answered:
+            return "a reply is waiting"
+        try:
+            if self._find_reply(job, step):
+                return "a reply is waiting"
+            return f"waiting for {self._audience(job, self._who_of(job, step))}"
+        except FactoryError as error:
+            # This job's own call failed; the other jobs on its tracker are read as usual.
+            return f"could not read {tracker.label}: {self.tracker.failed(tracker, job['issue'], error)}"
 
     def queue(self: _QueueHost) -> list[tuple[Any, ...]]:
         """Rows of `action issue job step note`, in the order to act on them.
@@ -139,6 +169,14 @@ class Queue:
         for j in sorted(jobs.values(), key=lambda j: j["id"]):
             n, name = j["issue"], j["step"]
             step = self.cfg.steps.get(name)
+            try:
+                tracker: Tracker = self.tracker.of(n)
+            except Refused:
+                owner: str | None = key_kind(n)
+                other.append(("skip", n, j["id"], name,
+                              f"its tracker, {LABELS.get(owner or '', owner)}, is not in [tracker].kind"))
+                continue
+            down: bool = tracker.kind in self.tracker.unread
             if name in graph.END_STATES:
                 if n in open_numbers:
                     other.append(("skip", n, j["id"], name,
@@ -146,14 +184,15 @@ class Queue:
             elif step is None:
                 other.append(("skip", n, j["id"], name, "factory.toml no longer has this step"))
             elif step["type"] == "human":
-                if j["id"] in answered or self._find_reply(j, step):
-                    replied.append(("resume", n, j["id"], name, "a reply is waiting"))
+                note: str = (f"could not read {tracker.label}: {self.tracker.reason(tracker.kind)}" if down
+                             else self._reply_note(j, step, tracker, j["id"] in answered))
+                if note == "a reply is waiting":
+                    replied.append(("resume", n, j["id"], name, note))
                 else:
-                    who_phrase: str = self._audience(j, step.get("who", "maintainer"))
-                    waiting.append(("wait", n, j["id"], name, f"waiting for {who_phrase}"))
+                    waiting.append(("wait", n, j["id"], name, note))
             elif step["type"] == "verify":
                 rows.append(("resume", n, j["id"], name, "validating after " + step["after"]))
-            elif not (j["pr"] or j.get("prs")) and (gone := self.tracker.withdrawn(n, open_numbers)):
+            elif not down and not (j["pr"] or j.get("prs")) and (gone := self.tracker.withdrawn(n, open_numbers)):
                 other.append(("skip", n, j["id"], name, gone))
             else:
                 turn = running.index(j["id"]) < limit

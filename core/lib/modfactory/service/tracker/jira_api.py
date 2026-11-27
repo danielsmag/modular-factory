@@ -227,16 +227,24 @@ class Client:
 
         `limit` stops reading once that many items are in hand.
         """
+        return self.pages_with_total(method, path, key, body, limit, **params)[0]
+
+    def pages_with_total(self, method: str, path: str, key: str, body: object = None, limit: int | None = None,
+                         **params: Any) -> tuple[list[Any], int | None]:
+        """As `pages`, with the `total` Jira gave for the whole list: more than `limit` when it stopped early."""
         out: list[Any] = []
+        whole: int | None = None
         while True:
             if limit is not None and len(out) >= limit:
-                return out
+                return out, whole
             found: object = self.request(method, path, dict(params, startAt=len(out), maxResults=PAGE), body)
             page: object = found.get(key) if isinstance(found, dict) else None
-            if not isinstance(page, list) or not page:
-                return out
-            out += page
             total: object = found.get("total") if isinstance(found, dict) else None
+            if isinstance(total, int) and not isinstance(total, bool):
+                whole = total
+            if not isinstance(page, list) or not page:
+                return out, whole
+            out += page
             if (isinstance(found, dict) and found.get("isLast") is True) or (
                     isinstance(total, int) and len(out) >= total):
-                return out
+                return out, whole

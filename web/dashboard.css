@@ -162,6 +162,67 @@ h2.job-title { font-size: var(--fs-title); overflow-wrap: anywhere; }
 .kchip.FAIL, .kchip.bad { border: 1px solid transparent; color: var(--bad); background: rgba(255, 90, 79, .14); }
 .kchip.CHANGES { border: 1px solid transparent; color: var(--warn); background: rgba(224, 168, 58, .16); }
 .kchip.wait { border-style: solid; border-color: var(--accent); color: var(--accent); }
+/* ---- board blocks: Jira, GitHub issues, the factory ---- */
+.block { border-top: 1px solid var(--line); padding: 14px 0 8px; }
+.block-head { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.block.folded .block-head { margin-bottom: 0; }
+.block-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fold { display: inline-flex; align-items: baseline; gap: 8px; font: 500 var(--fs-section) var(--sans); color: var(--text); text-align: left; }
+.fold svg { width: 14px; height: 14px; flex: none; align-self: center; color: var(--muted); }
+.fold[aria-expanded="true"] svg { transform: rotate(90deg); }
+.fold:hover .fold-title { color: var(--accent); }
+.fold .count, .fold .dim { font: var(--fs-floor) var(--mono); color: var(--text-2); }
+.refresh { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--line-2); border-radius: 3px; color: var(--text-2); }
+.refresh:hover { color: var(--text); border-color: var(--text); }
+.refresh svg { width: 14px; height: 14px; }
+.jira-area + .jira-area, .gh-area + .gh-area { margin-top: 18px; }
+.jira-area > .block-title, .gh-area > .block-title { margin-top: 0; }
+.jira-tools { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; min-width: 0; }
+.picker-open { font: var(--fs-floor) var(--mono); border: 1px solid var(--line-2); border-radius: 3px; padding: 4px 10px; color: var(--text-2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-open:hover { color: var(--text); border-color: var(--text); }
+.jboard { margin-bottom: 16px; }
+.jboard-head { display: flex; align-items: baseline; gap: 8px 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.jboard-head h3 { margin: 0; }
+.jboard-head .fold { font: 600 var(--fs-body) var(--sans); }
+.kanban.jira .kcol-cards { max-height: 70vh; overflow-y: auto; padding-right: 2px; }
+.kcard.job { border-color: var(--code-dim); }
+.board-error { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.board-error .error { margin: 0; }
+.drop-board { font: var(--fs-floor) var(--mono); border: 1px solid var(--line-2); border-radius: 3px; padding: 3px 9px; color: var(--text-2); }
+.drop-board:hover { color: var(--text); border-color: var(--text); }
+.kcard .card-top .chip { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.irows { display: flex; flex-direction: column; gap: 6px; }
+.irow {
+  display: grid; grid-template-columns: 60px minmax(0, 1fr) auto; grid-template-areas: "num title meta" "num chips meta";
+  gap: 4px 12px; align-items: baseline; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; cursor: pointer;
+}
+.irow:hover { border-color: var(--line-2); }
+.irow.on { box-shadow: inset 2px 0 var(--accent); }
+.irow .num { grid-area: num; font: var(--fs-floor) var(--mono); color: var(--code); }
+.irow .ititle { grid-area: title; overflow-wrap: anywhere; }
+.irow .ichips { grid-area: chips; display: flex; flex-wrap: wrap; gap: 6px; }
+.irow .ichips:empty { display: none; }
+.irow .imeta { grid-area: meta; display: flex; gap: 10px; font: var(--fs-meta)/var(--lh-prose) var(--sans); color: var(--text-2); white-space: nowrap; }
+.more { margin-top: 10px; }
+.picker-layer { z-index: 40; }
+.picker {
+  position: absolute; top: 12vh; left: 50%; transform: translateX(-50%); width: min(520px, calc(100% - 32px)); max-height: 72vh;
+  display: flex; flex-direction: column; gap: 10px; background: #0e0e0e; border: 1px solid var(--line-2); border-radius: 4px; padding: 14px;
+}
+.picker-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.picker-head h3 { margin: 0; font: 600 var(--fs-section) var(--sans); }
+.picker-search { background: var(--bg); border: 1px solid var(--line-2); color: var(--text); font: var(--fs-meta) var(--mono); padding: 7px 10px; outline: 0; }
+.picker-search:focus { border-color: var(--accent); }
+.picker-list { overflow-y: auto; min-height: 0; flex: 1; }
+.picker-group h4 { margin: 8px 0 4px; font: 500 var(--fs-floor) var(--mono); color: var(--text-2); }
+.picker-item { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: 3px; cursor: pointer; }
+.picker-item:hover { background: var(--panel-2); }
+.picker-item input { accent-color: var(--accent); }
+.picker-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.picker-item .dim { font: var(--fs-floor) var(--mono); }
+.picker-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pick-done { font: 600 var(--fs-floor) var(--mono); background: var(--text); color: var(--bg); padding: 6px 14px; }
+.pick-done:hover { background: var(--accent); color: #000; }
 .overlay { position: fixed; inset: 0; z-index: 30; }
 .scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .55); }
 .drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(1120px, 100%); background: #0e0e0e; border-left: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0, 1fr); }
@@ -416,9 +477,12 @@ footer { max-width: 1280px; margin: 0 auto; padding: 0 28px 30px; color: var(--t
 @media (max-width: 480px) {
   .cards { grid-template-columns: minmax(0, 1fr); }
   .cta { display: none; }
+  .irow { grid-template-columns: minmax(0, 1fr); grid-template-areas: "num" "title" "chips" "meta"; }
+  .irow .imeta { white-space: normal; flex-wrap: wrap; }
 }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 @media (prefers-reduced-motion: no-preference) {
   .nav a, .tabs button, .filters button { transition: background .12s, color .12s; }
+  .fold svg { transition: transform .12s; }
   .pulse, .kchip.wait { animation: pulse 1.6s ease-in-out infinite; }
 }

@@ -192,6 +192,13 @@ def read_jobs(project: Project) -> dict[str, object]:
     return {"jobs": jobs, "project": {}, "error": None, "schema": found}
 
 
+def _strings(raw: object) -> dict[str, str]:
+    """The string fields of a table from index.json, and nothing else."""
+    if not isinstance(raw, dict):
+        return {}
+    return {key: value for key, value in raw.items() if isinstance(key, str) and isinstance(value, str)}
+
+
 def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) -> dict[str, object]:
     items: list[dict[str, object]] = []
     for project in projects:
@@ -226,12 +233,13 @@ def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) 
             for key, value in labels_raw.items():
                 if isinstance(key, str) and isinstance(value, str):
                     labels[key] = value
-        tracker: dict[str, str] = {}
-        tracker_raw: object = body.get("tracker")
-        if isinstance(tracker_raw, dict):
-            for key, value in tracker_raw.items():
-                if isinstance(key, str) and isinstance(value, str):
-                    tracker[key] = value
+        tracker: dict[str, str] = _strings(body.get("tracker"))
+        # Every tracker the project takes jobs from. Older index files name only the one in `tracker`.
+        trackers_raw: object = body.get("trackers")
+        trackers: list[dict[str, str]] = [found for found in (_strings(raw) for raw in trackers_raw)
+                                          if found] if isinstance(trackers_raw, list) else []
+        if not trackers and tracker:
+            trackers = [tracker]
         concurrency_raw: object = body.get("concurrency")
         concurrency: int | None = None
         if isinstance(concurrency_raw, int) and not isinstance(concurrency_raw, bool) and concurrency_raw >= 1:
@@ -254,6 +262,7 @@ def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) 
             "tools": tools,
             "labels": labels,
             "tracker": tracker,
+            "trackers": trackers,
             "concurrency": concurrency,
             "config": config_rows,
         }

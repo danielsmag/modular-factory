@@ -308,7 +308,7 @@ skills = ["auth-rules"]</code></pre>
   <p>Each agent's prompt names the <code>SKILL.md</code> files to read. This works the same in every tool. In Claude Code, a skill in <code>.claude/skills</code> is also loaded up front. <code>mfactory sync</code> refuses a name that matches no skill and says where it looked.</p>
 
   <h2 id="tracker-a-jira-board">Tracker: a Jira board</h2>
-  <p>By default the tracker is GitHub issues: jobs come from open issues with the queue label, and people reply in issue and pull request comments. With <code>kind = "jira"</code>, a Jira kanban board is the tracker. New jobs are the cards in its queue column, each step's card sits in a column of the board, and people reply in Jira comments or by moving the card. Code, branches and pull requests stay on GitHub. A project uses one tracker; a workspace can hold projects of both kinds.</p>
+  <p>By default the tracker is GitHub issues: jobs come from open issues with the queue label, and people reply in issue and pull request comments. With <code>kind = "jira"</code>, a Jira kanban board is the tracker. New jobs are the cards in its queue column, each step's card sits in a column of the board, and people reply in Jira comments or by moving the card. Code, branches and pull requests stay on GitHub. A project can also take jobs from both: see <a href="#tracker-both">GitHub issues and a Jira board together</a>.</p>
   <pre data-lang="toml"><code>[tracker]
 kind = "jira"
 
@@ -344,7 +344,7 @@ token_file = ".secrets/jira"    # optional. One line, the token only</code></pre
     <table>
       <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td class="mono">[tracker] kind</td><td><code>github</code></td><td><code>github</code> or <code>jira</code>.</td></tr>
+        <tr><td class="mono">[tracker] kind</td><td><code>github</code></td><td><code>github</code>, <code>jira</code>, or both as a list: <code>["github", "jira"]</code>.</td></tr>
         <tr><td class="mono">[tracker.jira] site</td><td></td><td>The Jira Cloud site. <code>https://</code> only.</td></tr>
         <tr><td class="mono">[tracker.jira] board</td><td></td><td>The kanban board's id: the number in its address. Its saved filter scopes the queue.</td></tr>
         <tr><td class="mono">[tracker.jira] jql</td><td><code>""</code></td><td>Narrows the queue further, ANDed with the board's filter. A filter only: no <code>ORDER BY</code>. <code>assignee = currentUser()</code> keeps the queue to cards assigned to the operator.</td></tr>
@@ -430,10 +430,39 @@ token_file = ".secrets/jira"    # optional. One line, the token only</code></pre
   <ul>
     <li>A job's issue is its Jira key, such as <code>PROJ-123</code>: <code>/mfactory run PROJ-123</code>, <code>mfactory answer PROJ-123 approve</code>.</li>
     <li>The branch is <code>&lt;branch_prefix&gt;PROJ-123-&lt;job id&gt;</code>, the pull request title must contain the key, and its body starts with <code>Refs PROJ-123</code>, so Jira's development panel links them. <code>branch_pattern</code> must accept that branch.</li>
-    <li><code>[project] issue_link = "closes"</code> is refused: a pull request cannot close a Jira issue.</li>
+    <li><code>[project] issue_link = "closes"</code> is refused when Jira is the only tracker: a pull request cannot close a Jira issue. With both trackers it applies to the GitHub issues.</li>
     <li><code>[labels]</code> is not used. The queue column and the step columns say what the labels said.</li>
     <li>Asks are posted on the Jira issue only, and comments on the pull request are not read as replies. A pull request merged by hand still continues the job.</li>
     <li><code>mfactory close issue</code> moves the card to the status of <code>done</code>, or of <code>rejected</code> with <code>--not-planned</code>.</li>
+  </ul>
+  <h3 id="tracker-both">GitHub issues and a Jira board together</h3>
+  <pre data-lang="toml"><code>[tracker]
+kind = ["github", "jira"]
+
+[tracker.jira]
+site = "https://acme.atlassian.net"
+board = 1234
+
+[tracker.jira.columns]
+queue = "Ready for factory"
+# ... a status for each step, as above</code></pre>
+  <ul>
+    <li>Both queues feed the project: open issues with the queue label, and the cards in the queue column. The queue takes one from each in turn, starting with the first tracker in <code>kind</code>, so neither waits for the other to empty. <code>[run].concurrency</code> caps them together.</li>
+    <li>Each job asks and listens on its own tracker. A job from a GitHub issue is asked on the issue or its pull request, with the factory's labels. A job from a Jira card is asked in Jira, and its card follows the job. <code>/mfactory approve 12</code> and <code>/mfactory approve PROJ-123</code> both work.</li>
+    <li>Pull requests follow the issue. A GitHub issue's starts with <code>Refs #12</code>, or <code>Closes #12</code> with <code>issue_link = "closes"</code>. A Jira issue's starts with <code>Refs PROJ-123</code> and carries the key in its title.</li>
+    <li><code>mfactory file</code> opens the issue on the first tracker in <code>kind</code>. <code>mfactory file --tracker jira "&lt;title&gt;"</code> chooses.</li>
+    <li><code>[project] pr_title</code> and <code>pr_title_pattern</code> apply to every job's pull request, so with both trackers the pattern must also accept a title without a Jira key.</li>
+    <li>People are named per tracker, because a GitHub login and a Jira account id can look the same. In <code>authors</code> and <code>assignees</code>, a tracker left out is not filtered. A <code>who</code> table names every tracker. The words <code>author</code>, <code>maintainer</code> and <code>operator</code> stay plain strings.</li>
+  </ul>
+  <pre data-lang="toml"><code>[run]
+authors = { github = ["alice"], jira = ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }
+
+[steps.spec-approval]
+who = { github = ["alice"], jira = ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }</code></pre>
+  <ul>
+    <li>When one tracker cannot be reached, the other's jobs carry on. <code>mfactory queue</code> prints <code>problem: Jira: &lt;reason&gt;</code>, a job waiting on that tracker shows <code>could not read Jira</code>, and the dashboard shows the problem. When neither can be reached, the command fails as before.</li>
+    <li>A job keeps the tracker it came from, so adding a second tracker leaves jobs in flight running. A job whose tracker is taken out of <code>kind</code> gets a <code>skip</code> row until the tracker is back.</li>
+    <li><code>mfactory doctor</code> checks both. <code>mfactory tracker show</code> and <code>tracker sync</code> work on the Jira board.</li>
   </ul>
 
   <h2 id="labels-paths-and-ports">Labels, paths and ports</h2>
@@ -456,7 +485,7 @@ step = 10</code></pre>
     <table>
       <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td class="mono">[tracker] kind</td><td>Where jobs come from and where people reply to the factory: <code>github</code> (GitHub issues) or <code>jira</code>. See <a href="#tracker-a-jira-board">Tracker: a Jira board</a>. Pull requests are always on GitHub.</td></tr>
+        <tr><td class="mono">[tracker] kind</td><td>Where jobs come from and where people reply to the factory: <code>github</code> (GitHub issues), <code>jira</code>, or both as a list. See <a href="#tracker-a-jira-board">Tracker: a Jira board</a>. Pull requests are always on GitHub.</td></tr>
         <tr><td class="mono">[labels] queue</td><td>Issues with this label are built.</td></tr>
         <tr><td class="mono">[labels] needs_info</td><td>Put on an issue while its author is being asked.</td></tr>
         <tr><td class="mono">[labels] needs_human</td><td>Put on an issue while a maintainer, the operator, or a named login is being asked.</td></tr>

@@ -38,7 +38,8 @@
   <p>A reply to a human step counts only from the issue's author, from someone with write access, from the operator, or from named logins, depending on the step. <code>replies = "tool"</code> ignores comments and takes the reply from the coding tool. Comments from anyone else are ignored.</p>
 
   <h2 id="the-dashboard">The dashboard</h2>
-  <p>The dashboard changes nothing. It answers only on <code>127.0.0.1</code>, refuses requests with another <code>Host</code> header, serves only <code>.md</code> and <code>.log</code> files from <code>.factory/jobs/</code>, loads nothing from the network, and builds its page without ever turning text into markup, because job text comes from GitHub issues. Agent activity sends the tool name and a short label only, not tool output, file contents, or assistant replies.</p>
+  <p>The dashboard changes nothing. It answers only on <code>127.0.0.1</code>, refuses requests with another <code>Host</code> header, serves only <code>.md</code> and <code>.log</code> files from <code>.factory/jobs/</code>, and has no route that writes. Its page loads nothing from elsewhere and builds itself without ever turning text into markup, because job and issue text comes from GitHub and Jira. Agent activity sends the tool name and a short label only, not tool output, file contents, or assistant replies.</p>
+  <p>The Board's Jira and GitHub blocks are read by the server, only when the page asks, through a short cache and with each project's own settings. The Jira token stays in the server's environment: it never reaches the page, a file, or an error message.</p>
 
   <h2 id="what-is-untested">What is untested</h2>
   <aside class="callout bad">

@@ -126,6 +126,7 @@ class World:
         self.state_file = tmp / "gh.json"
         self._factory = None
         self.jira = None
+        self.github_issues = False  # with both trackers, `issue()` makes GitHub issues and `jira.ticket()` cards
         self.acli_log = tmp / "acli.log"
         self.bin = tmp / "bin"
         self.monkeypatch = None
@@ -137,6 +138,15 @@ class World:
         if self.jira is None:
             self.jira = stub_jira.FakeJira()
         self.configure(f'[tracker]\nkind = "jira"\n\n[tracker.jira]\nsite = "{self.jira.url}"\nboard = 7\n'
+                       f"{settings}\n{columns}\n{extra}")
+        return self.jira
+
+    def use_both(self, extra="", columns=JIRA_COLUMNS, settings="", kind='["github", "jira"]'):
+        """Make this project take jobs from GitHub issues and the fake Jira board at once."""
+        if self.jira is None:
+            self.jira = stub_jira.FakeJira()
+        self.github_issues = True
+        self.configure(f'[tracker]\nkind = {kind}\n\n[tracker.jira]\nsite = "{self.jira.url}"\nboard = 7\n'
                        f"{settings}\n{columns}\n{extra}")
         return self.jira
 
@@ -173,7 +183,7 @@ class World:
 
     def issue(self, title="Add a thing", body="Please add it.", labels=("factory",), author="alice",
               assignees=()):
-        if self.jira:
+        if self.jira and not self.github_issues:
             return self.jira.ticket(title, body, reporter=author, assignee=next(iter(assignees), None),
                                     labels=[n for n in labels if n != "factory"])
         number = self.gh["next_number"] + 1

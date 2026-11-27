@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 STATE = Path(os.environ["GH_STATE"])
@@ -93,6 +94,9 @@ def main(argv):
     pos, named = flags(rest)
     out = ""
 
+    for start, seconds in (state.get("slow") or {}).items():
+        if " ".join(argv).startswith(start):
+            time.sleep(seconds)  # a gh that answers late, for timeouts
     if state.get("fail") and " ".join(argv).startswith(state["fail"]):
         save(state)
         sys.exit(f"stub gh: told to fail on `{state['fail']}`")
@@ -107,6 +111,8 @@ def main(argv):
             out = json.dumps({"permission": state["permissions"].get(login, "read")})
         else:
             sys.exit(f"stub gh: unknown api call {action}")
+    elif group == "repo" and action == "view":
+        out = json.dumps(pick({"url": "https://github.test/acme/app", "nameWithOwner": "acme/app"}, named["json"]))
     elif group == "label":
         if action == "create":
             state["labels"] = sorted(set(state["labels"]) | {pos[0]})
@@ -121,8 +127,13 @@ def main(argv):
                 sys.exit(f"stub gh: no issue {pos[0]}")
             out = json.dumps(pick(issue, named["json"]))
         elif action == "list":
+            wanted = named.get("label")
             rows = [i for i in state["issues"].values()
-                    if i["state"] == "OPEN" and named["label"] in [label["name"] for label in i["labels"]]]
+                    if i["state"] == "OPEN" and (wanted is None or wanted in [label["name"] for label in i["labels"]])]
+            if "sort:updated-desc" in str(named.get("search", "")):
+                rows.sort(key=lambda i: i.get("updatedAt") or "", reverse=True)
+            if "limit" in named:
+                rows = rows[:int(named["limit"])]
             out = json.dumps([pick(i, named["json"]) for i in rows])
         elif action == "create":
             state["next_number"] += 1

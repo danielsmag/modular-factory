@@ -12,10 +12,10 @@ from typing import Any
 from ... import board
 from ...util import Refused
 from . import adf
-from .base import Key, Who
+from .base import JIRA_KEY, Key, OneTracker, Who
 from .jira_api import Client
 
-KEY = re.compile(r"[A-Za-z][A-Za-z0-9_]*-[1-9][0-9]*")
+KEY = JIRA_KEY
 # The last line of every comment the factory writes. The factory posts from the operator's own account,
 # so this is what tells its comments from ones the operator typed. It is plain text, so it survives
 # whichever way Jira is reached.
@@ -26,6 +26,71 @@ LIST_FIELDS = "summary,status,reporter,assignee,labels,created,updated"
 KEYS_PER_CALL = 50
 # Cards read from the board to find one in each status, for checking the workflow's transitions.
 SAMPLE_CARDS = 500
+
+
+# What a card on the dashboard's Jira board shows.
+CARD_FIELDS = "summary,status,assignee,priority,issuetype,labels,updated"
+
+
+def boards(client: Client, limit: int = 500) -> list[dict[str, Any]]:
+    """Every board the account may see, up to `limit`: its id, name, type and project key."""
+    out: list[dict[str, Any]] = []
+    for row in client.pages("GET", "/rest/agile/1.0/board", "values", limit=limit)[:limit]:
+        ident: object = row.get("id") if isinstance(row, dict) else None
+        if not isinstance(ident, int) or isinstance(ident, bool):
+            continue
+        location: object = row.get("location")
+        project: object = location.get("projectKey") if isinstance(location, dict) else ""
+        out.append({"id": ident, "name": str(row.get("name") or f"Board {ident}"), "type": str(row.get("type") or ""),
+                    "project": str(project or "")})
+    return out
+
+
+def board_view(client: Client, board_id: int, days: int = 14, limit: int = 300) -> dict[str, Any]:
+    """One board as Jira draws it: its columns left to right, each with its cards.
+
+    A kanban board leaves out Done cards untouched for `days`, and a scrum board shows its open sprints,
+    as Jira's own boards do. At most `limit` cards are read; `total` says how many the board has.
+    """
+    info: object = client.get(f"/rest/agile/1.0/board/{board_id}")
+    about: dict[str, Any] = info if isinstance(info, dict) else {}
+    kind: str = str(about.get("type") or "kanban")
+    layout: object = client.get(f"/rest/agile/1.0/board/{board_id}/configuration")
+    raw_columns: object = ((layout if isinstance(layout, dict) else {}).get("columnConfig") or {}).get("columns")
+    columns: list[dict[str, Any]] = []
+    column_of: dict[str, int] = {}
+    for index, column in enumerate(raw_columns if isinstance(raw_columns, list) else []):
+        columns.append({"name": str(column.get("name") or ""), "cards": []})
+        for status in column.get("statuses") or []:
+            column_of.setdefault(str(status.get("id")), index)
+    # One clause, in parentheses, so it reads the same however Jira joins it to the board's own filter.
+    jql: str = "sprint in openSprints()" if kind == "scrum" else f"(statusCategory != Done OR updated >= -{days}d)"
+    rows, total = client.pages_with_total("GET", f"/rest/agile/1.0/board/{board_id}/issue", "issues",
+                                          limit=limit, jql=jql, fields=CARD_FIELDS)
+    read: list[Any] = rows[:limit]
+    hidden: int = 0
+    for row in read:
+        fields: dict[str, Any] = row.get("fields") or {}
+        status: object = fields.get("status")
+        where: int | None = column_of.get(str(status.get("id"))) if isinstance(status, dict) else None
+        if where is None:
+            hidden += 1  # a status on no column: Jira leaves the card off the board too
+            continue
+        columns[where]["cards"].append(_card(client.site, row["key"], fields))
+    count: int = total if total is not None else len(rows)
+    return {"board": {"id": board_id, "name": str(about.get("name") or f"Board {board_id}"), "type": kind},
+            "columns": columns, "shown": len(read) - hidden, "total": count, "hidden": hidden,
+            "truncated": count > len(read)}
+
+
+def _card(site: str, key: str, fields: dict[str, Any]) -> dict[str, Any]:
+    def name(value: object, field: str = "name") -> str | None:
+        found: object = value.get(field) if isinstance(value, dict) else None
+        return str(found) if found else None
+    return {"key": key, "title": str(fields.get("summary") or ""), "url": f"{site}/browse/{key}",
+            "status": _status_name(fields.get("status")), "type": name(fields.get("issuetype")),
+            "priority": name(fields.get("priority")), "assignee": name(fields.get("assignee"), "displayName"),
+            "labels": [str(label) for label in fields.get("labels") or []], "updated_at": fields.get("updated")}
 
 
 def _same(a: str, b: str) -> bool:
@@ -44,9 +109,10 @@ def _status_name(value: object) -> str:
     return value if isinstance(value, str) else ""
 
 
-class JiraTracker:
+class JiraTracker(OneTracker):
     kind = "jira"
     label = "Jira"
+    has_board = True
     # How Jira is reached: its REST API here, the Atlassian CLI in `jira_acli.py`.
     via = "rest"
     # True when the tracker can tell who moved a card, so a move can answer a human step.
