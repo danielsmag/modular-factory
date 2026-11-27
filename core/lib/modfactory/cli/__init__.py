@@ -90,6 +90,9 @@ def _tracker_show(factory: Factory, as_json: bool) -> int:
         print(json.dumps(report))
         return 1 if wrong else 0
     print(f"{board_tracker.label} board {report['board']} at {report['site']}")
+    email_from: str = str(report.get("email_from") or "")
+    if email_from:
+        print(f"account email from {email_from}, token from {report.get('token_from')}")
     table: list[tuple[str, str, str, str, str]] = [("step", "type", "status", "column", "")]
     for row in report["rows"]:
         note: str = row["problem"] or ("switched off" if not row["enabled"] else

@@ -137,8 +137,9 @@ def test_show_prints_the_mapping_as_a_table(world):
         'review = "Review"\n', ""))
     lines = printed(world.cli("tracker", "show"))
     assert lines[0] == f"Jira board 7 at {world.jira.url}"
-    assert lines[1].split() == ["step", "type", "status", "column"]
-    table = {line.split()[0]: line for line in lines[2:]}
+    assert lines[1] == "account email from $JIRA_EMAIL, token from $JIRA_API_TOKEN"
+    assert lines[2].split() == ["step", "type", "status", "column"]
+    table = {line.split()[0]: line for line in lines[3:]}
     assert table["queue"].split() == ["queue", "-", "Ready", "for", "factory", "Ready", "for", "factory"]
     assert table["build"].endswith("Jira has no status `Biuld`")
     assert table["review"].endswith("no status: the card stays where it is")

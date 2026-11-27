@@ -147,11 +147,16 @@ def follow(job, step, outcome):
   run, and adding a label needs triage or write access. With a Jira board the
   boundary is the queue column: only cards the board shows in it run, and
   moving a card needs the workflow's permission.
-- **Tracker credentials stay in the environment.** The Jira account and token
-  are read when a request is made, sent only to `[tracker.jira].site`, and
-  never written to a job file, the dashboard's index or an error message. A
-  redirect is refused rather than followed. Without them the factory runs
-  `acli`, which holds its own sign-in.
+- **Tracker credentials are read when a request is made.** The Jira email may
+  be set in `factory.toml`. The API token stays out of that file: a path in
+  `token_file`, the process environment, or one key in `.env` next to the
+  repository. The token is sent only to `[tracker.jira].site`, and is never
+  written to a job file, `config show`, the dashboard, or an error message.
+  The email may appear in `config show` and the dashboard, because it is not
+  a secret. A redirect is refused rather than followed. Without an email and
+  a token the factory runs `acli`, which holds its own sign-in. A configured
+  `token_file` that cannot be read is an error, and the factory does not fall
+  back to acli.
 - **Issue text is data.** It reaches agents only inside `issue.md`, which every
   prompt calls quoted data. The orchestrator never pastes it into a prompt.
   This lowers the risk of an issue steering an agent; it does not remove it.

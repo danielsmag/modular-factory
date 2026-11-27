@@ -19,6 +19,7 @@ from ...util import Refused, run
 from . import adf
 from .base import Key
 from .jira import KEY, KEYS_PER_CALL, JiraTracker, _same, _status_name
+from .jira_api import rest_ready
 
 # Fields asked of `workitem search`. The second set is its documented default, for a CLI that refuses more.
 SEARCH_FIELDS = ("key,summary,status,assignee,reporter,labels,created,updated", "key,summary,status,assignee")
@@ -54,15 +55,17 @@ def items(found: object, key: str) -> list[Any]:
 def from_config(cfg, gh=None) -> JiraTracker:
     """The Jira tracker `[tracker.jira].via` asks for.
 
-    `auto` uses REST while both credentials are in the environment, and falls back to acli when they are
-    not and acli is installed. With neither, it is REST, whose first request says what is missing.
+    `auto` uses REST while the email and the token are both found, and falls back to acli when they are
+    not and acli is installed. A `token_file` that is set but unusable is an error, not a fallback.
+    With neither credentials nor acli, it is REST, whose first request says what is missing.
     """
     settings: dict[str, Any] = cfg["tracker"]["jira"]
     via: str = settings.get("via", "auto")
-    ready: bool = all(os.environ.get(settings[name]) for name in ("email_env", "token_env"))
+    ready: bool = via != "acli" and rest_ready(settings, cfg.repo)
     use_acli: bool = via == "acli" or (via == "auto" and not ready and shutil.which("acli") is not None)
     cls: type[JiraTracker] = AcliJiraTracker if use_acli else JiraTracker
-    return cls(settings, steps=cfg.steps, start=cfg["run"]["start"], escalate=cfg["run"]["escalate_to"])
+    return cls(settings, steps=cfg.steps, start=cfg["run"]["start"], escalate=cfg["run"]["escalate_to"],
+               repo=cfg.repo)
 
 
 class AcliJiraTracker(JiraTracker):

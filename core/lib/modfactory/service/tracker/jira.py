@@ -6,6 +6,7 @@ changed board takes.
 """
 
 import re
+from pathlib import Path
 from typing import Any
 
 from ... import board
@@ -123,7 +124,8 @@ class JiraTracker(OneTracker):
     links_by_title = True
 
     def __init__(self, settings: dict[str, Any], client: Client | None = None,
-                 steps: dict[str, Any] | None = None, start: str = "", escalate: str = ""):
+                 steps: dict[str, Any] | None = None, start: str = "", escalate: str = "",
+                 repo: Path | None = None):
         # The pipeline, for reports that compare the board with it.
         self.steps: dict[str, Any] = steps or {}
         self.start: str = start
@@ -135,7 +137,9 @@ class JiraTracker(OneTracker):
         self.maintainers: list[str] = list(settings.get("maintainers") or [])
         self.project: str = str(settings.get("project") or "")
         self.site: str = str(settings["site"]).rstrip("/")
-        self.api = client or Client(self.site, settings["email_env"], settings["token_env"])
+        self.api = client or Client(
+            self.site, str(settings["email_env"]), str(settings["token_env"]), repo or Path("."),
+            email=str(settings.get("email") or ""), token_file=str(settings.get("token_file") or ""))
         self._operator: str | None = None
         self._names: dict[str, str] = {}
         self._writers: dict[str, bool] = {}
@@ -144,7 +148,7 @@ class JiraTracker(OneTracker):
     @classmethod
     def from_config(cls, cfg, gh=None) -> "JiraTracker":
         return cls(cfg["tracker"]["jira"], steps=cfg.steps, start=cfg["run"]["start"],
-                   escalate=cfg["run"]["escalate_to"])
+                   escalate=cfg["run"]["escalate_to"], repo=cfg.repo)
 
     # -- keys
 
@@ -494,9 +498,13 @@ class JiraTracker(OneTracker):
         sound: set[str] = {r["status"].casefold() for r in rows
                            if r["status"] and not r["problem"] and r["step"] != board.WATCH}
         problems, unchecked = self._workflow_gaps(queue, sound)
+        email_from: str
+        token_from: str
+        email_from, token_from = self.api.credential_sources()
         return {"tracker": self.kind, "via": self.via, "site": self.site, "board": self.board, "rows": rows,
                 "unused": [name for name in on_board if name.casefold() not in used],
-                "problems": problems, "unchecked": unchecked, "warnings": warnings, "note": None}
+                "problems": problems, "unchecked": unchecked, "warnings": warnings, "note": None,
+                "email_from": email_from, "token_from": token_from}
 
     def _workflow_gaps(self, queue: list[str], sound: set[str]) -> tuple[list[str], list[str]]:
         """Moves the pipeline needs and the workflow lacks, and the statuses no card could show them for.
@@ -531,7 +539,11 @@ class JiraTracker(OneTracker):
 
     def doctor(self, ok, warn, fail) -> None:
         try:
-            ok(f"Jira: signed in to {self.site} as {self.mention(self.operator())}")
+            who: str = self.mention(self.operator())
+            email_from: str
+            token_from: str
+            email_from, token_from = self.api.credential_sources()
+            ok(f"Jira: signed in to {self.site} as {who} (email from {email_from}, token from {token_from})")
             report: dict[str, Any] = self.board_report()
         except Refused as error:
             fail(str(error))
