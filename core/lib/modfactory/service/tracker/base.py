@@ -244,6 +244,6 @@ class OneTracker:
     def reason(self, kind: str) -> str:
         return ""
 
-    def unreadable(self, tracker: Any, error: Exception) -> None:
-        """One tracker that cannot be read stops the command, as it always has."""
+    def failed(self, tracker: Any, what: object, error: Exception) -> str:
+        """One tracker whose call for `what` fails stops the command, as it always has."""
         raise error

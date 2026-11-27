@@ -39,7 +39,7 @@ class _QueueHost(Protocol):
     def _picks(self) -> Callable[[dict[str, Any]], bool]: ...
 
     def _reply_note(self, job: dict[str, Any], step: dict[str, Any], tracker: Tracker,
-                    answered: bool) -> str | None: ...
+                    answered: bool) -> str: ...
 
 
 class Queue:
@@ -108,7 +108,12 @@ class Queue:
             if tracker.kind not in rules:
                 authors: list[str] = mine + config.people_for(run.get("authors"), tracker.kind)
                 assignees: list[str] = mine + config.people_for(run.get("assignees"), tracker.kind)
-                operator: str = tracker.operator() if "@me" in authors + assignees else ""
+                operator: str = ""
+                if "@me" in authors + assignees:
+                    try:
+                        operator = tracker.operator()
+                    except FactoryError as error:
+                        self.tracker.failed(tracker, "@me", error)  # `@me` then names nobody on that tracker
 
                 def logins(names: list[str]) -> set[str]:
                     return {operator if name == "@me" else name for name in names}
@@ -125,8 +130,8 @@ class Queue:
         return picks
 
     def _reply_note(self: _QueueHost, job: dict[str, Any], step: dict[str, Any], tracker: Tracker,
-                    answered: bool) -> str | None:
-        """`a reply is waiting`, or who a parked job waits for. None when its tracker could not be read."""
+                    answered: bool) -> str:
+        """`a reply is waiting`, who a parked job waits for, or why its tracker could not say."""
         if answered:
             return "a reply is waiting"
         try:
@@ -134,8 +139,8 @@ class Queue:
                 return "a reply is waiting"
             return f"waiting for {self._audience(job, self._who_of(job, step))}"
         except FactoryError as error:
-            self.tracker.unreadable(tracker, error)  # one tracker raises here, as it always has
-            return None
+            # This job's own call failed; the other jobs on its tracker are read as usual.
+            return f"could not read {tracker.label}: {self.tracker.failed(tracker, job['issue'], error)}"
 
     def queue(self: _QueueHost) -> list[tuple[Any, ...]]:
         """Rows of `action issue job step note`, in the order to act on them.
@@ -179,9 +184,8 @@ class Queue:
             elif step is None:
                 other.append(("skip", n, j["id"], name, "factory.toml no longer has this step"))
             elif step["type"] == "human":
-                note: str | None = None if down else self._reply_note(j, step, tracker, j["id"] in answered)
-                if note is None:
-                    note = f"could not read {tracker.label}: {self.tracker.reason(tracker.kind)}"
+                note: str = (f"could not read {tracker.label}: {self.tracker.reason(tracker.kind)}" if down
+                             else self._reply_note(j, step, tracker, j["id"] in answered))
                 if note == "a reply is waiting":
                     replied.append(("resume", n, j["id"], name, note))
                 else:

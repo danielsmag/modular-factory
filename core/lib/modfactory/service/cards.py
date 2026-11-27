@@ -6,8 +6,9 @@ A tracker with no board gives no status for any step, and everything here return
 from typing import Any
 
 from .. import board, graph
-from ..util import Refused
+from ..util import FactoryError, Refused
 from .human import COMMAND, NEEDS_TEXT
+from .tracker.base import LABELS, Tracker, key_kind
 
 NOTE_HEADING = "### Factory: the card was moved back"
 
@@ -145,13 +146,17 @@ class Cards:
         answered: set[str] = set()
         for j in active:
             name: str = j["step"]
-            kind, data = self._read_card(j, name, self.cfg.steps[name], where.get(j["issue"]))
-            if kind == "reply":
-                answered.add(j["id"])
-            elif kind != "ok":
-                job: dict[str, Any] | None = self.store.try_open(j["id"])
-                if job:
-                    self._settle_card(job, name, kind, data)
+            try:
+                kind, data = self._read_card(j, name, self.cfg.steps[name], where.get(j["issue"]))
+                if kind == "reply":
+                    answered.add(j["id"])
+                elif kind != "ok":
+                    job: dict[str, Any] | None = self.store.try_open(j["id"])
+                    if job:
+                        self._settle_card(job, name, kind, data)
+            except FactoryError as error:
+                # One card that cannot be read or moved holds back its own job, not the other tracker's.
+                self.tracker.failed(self.tracker.of(j["issue"]), j["issue"], error)
         return answered
 
     def _card_status(self, job: dict[str, Any]) -> str | None:
@@ -168,12 +173,19 @@ class Cards:
         """
         jobs: list[dict[str, Any]] = [j for j in self.store.all()
                                       if j["step"] not in graph.END_STATES and j["step"] in self.cfg.steps]
-        mapped: list[Any] = [j["issue"] for j in jobs if self.tracker.of(j["issue"]).status_for(j["step"]) is not None]
+        mapped: list[Any] = [j["issue"] for j in jobs if self._card_status(j) is not None]
         where: dict[Any, str] = self.tracker.statuses(mapped) if mapped else {}
         fine: bool = True
         for j in jobs:
-            head: str = f"{self.tracker.ref(j['issue'])}  {j['id']}  {j['step']}"
-            expected: str | None = self.tracker.of(j["issue"]).status_for(j["step"])
+            try:
+                tracker: Tracker = self.tracker.of(j["issue"])
+            except Refused:
+                owner: str | None = key_kind(j["issue"])
+                self.say(f"skip   {j['issue']}  {j['id']}  {j['step']}  its tracker, "
+                         f"{LABELS.get(owner or '', owner)}, is not in [tracker].kind")
+                continue
+            head: str = f"{tracker.ref(j['issue'])}  {j['id']}  {j['step']}"
+            expected: str | None = tracker.status_for(j["step"])
             current: str | None = where.get(j["issue"])
             if expected is None:
                 self.say(f"skip   {head}  no status for this step")

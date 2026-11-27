@@ -85,18 +85,30 @@ class Trackers:
             try:
                 queues.append(tracker.queue())
             except FactoryError as error:
-                self.unreadable(tracker, error)
+                self._unreadable(tracker, error)
         if len(self.unread) == len(self.members):
             raise self._errors[self.members[0].kind]
         return [issue for turn in zip_longest(*queues) for issue in turn if issue is not None]
 
-    def unreadable(self, tracker: Tracker, error: FactoryError) -> None:
+    def _unreadable(self, tracker: Tracker, error: FactoryError) -> None:
         """Remember that `tracker` could not be read, once, so the other tracker's jobs carry on."""
         if tracker.kind not in self.unread:
             self.unread.add(tracker.kind)
             self._errors[tracker.kind] = error
             lines: list[str] = str(error).strip().splitlines()
             self.problems.append(f"{tracker.label}: {lines[-1] if lines else 'could not be read'}")
+
+    def failed(self, tracker: Tracker, what: object, error: FactoryError) -> str:
+        """Note that one call for `what` (an issue, or `@me`) failed, while `tracker` itself answers.
+
+        Only that job is held back: the tracker stays readable for every other job. Returns the reason.
+        """
+        lines: list[str] = str(error).strip().splitlines()
+        why: str = lines[-1] if lines else "could not be read"
+        problem: str = f"{tracker.label}: {what}: {why}"
+        if problem not in self.problems:
+            self.problems.append(problem)
+        return why
 
     def reason(self, kind: str) -> str:
         """Why the tracker of `kind` could not be read, for a job that waits on it."""
@@ -164,7 +176,7 @@ class Trackers:
                 try:
                     out.update(tracker.statuses(mine))
                 except FactoryError as error:
-                    self.unreadable(tracker, error)
+                    self._unreadable(tracker, error)
         return out
 
     def last_move(self, key: Key, status: str) -> dict[str, Any] | None:

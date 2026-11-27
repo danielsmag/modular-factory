@@ -428,3 +428,57 @@ def test_tracker_sync_moves_only_jira_cards(world):
     res = world.cli("tracker", "sync")
     assert res.returncode == 0, res.stdout + res.stderr
     assert f"moved  {key}  {job}" in res.stdout.replace("   ", "  ")
+
+
+# ---- One job's call failing, while its tracker answers ----------------------------
+
+
+def test_a_jira_error_while_settling_cards_leaves_the_github_jobs(world):
+    world.use_both(extra=SPEC_APPROVAL)
+    key = world.jira.ticket()
+    job = world.create(key)
+    world.play(job, until="spec-approval")
+    number = world.issue("On GitHub")
+    world.jira.drag(key, "Build", "maint")                     # settling reads the card's history
+    world.jira.fail = (f"/rest/api/3/issue/{key}/changelog", 503)
+    world.factory().store.release()  # the command line takes the job's lock itself
+    res = world.cli("queue")
+    assert res.returncode == 0, res.stderr
+    assert f"new  {number}  -  -  On GitHub" in res.stdout.splitlines()
+    assert f"problem: Jira: {key}: Jira answered 503" in res.stderr
+
+
+def test_an_unresolvable_me_only_reports_a_problem(world):
+    world.use_both(extra='[run]\npick = "mine"\n')
+    number = world.issue("Mine", author="operator")
+    world.jira.ticket("Also mine, in Jira", reporter="op")
+    world.jira.fail = ("/rest/api/3/myself", 503)
+    res = world.cli("queue")
+    assert res.returncode == 0, res.stderr
+    assert f"new  {number}  -  -  Mine" in res.stdout.splitlines()
+    assert "problem: Jira: @me: Jira answered 503" in res.stderr
+
+
+def test_one_jobs_error_leaves_the_other_jobs_rows_alone(world):
+    world.use_jira(extra=SPEC_APPROVAL)
+    world.use_both(extra=SPEC_APPROVAL)
+    first, second = world.jira.ticket("First"), world.jira.ticket("Second")
+    jobs = [world.create(first), world.create(second)]
+    for job in jobs:
+        world.play(job, until="spec-approval")
+    world.jira.fail = (f"/rest/api/3/issue/{first}/comment", 503)
+    rows = {row[1]: row for row in world.queue()}
+    assert rows[first][4].startswith("could not read Jira: Jira answered 503")
+    assert rows[second][:4] == ("wait", second, jobs[1], "spec-approval")
+    assert rows[second][4] == "waiting for a maintainer"
+
+
+def test_tracker_sync_skips_a_job_whose_tracker_left(world):
+    world.use_both()
+    number = world.issue("On GitHub")
+    job = world.create(number)
+    world.use_jira()                                           # GitHub is no longer in [tracker].kind
+    world.factory().store.release()
+    res = world.cli("tracker", "sync")
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert f"skip   {number}  {job}  intake  its tracker, GitHub, is not in [tracker].kind" in res.stdout
