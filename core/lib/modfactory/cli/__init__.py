@@ -79,15 +79,16 @@ def _tracker_suggest(cfg: Any, as_json: bool) -> None:
 
 def _tracker_show(factory: Factory, as_json: bool) -> int:
     """`mfactory tracker show`: each step, its status and its board column. 1 when the board has a problem."""
-    report: dict[str, Any] | None = factory.tracker.board_report()
-    if report is None:
-        print(f"{factory.tracker.label} issues have no board: {factory.tracker.queue_note()}")
+    board_tracker = factory.tracker.board_member()
+    report: dict[str, Any] | None = board_tracker.board_report() if board_tracker else None
+    if board_tracker is None or report is None:
+        print(f"{factory.tracker.primary.label} issues have no board: {factory.tracker.queue_note()}")
         return 0
     wrong: bool = bool(report["problems"]) or any(row["problem"] for row in report["rows"])
     if as_json:
         print(json.dumps(report))
         return 1 if wrong else 0
-    print(f"{factory.tracker.label} board {report['board']} at {report['site']}")
+    print(f"{board_tracker.label} board {report['board']} at {report['site']}")
     table: list[tuple[str, str, str, str, str]] = [("step", "type", "status", "column", "")]
     for row in report["rows"]:
         note: str = row["problem"] or ("switched off" if not row["enabled"] else
@@ -264,7 +265,8 @@ def run(args: argparse.Namespace) -> int:
             text: str = _stdin_text()
             if not text.strip():
                 raise Refused("the issue's text goes on stdin")
-            print(factory.tracker.create_issue(" ".join(args.title), text, queue=True))
+            target = factory.tracker.member(args.tracker) if args.tracker else factory.tracker.primary
+            print(target.create_issue(" ".join(args.title), text, queue=True))
         elif command == "next":
             factory.next(args.job)
         elif command == "done":
@@ -288,8 +290,8 @@ def run(args: argparse.Namespace) -> int:
         elif command == "tracker" and args.tracker_what == "show":
             return _tracker_show(factory, args.json)
         elif command == "tracker":
-            if factory.tracker.board_report() is None:
-                print(f"{factory.tracker.label} issues have no board: nothing to move")
+            if factory.tracker.board_member() is None:
+                print(f"{factory.tracker.primary.label} issues have no board: nothing to move")
                 return 0
             return 0 if factory.sync_cards() else 1
     return 0

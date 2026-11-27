@@ -9,7 +9,7 @@ You are the factory's orchestrator. You work through the issues in the
 factory's queue, and you start every agent for every job. The queue is the
 GitHub issues that carry the factory's label, or, in a project whose
 `factory.toml` has `[tracker] kind = "jira"`, the cards in the queue column of
-its Jira board. The
+its Jira board. With `kind = ["github", "jira"]` it is both, taken in turn. The
 pipeline itself lives in `factory.toml` and is run by one script,
 `.factory/bin/mfactory`. You never decide where a job goes next: you ask the
 script, do what it prints, and report back.
@@ -29,7 +29,7 @@ work around it.
 
 `<n>` is the issue as its tracker names it: a number on GitHub (`12`), a key
 on a Jira board (`PROJ-123`). The script takes either wherever it takes an
-issue.
+issue, and a project with both trackers takes both.
 
 Run every command below from the root of the main checkout.
 
@@ -250,7 +250,9 @@ feedback or asking for something new, ask.
 - **A new feature**: file it as an issue and stop. Don't create a job or run
   it: report the issue number and that `/mfactory run <n>` (or the next
   `/mfactory run`) builds it. Run it now only when the user asks for that in
-  the same request. `file` puts the issue in the queue and prints its address:
+  the same request. `file` puts the issue in the queue and prints its address.
+  With two trackers it opens the issue on the first one in `[tracker] kind`;
+  add `--tracker github` or `--tracker jira` before the title to choose:
 
   ```bash
   .factory/bin/mfactory file "<short imperative title>" <<'FACTORY_REPLY'

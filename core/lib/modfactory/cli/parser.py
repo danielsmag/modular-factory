@@ -79,6 +79,8 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("issue")
     file: argparse.ArgumentParser = sub.add_parser(
         "file", help="open an issue in the queue; its text is read from standard input")
+    file.add_argument("--tracker", choices=config.TRACKER_KINDS,
+                      help="with two trackers, where to open it; the first in [tracker].kind otherwise")
     file.add_argument("title", nargs="+")
     nxt: argparse.ArgumentParser = sub.add_parser("next", help="say what the orchestrator must do for a job")
     nxt.add_argument("job")

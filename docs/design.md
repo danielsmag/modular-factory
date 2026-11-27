@@ -70,6 +70,7 @@ core/lib/modfactory/      the factory's code
       jira.py             a Jira kanban board: the queue is a column
       jira_api.py         Jira's REST API, with the standard library
       jira_acli.py        Jira through the Atlassian CLI, when REST has no credentials
+      routing.py          GitHub and Jira together: each issue to its own tracker, the queues in turn
       adf.py              Jira's document format, to and from text
   store.py, cost.py, util.py
 core/roles/*.md           one prompt per agent step and reviewer

@@ -879,8 +879,8 @@ A missing project file you list yourself fails `mfactory sync`. A missing user f
 By default the tracker is GitHub issues: jobs come from open issues with the queue label, and people reply in
 issue and pull request comments. With `kind = "jira"`, a Jira kanban board is the tracker. New jobs are the cards
 in its queue column, each step's card sits in a column of the board, and people reply in Jira comments or by
-moving the card. Code, branches and pull requests stay on GitHub. A project uses one tracker; a workspace can
-hold projects of both kinds.
+moving the card. Code, branches and pull requests stay on GitHub. A project can also take jobs from both: see
+[GitHub issues and a Jira board together](#github-issues-and-a-jira-board-together).
 
 ```toml
 [tracker]
@@ -916,7 +916,7 @@ export JIRA_API_TOKEN="..."
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `[tracker] kind` | `github` | `github` or `jira`. |
+| `[tracker] kind` | `github` | `github`, `jira`, or both as a list: `["github", "jira"]`. |
 | `[tracker.jira] site` | | The Jira Cloud site. `https://` only. |
 | `[tracker.jira] board` | | The kanban board's id: the number in its address. Its saved filter scopes the queue. |
 | `[tracker.jira] jql` | `""` | Narrows the queue further, ANDed with the board's filter. A filter only: no `ORDER BY`. `assignee = currentUser()` keeps the queue to cards assigned to the operator. |
@@ -1043,11 +1043,56 @@ account, and that line is how it tells its comments from ones the operator typed
 - A job's issue is its Jira key, such as `PROJ-123`: `/mfactory run PROJ-123`, `mfactory answer PROJ-123 approve`.
 - The branch is `<branch_prefix>PROJ-123-<job id>`, the pull request title must contain the key, and its body
   starts with `Refs PROJ-123`, so Jira's development panel links them. `branch_pattern` must accept that branch.
-- `[project] issue_link = "closes"` is refused: a pull request cannot close a Jira issue.
+- `[project] issue_link = "closes"` is refused when Jira is the only tracker: a pull request cannot close a Jira
+  issue. With both trackers it applies to the GitHub issues.
 - `[labels]` is not used. The queue column and the step columns say what the labels said.
 - Asks are posted on the Jira issue only, and comments on the pull request are not read as replies. A pull
   request merged by hand still continues the job.
 - `mfactory close issue` moves the card to the status of `done`, or of `rejected` with `--not-planned`.
+
+### GitHub issues and a Jira board together
+
+```toml
+[tracker]
+kind = ["github", "jira"]
+
+[tracker.jira]
+site = "https://acme.atlassian.net"
+board = 1234
+
+[tracker.jira.columns]
+queue = "Ready for factory"
+# ... a status for each step, as above
+```
+
+- Both queues feed the project: open issues with the queue label, and the cards in the queue column. The queue
+  takes one from each in turn, starting with the first tracker in `kind`, so neither waits for the other to
+  empty. `[run].concurrency` caps them together.
+- Each job asks and listens on its own tracker. A job from a GitHub issue is asked on the issue or its pull
+  request, with the factory's labels. A job from a Jira card is asked in Jira, and its card follows the job.
+  `/mfactory approve 12` and `/mfactory approve PROJ-123` both work.
+- Pull requests follow the issue. A GitHub issue's starts with `Refs #12`, or `Closes #12` with
+  `issue_link = "closes"`. A Jira issue's starts with `Refs PROJ-123` and carries the key in its title.
+- `mfactory file` opens the issue on the first tracker in `kind`. `mfactory file --tracker jira "<title>"`
+  chooses.
+- People are named per tracker, because a GitHub login and a Jira account id can look the same:
+
+  ```toml
+  [run]
+  authors = { github = ["alice"], jira = ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }
+
+  [steps.spec-approval]
+  who = { github = ["alice"], jira = ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }
+  ```
+
+  In `authors` and `assignees`, a tracker left out is not filtered. A `who` table names every tracker. The words
+  `author`, `maintainer` and `operator` stay plain strings.
+- When one tracker cannot be reached, the other's jobs carry on. `mfactory queue` prints
+  `problem: Jira: <reason>`, a job waiting on that tracker shows `could not read Jira`, and the dashboard shows
+  the problem. When neither can be reached, the command fails as before.
+- A job keeps the tracker it came from, so adding a second tracker leaves jobs in flight running. A job whose
+  tracker is taken out of `kind` gets a `skip` row until the tracker is back.
+- `mfactory doctor` checks both. `mfactory tracker show` and `tracker sync` work on the Jira board.
 
 ## Labels, paths and ports
 

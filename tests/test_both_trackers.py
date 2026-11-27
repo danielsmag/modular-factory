@@ -383,3 +383,48 @@ def test_a_job_from_a_removed_tracker_is_skipped(world):
     world.configure("")  # back to GitHub issues only
     rows = world.queue()
     assert ("skip", key, job, "intake", "its tracker, Jira, is not in [tracker].kind") in rows
+
+
+# ---- Commands with both trackers --------------------------------------------------
+
+
+def test_file_goes_to_the_first_tracker_or_the_one_named(world):
+    world.use_both()
+    first = world.cli("file", "Add a thing", input="Please add it.")
+    assert first.returncode == 0, first.stderr
+    assert first.stdout.strip().startswith("https://github.test/acme/app/issues/")
+    named = world.cli("file", "--tracker", "jira", "Add a thing", input="Please add it.")
+    assert named.returncode == 0, named.stderr
+    assert named.stdout.strip() == f"{world.jira.url}/browse/PROJ-1"
+    assert world.jira.status("PROJ-1") == "Ready for factory"
+
+
+def test_file_refuses_a_tracker_the_project_does_not_use(world):
+    res = world.cli("file", "--tracker", "jira", "Add a thing", input="Please add it.")
+    assert res.returncode != 0
+    assert "takes no jobs from Jira" in res.stderr
+
+
+def test_doctor_checks_both_trackers(world):
+    world.use_both()
+    found = world.cli("doctor").stdout
+    assert "GitHub labels" in found
+    assert "Jira: signed in to" in found and "Jira board 7" in found
+
+
+def test_tracker_show_uses_the_jira_board(world):
+    world.use_both()
+    res = world.cli("tracker", "show")
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "Jira board 7 at" in res.stdout
+
+
+def test_tracker_sync_moves_only_jira_cards(world):
+    world.use_both()
+    key = world.jira.ticket()
+    job = world.create(key)
+    world.jira.drag(key, "Backlog", "op")
+    world.factory().store.release()  # the command line takes the job's lock itself
+    res = world.cli("tracker", "sync")
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert f"moved  {key}  {job}" in res.stdout.replace("   ", "  ")
