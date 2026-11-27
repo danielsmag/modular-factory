@@ -278,6 +278,16 @@ def test_refused_credentials_are_reported_without_the_token(world, monkeypatch):
     assert "a-wrong-token" not in str(caught.value)
 
 
+def test_a_refused_file_email_names_factory_toml_and_not_the_address(world):
+    found = tracker(world, settings='email = "other@example.test"')
+    with pytest.raises(Refused) as caught:
+        found.operator()
+    text = str(caught.value)
+    assert "factory.toml" in text
+    assert "other@example.test" not in text
+    assert "jira-token-for-tests" not in text
+
+
 def test_a_site_that_does_not_answer_is_refused(world):
     found = tracker(world)
     world.jira.stop()
@@ -336,7 +346,8 @@ def test_doctor_says_which_jira_account_is_signed_in(world):
     found = tracker(world)
     ok, failed = [], []
     found.doctor(ok.append, ok.append, failed.append)
-    assert ok[0] == f"Jira: signed in to {world.jira.url} as Olivia Operator"
+    assert ok[0] == (f"Jira: signed in to {world.jira.url} as Olivia Operator "
+                     "(email from $JIRA_EMAIL, token from $JIRA_API_TOKEN)")
     assert failed == []
 
 

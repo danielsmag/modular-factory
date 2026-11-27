@@ -422,9 +422,27 @@ def a_jql(value: object) -> str | None:
     return "must be a filter without ORDER BY"
 
 
-JIRA_KEYS = {"site": a_site, "board": an_int(0), "jql": a_jql, "email_env": an_env_name,
-             "token_env": an_env_name, "issue_type": a_filled_string, "maintainers": a_string_list,
-             "via": one_of("auto", "rest", "acli"), "project": a_project_key,
+# An account email. Empty means read email_env. The address is not a secret.
+EMAIL_ADDRESS = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+
+
+def an_email(value: object) -> str | None:
+    """Empty, or an account email. Empty means read email_env."""
+    if isinstance(value, str) and (not value.strip() or EMAIL_ADDRESS.fullmatch(value.strip())):
+        return None
+    return "must be an email address, or empty to read email_env"
+
+
+def a_token_file(value: object) -> str | None:
+    """Empty, or a path to a file that holds the API token. The token itself never goes in factory.toml."""
+    if isinstance(value, str) and "\n" not in value and "\r" not in value and "\x00" not in value:
+        return None
+    return "must be a path, or empty"
+
+
+JIRA_KEYS = {"site": a_site, "board": an_int(0), "jql": a_jql, "email": an_email, "email_env": an_env_name,
+             "token_env": an_env_name, "token_file": a_token_file, "issue_type": a_filled_string,
+             "maintainers": a_string_list, "via": one_of("auto", "rest", "acli"), "project": a_project_key,
              "columns": lambda value: None}
 # A Jira account id: letters, digits, hyphens and a colon, such as 712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70.
 ACCOUNT = re.compile(r"[A-Za-z0-9][A-Za-z0-9:_-]{0,127}")

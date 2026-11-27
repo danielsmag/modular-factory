@@ -63,8 +63,26 @@ def test_credentials_are_named_by_environment_variable_and_never_given(world):
     world.configure(JIRA + COLUMNS)
     jira = config.load(world.repo)["tracker"]["jira"]
     assert (jira["email_env"], jira["token_env"]) == ("JIRA_EMAIL", "JIRA_API_TOKEN")
+    assert (jira["email"], jira["token_file"]) == ("", "")
+    world.configure(JIRA + 'email = "you@example.com"\ntoken_file = ".secrets/jira"\n' + COLUMNS)
+    jira = config.load(world.repo)["tracker"]["jira"]
+    assert (jira["email"], jira["token_file"]) == ("you@example.com", ".secrets/jira")
     found = problems(world, JIRA + 'token = "secret"\n' + COLUMNS)
     assert "[tracker.jira].token is not a setting" in found
+    found = problems(world, JIRA + 'email = "not-an-email"\n' + COLUMNS)
+    assert "[tracker.jira].email must be an email address, or empty to read email_env" in found
+    found = problems(world, JIRA + "email = 1\n" + COLUMNS)
+    assert "[tracker.jira].email must be an email address, or empty to read email_env" in found
+    found = problems(world, JIRA + 'token_file = "a\\nb"\n' + COLUMNS)
+    assert "[tracker.jira].token_file must be a path, or empty" in found
+    secret = "jira-token-for-tests"
+    folder = world.repo / ".secrets"
+    folder.mkdir()
+    (folder / "jira").write_text(secret + "\n")
+    world.configure(JIRA + 'token_file = ".secrets/jira"\n' + COLUMNS)
+    cfg = config.load(world.repo)
+    assert secret not in config.show(cfg)
+    assert all(secret not in str(row["value"]) for row in config.as_json(cfg))
 
 
 def test_an_unknown_tracker_setting_is_named(world):
