@@ -44,13 +44,25 @@ def test_snapshot_reads_branch_files(world):
 def test_snapshot_jira_and_both(world):
     jira = world.use_both()
     world.issue("From GitHub")
-    card = jira.ticket("From Jira", "Body", labels=[])
+    card = jira.ticket("From Jira", "Body", labels=[], priority="Highest")
     out = snapshot(world)
     by_tracker = {t["tracker"]: t for t in out["tickets"]}
     assert set(by_tracker) == {"github", "jira"}
     assert by_tracker["jira"]["key"] == card
-    assert by_tracker["jira"]["priority"] in {"critical", "high", "normal", "low"}
+    assert by_tracker["jira"]["priority"] == "critical"
+    assert by_tracker["github"]["priority"] == "normal"
     assert by_tracker["jira"]["ref"] == f"repo:{card}"
+
+
+def test_snapshot_keeps_priority_of_a_job_past_the_queue_column(world):
+    jira = world.use_jira()
+    card = jira.ticket("Urgent thing", "Body", priority="Highest", labels=["web"])
+    job = world.create(card)
+    assert card not in [i["number"] for i in world.factory().tracker.queue()]
+    out = snapshot(world)
+    (found,) = out["tickets"]
+    assert found["job"] == job and found["priority"] == "critical" and found["labels"] == ["web"]
+    assert out["errors"] == []
 
 
 def test_pairs_similar_titles():

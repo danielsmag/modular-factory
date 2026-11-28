@@ -21,7 +21,7 @@ KEY = JIRA_KEY
 # so this is what tells its comments from ones the operator typed. It is plain text, so it survives
 # whichever way Jira is reached.
 SIGNATURE = "— mfactory"
-FIELDS = "summary,description,status,reporter,assignee,labels,created,updated"
+FIELDS = "summary,description,status,reporter,assignee,labels,priority,created,updated"
 LIST_FIELDS = "summary,status,reporter,assignee,labels,priority,created,updated"
 # Issue keys in one JQL `key in (...)`.
 KEYS_PER_CALL = 50

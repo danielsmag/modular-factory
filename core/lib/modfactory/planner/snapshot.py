@@ -71,6 +71,12 @@ def project_tickets(factory: Factory, label: str) -> tuple[list[dict[str, Any]],
     for key in [*queued, *(k for k in jobs if k not in queued)]:
         issue: dict[str, Any] = queued.get(key) or {}
         job: dict[str, Any] | None = jobs.get(key)
+        if job and key not in queued and job["step"] not in END_STATES:
+            # The card left the queue column, so the listing no longer carries its labels and priority.
+            try:
+                issue = factory.tracker.issue(key)
+            except FactoryError as error:
+                errors.append(f"{label}: could not read {job['id']}'s issue: {error}")
         kind: str = (job or {}).get("tracker") or key_kind(key) or "github"
         title: str = str(issue.get("title") or (job or {}).get("title") or "")
         excerpt: str = ""
