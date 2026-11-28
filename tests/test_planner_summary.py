@@ -1,9 +1,12 @@
 """`plan summary`, `plan show` and `plan suggest`: the planner's findings on demand, and the skill that drives them."""
 
 import json
+import os
 from datetime import UTC, datetime
+from pathlib import Path
 
 from modfactory.planner import summary
+from modfactory.planner.state import PlannerState
 from test_planner_ingest import entry, snap, ticket
 from test_workspace_planner import launcher, pair  # noqa: F401  (pair is a fixture)
 
@@ -109,3 +112,58 @@ def test_summary_fresh_prints_scan_lines_only_when_changed(world):
     assert lines[0] == "start-agent mfactory-planner-scan"
     assert lines[1].startswith("prompt: Planner scan.")
     assert lines[2] == "then: mfactory plan summary" and len(lines) == 3
+
+
+def state_of(world):
+    return PlannerState(Path(os.environ["FACTORY_HOME"]) / "planner")
+
+
+def test_suggest_adds_open_finding(world):
+    world.issue("Add the VAT field to invoices")
+    world.issue("Show the VAT field on invoices")
+    world.issue("Rework the login page")
+    launcher(world.repo)
+    scan_and_ingest(world, ("repo:#1", "repo:#2"))
+    before = state_of(world).read_findings()
+    assert world.cli("plan", "dismiss", "F-1").returncode == 0
+    new = {"findings": [entry("repo:#1", "repo:#3", kind="overlap")]}
+    res = world.cli("plan", "suggest", input=json.dumps(new))
+    assert res.returncode == 0, res.stderr
+    shown = json.loads(world.cli("plan", "show", "--json").stdout)
+    by_id = {f["id"]: f for f in shown["findings"]}
+    assert by_id["F-2"]["status"] == "open" and by_id["F-2"]["tickets"] == ["repo:#1", "repo:#3"]
+    assert by_id["F-1"]["status"] == "dismissed"
+    assert shown["scanned_at"] == before["scanned_at"] and shown["snapshot_hash"] == before["snapshot_hash"]
+    text = world.cli("plan", "show")
+    assert "F-2" in text.stdout and "open" in text.stdout
+
+
+def test_suggest_keeps_other_open_findings(world):
+    world.issue("Add the VAT field to invoices")
+    world.issue("Show the VAT field on invoices")
+    world.issue("Rework the login page")
+    launcher(world.repo)
+    scan_and_ingest(world, ("repo:#1", "repo:#2"))
+    new = {"findings": [entry("repo:#1", "repo:#3", kind="overlap")]}
+    assert world.cli("plan", "suggest", input=json.dumps(new)).returncode == 0
+    shown = json.loads(world.cli("plan", "show", "--json").stdout)
+    assert [(f["id"], f["status"]) for f in shown["findings"]] == [("F-1", "open"), ("F-2", "open")]
+
+
+def test_suggest_rejects_an_invalid_entry(world):
+    world.issue("Add the VAT field to invoices")
+    launcher(world.repo)
+    assert world.cli("plan", "scan", "--force").returncode == 0
+    bad = {"findings": [entry("repo:#1", "repo:#99")]}
+    res = world.cli("plan", "suggest", input=json.dumps(bad))
+    assert res.returncode == 1
+    assert "dropped:" in res.stdout and "repo:#99" in res.stdout
+    assert json.loads(world.cli("plan", "show", "--json").stdout)["findings"] == []
+
+
+def test_skill_mentions_planner_commands(world):
+    assert world.cli("sync").returncode == 0
+    text = (world.repo / ".claude/skills/mfactory/SKILL.md").read_text()
+    for needle in ("mfactory plan summary --fresh", "mfactory plan due", "only when the user says so",
+                   "mfactory plan suggest", "/mfactory plan summary"):
+        assert needle in text, needle

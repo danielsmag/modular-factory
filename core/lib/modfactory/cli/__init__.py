@@ -289,6 +289,39 @@ def plan_ingest(cfg: config.Config, reply: bool) -> int:
     return 0
 
 
+def plan_suggest(cfg: config.Config) -> int:
+    """Add the one entry of a Draft on standard input as an open finding. The other findings stay as they are."""
+    _planner_on(cfg)
+    state: PlannerState = PlannerState(user_dir() / "planner")
+    snapshot: dict[str, Any] | None = state.read_snapshot(state.scan_snapshot_path) or state.read_snapshot()
+    if snapshot is None:
+        raise Refused("there is no snapshot: run `mfactory plan scan` first")
+    draft: object = _draft_json(_stdin_text())
+    if not isinstance(draft, dict) or not isinstance(draft.get("findings"), list) or len(draft["findings"]) != 1:
+        raise Refused('the suggestion is not a JSON object with a findings list of one entry: {"findings": [...]}')
+    settings: dict[str, Any] = cfg["planner"]
+    kept, dropped = ingest_mod.validate(draft, snapshot, int(settings["max_extra"]))
+    for reason in dropped:
+        print(f"dropped: {reason}")
+    if not kept:
+        return 1
+    old: dict[str, Any] = state.read_findings()
+    merged: dict[str, Any] = ingest_mod.merge(old, kept, snapshot, settings, now())
+    # A suggestion is not a scan: merge drops the open findings the entry does not repeat, and stamps a scan.
+    here: set[str] = {str(f.get("id")) for f in merged["findings"]}
+    merged["findings"] += [f for f in old["findings"] if f.get("status") == "open" and f.get("id") not in here]
+    merged["findings"].sort(key=lambda f: int(str(f.get("id")).partition("-")[2] or 0))
+    merged.update(scanned_at=old.get("scanned_at"), snapshot_hash=old.get("snapshot_hash"))
+    key: str = ingest_mod.finding_key(kept[0]["kind"], kept[0]["tickets"])
+    added: dict[str, Any] = next(f for f in merged["findings"] if f.get("key") == key)
+    if added.get("status") != "open":
+        print(f"not added: {added['id']} is {added.get('status')} and its tickets have not changed")
+        return 1
+    state.write_findings(merged)
+    print(f"{added['id']} open")
+    return 0
+
+
 def plan_release(factory: Factory, ref: str) -> int:
     """Lift the hold of a job or a queued issue. `ref` is a job id or an issue key."""
     key: Any
@@ -668,6 +701,8 @@ def run(args: argparse.Namespace) -> int:
         return plan_summary(repo, cfg, args.fresh, args.project, args.json)
     elif command == "plan" and args.plan_what == "show":
         return plan_show(cfg, args.json)
+    elif command == "plan" and args.plan_what == "suggest":
+        return plan_suggest(cfg)
     elif command == "plan" and args.plan_what == "ingest":
         return plan_ingest(cfg, args.reply)
     elif command == "plan" and args.plan_what == "approve":

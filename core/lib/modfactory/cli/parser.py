@@ -181,6 +181,8 @@ def parser() -> argparse.ArgumentParser:
     plan_summary.add_argument("--json", action="store_true", help="the report as one JSON object")
     plan_show: argparse.ArgumentParser = plan_sub.add_parser("show", help="the findings and their status")
     plan_show.add_argument("--json", action="store_true", help="the findings file as one JSON object")
+    plan_sub.add_parser(
+        "suggest", help='add one finding from standard input: {"findings": [one entry]}, checked like ingest')
     plan_ingest: argparse.ArgumentParser = plan_sub.add_parser(
         "ingest", help="check the scan agent's draft and merge it into the findings")
     plan_ingest.add_argument("--reply", action="store_true", help="read the draft from standard input")
