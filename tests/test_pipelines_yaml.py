@@ -231,6 +231,31 @@ def test_migrate_moves_steps_to_yaml(tmp_path):
     assert (root / "factory" / "pipes" / "default.yaml").read_text().count("\npipes:\n") == 1
 
 
+def test_a_project_as_0_32_0_left_it_still_runs_until_migrate_layout(tmp_path):
+    (tmp_path / "factory.toml").write_text(BASE + '[run]\npipeline = "hotfix"\n')
+    early = tmp_path / "pipelines"
+    early.mkdir()
+    (early / "hotfix.yaml").write_text(HOTFIX.replace("pipes:", "pipelines:", 1))
+    cfg = config.load(tmp_path)
+    assert list(cfg.pipelines) == ["default", "hotfix"] and cfg.pipelines["hotfix"].file == "pipelines/hotfix.yaml"
+    assert cfg.choose_pipeline(None) == "hotfix"  # [run].pipeline, 0.32.0's name for [run].pipe
+    assert config.old_names(cfg) == [
+        "factory.toml is at the root of the repository, not in factory/",
+        "the pipes are in pipelines/, not factory/pipes/",
+        "pipelines/hotfix.yaml declares `pipelines:`, not `pipes:`",
+        "[run].pipeline is now [run].pipe",
+    ]
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    res = subprocess.run([sys.executable, str(CLI), "migrate", "layout"], cwd=tmp_path, capture_output=True,
+                         text=True)
+    assert res.returncode == 0, res.stderr
+    assert "moved [run].pipeline -> [run].pipe" in res.stdout
+    cfg = config.load(tmp_path)
+    assert config.old_names(cfg) == [] and cfg.choose_pipeline(None) == "hotfix"
+    assert cfg.pipelines["hotfix"].file == "factory/pipes/hotfix.yaml"
+    assert 'pipe = "hotfix"' in (tmp_path / "factory" / "factory.toml").read_text()
+
+
 def test_a_factory_toml_at_the_root_still_loads_and_migrate_layout_moves_it(tmp_path):
     (tmp_path / "factory.toml").write_text(BASE + '[run]\nconcurrency = 2\n')
     early = tmp_path / "pipelines"

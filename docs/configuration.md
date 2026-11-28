@@ -260,7 +260,12 @@ mfactory migrate pipes          [steps.*] in factory.toml to factory/pipes/defau
 mfactory migrate layout         factory.toml at the root into factory/
 ```
 
-`pipelines` and `--pipeline`, the names before `pipes`, still work as aliases.
+**From 0.32.0.** 0.32.0 kept the pipes in `pipelines/` at the root, under a
+`pipelines:` key, with `[run].pipeline` and `[paths].pipelines`. All of that
+still loads, and `pipelines` and `--pipeline` still work as aliases on the
+command line. `doctor` lists what still uses the old names, and
+`.factory/bin/mfactory migrate layout` moves `factory.toml` and the pipe files
+into `factory/` (with git history) and renames the keys.
 
 ## The pipeline: steps
 

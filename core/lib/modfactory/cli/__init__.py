@@ -252,7 +252,7 @@ def migrate_layout(repo: Path) -> int:
     # Pipes from before they moved into factory/: a pipelines/ folder at the root, its files under `pipelines:`.
     early: Path = repo / "pipelines"
     pipes_dir: Path = repo / pipelines.FOLDER
-    if early.is_dir() and not pipelines.project_files(repo, pipelines.FOLDER):
+    if pipelines.old_folder_in_use(repo):
         for path in sorted(p for p in early.iterdir() if p.suffix in pipelines.SUFFIXES):
             target: Path = pipes_dir / path.name
             _move(repo, path, target)
@@ -262,6 +262,7 @@ def migrate_layout(repo: Path) -> int:
             moved.append(f"pipelines/{path.name} -> {pipelines.FOLDER}/{path.name}")
         if early.is_dir() and not any(early.iterdir()):
             early.rmdir()
+    moved += _rename_old_keys(config.config_path(repo))
     if not moved:
         print(f"nothing to move: {config.config_rel(repo)} is in place")
         return 0
@@ -270,6 +271,33 @@ def migrate_layout(repo: Path) -> int:
         print(f"moved {line}")
     print(f"Commit {config.DIR}/ and the removed files.")
     return 0
+
+
+def _rename_old_keys(path: Path) -> list[str]:
+    """[run].pipeline becomes [run].pipe; [paths].pipelines is dropped when it named pipelines/, else renamed."""
+    if not path.is_file():
+        return []
+    table: str = ""
+    lines: list[str] = []
+    done: list[str] = []
+    for line in path.read_text().splitlines():
+        header: str = line.strip()
+        if header.startswith("[") and header.endswith("]") and not header.startswith("[["):
+            table = header.strip("[]").strip()
+        key: re.Match[str] | None = re.match(r"(\s*)(pipeline|pipelines)(\s*=\s*)(.*)$", line)
+        if key and table == "run" and key.group(2) == "pipeline":
+            line = f"{key.group(1)}pipe{key.group(3)}{key.group(4)}"
+            done.append("[run].pipeline -> [run].pipe")
+        elif key and table == "paths" and key.group(2) == "pipelines":
+            done.append("[paths].pipelines -> [paths].pipes" if not re.match(r'"pipelines/?"', key.group(4))
+                        else "[paths].pipelines removed: the pipes are in factory/pipes/")
+            if re.match(r'"pipelines/?"', key.group(4)):
+                continue
+            line = f"{key.group(1)}pipes{key.group(3)}{key.group(4)}"
+        lines.append(line)
+    if done:
+        path.write_text("\n".join(lines) + "\n")
+    return done
 
 
 def migrate_pipelines(repo: Path) -> int:
@@ -285,7 +313,7 @@ def migrate_pipelines(repo: Path) -> int:
         return 0
     cfg: config.Config = config.load(repo)
     pipe: pipelines.Pipeline = cfg.pipelines[pipelines.DEFAULT]
-    folder: Path = pipelines.folder(repo, cfg["paths"].get("pipes"))
+    folder: Path = config.pipes_folder(cfg)
     target: Path = folder / "default.yaml"
     if pipe.file not in ("built-in", target.relative_to(repo).as_posix()):
         raise Refused(f"the default pipeline is declared in {pipe.file}. Move [steps.*] there by hand.")

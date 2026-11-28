@@ -22,6 +22,9 @@ BUILTIN_FILE = CORE / "pipes" / "default.yaml"
 SCHEMA_FILE = CORE / "schema" / "pipe.schema.json"
 KEY = "pipes"               # the top-level key of a pipe file
 FOLDER = "factory/pipes"    # where a project's pipe files are, from the repository root
+# Where 0.32.0 kept them, and the key their files used. Both still load until `mfactory migrate layout`.
+OLD_KEY = "pipelines"
+OLD_FOLDER = "pipelines"
 BUILTIN_LABEL = "default"   # the source label of a value that comes from the built-in pipeline
 SUFFIXES = (".yaml", ".yml")
 
@@ -48,6 +51,7 @@ class PipelineFile:
     text: str
     names: list[str]
     errors: list[str]
+    old_key: bool = False        # declared under `pipelines:`, as 0.32.0 wrote it
 
 
 # ---- YAML ------------------------------------------------------------------
@@ -183,15 +187,27 @@ def _mark(sources: dict[tuple[str, ...], str], layer: dict[str, Any], label: str
 
 
 def folder(repo: Path, setting: object) -> Path:
-    name: str = setting if isinstance(setting, str) and setting.strip() else FOLDER
-    return Path(repo) / name
+    """The folder the project's pipes are read from: the setting, factory/pipes, or 0.32.0's pipelines/."""
+    if isinstance(setting, str) and setting.strip():
+        return Path(repo) / setting
+    if old_folder_in_use(repo):
+        return Path(repo) / OLD_FOLDER
+    return Path(repo) / FOLDER
 
 
-def project_files(repo: Path, setting: object) -> list[Path]:
-    root: Path = folder(repo, setting)
+def _yaml_in(root: Path) -> list[Path]:
     if not root.is_dir():
         return []
     return sorted(p for p in root.iterdir() if p.is_file() and p.suffix in SUFFIXES)
+
+
+def old_folder_in_use(repo: Path) -> bool:
+    """True when the pipes are still in pipelines/ at the root, where 0.32.0 put them, and factory/pipes/ has none."""
+    return not _yaml_in(Path(repo) / FOLDER) and bool(_yaml_in(Path(repo) / OLD_FOLDER))
+
+
+def project_files(repo: Path, setting: object) -> list[Path]:
+    return _yaml_in(folder(repo, setting))
 
 
 def _read(path: Path, label: str) -> tuple[dict[str, Any], PipelineFile]:
@@ -202,13 +218,16 @@ def _read(path: Path, label: str) -> tuple[dict[str, Any], PipelineFile]:
         return {}, PipelineFile(label, text, [], [doc.message])
     if doc is None:
         return {}, PipelineFile(label, text, [], [f"{label}: the file is empty. It must declare `pipes:`"])
+    old: bool = isinstance(doc, dict) and OLD_KEY in doc and KEY not in doc
+    if old:  # a file from 0.32.0, under `pipelines:`
+        doc = {KEY if key == OLD_KEY else key: value for key, value in doc.items()}
     errors: list[str] = [f"{label}: {where or '(top)'} {message}"
                          for where, message in jsonschema_lite.validate(doc, schema())]
     declared: dict[str, Any] = doc.get(KEY) if isinstance(doc, dict) else None  # type: ignore[assignment]
     names: list[str] = list(declared) if isinstance(declared, dict) else []
     if errors:
-        return {}, PipelineFile(label, text, names, errors)
-    return dict(declared), PipelineFile(label, text, names, [])
+        return {}, PipelineFile(label, text, names, errors, old)
+    return dict(declared), PipelineFile(label, text, names, [], old)
 
 
 def load_all(repo: Path, setting: object = None, legacy_steps: dict[str, Any] | None = None,

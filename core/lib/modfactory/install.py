@@ -138,7 +138,7 @@ def _pattern_present(have: set[str], pattern: str) -> bool:
 def personal_patterns(cfg: config.Config) -> list[str]:
     """Ignore lines for a personal install: the factory, its runtime dirs, and generated files."""
     worktrees: str = str(cfg["paths"]["worktrees"]).strip("/")
-    folder: str = str(cfg["paths"].get("pipes") or pipelines.FOLDER).strip("/")
+    folder: str = config.pipes_folder(cfg).relative_to(cfg.repo).as_posix().strip("/")
     patterns: list[str] = [f"/{config.DIR}/", "/.factory/", f"/{worktrees}/"]
     if config.is_legacy_layout(cfg.repo):
         patterns.insert(0, f"/{config.FILE}")
@@ -272,7 +272,8 @@ def write_pipelines(repo: Path, say: Callable[[str], None] = print) -> None:
     setting: object = None
     if config.config_path(repo).is_file():
         try:
-            setting = config.read_toml(config.config_path(repo)).get("paths", {}).get("pipes")
+            paths_table = config.read_toml(config.config_path(repo)).get("paths", {})
+            setting = paths_table.get("pipes") or paths_table.get("pipelines")
         except ConfigError:
             setting = None
     folder: Path = pipelines.folder(repo, setting)
@@ -408,10 +409,9 @@ def doctor(repo, run_checks=True, say=print):
         fail(str(e))
         return failures
     ok(f"{config.config_rel(repo)} is valid")
-    if config.is_legacy_layout(repo):
-        warn(f"{config.FILE} is at the root of the repository. Run `.factory/bin/mfactory migrate layout` "
-             f"to move it into {config.DIR}/, next to the pipes.")
-    folder_setting: object = cfg["paths"].get("pipes")
+    for old in config.old_names(cfg):
+        warn(f"{old}. Run `.factory/bin/mfactory migrate layout` to move to factory/ and the new names.")
+    folder_setting: object = config.pipes_setting(cfg)
     folder: Path = pipelines.folder(repo, folder_setting)
     if not pipelines.project_files(repo, folder_setting):
         warn(f"{folder.relative_to(repo).as_posix()}/ has no pipe files, so jobs run the built-in pipe. "

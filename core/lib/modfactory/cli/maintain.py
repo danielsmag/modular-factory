@@ -266,7 +266,7 @@ def uninstall(repo: Path, remove_config: bool = False, labels: bool = False,
         if config_path.is_file():
             removed.append(config.config_rel(repo))
             config_path.unlink()
-        pipes_dir: Path = repo / str((cfg["paths"].get("pipes") if cfg else None) or "factory/pipes")
+        pipes_dir: Path = config.pipes_folder(cfg) if cfg else repo / "factory" / "pipes"
         if pipes_dir.is_dir() and pipes_dir.resolve().is_relative_to(repo.resolve()):
             shutil.rmtree(pipes_dir)
             removed.append(pipes_dir.relative_to(repo).as_posix() + "/")

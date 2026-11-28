@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 
+from . import config
 from .config import Config
 from .util import Refused, run, tail
 
@@ -24,7 +25,7 @@ OWNED = ["factory/*", "factory.toml", ".factory/*",
 
 def owned_patterns(cfg) -> list[str]:
     """OWNED, and the project's pipes folder when it is outside factory/: a job may not rewrite its pipe."""
-    folder: str = str(cfg["paths"].get("pipes") or "factory/pipes").strip("/")
+    folder: str = config.pipes_folder(cfg).relative_to(cfg.repo).as_posix().strip("/")
     return OWNED + [f"{folder}/*"]
 
 

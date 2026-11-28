@@ -204,8 +204,9 @@ them, `mfactory pipes validate` checks every file against the schema and the
 graph rules, and `mfactory graph --pipe hotfix` prints one. A project that
 still has `[steps.*]` in `factory.toml` keeps working: those tables override
 the default pipe, and `mfactory migrate pipes` moves them to YAML. A project
-with `factory.toml` at its root, from before `factory/`, keeps working too;
-`mfactory migrate layout` moves it into `factory/`, and `doctor` says so.
+with `factory.toml` at its root, or with 0.32.0's `pipelines/` folder and
+names, keeps working too; `mfactory migrate layout` moves it all into
+`factory/`, and `doctor` says so.
 
 The pipes need PyYAML. `install.sh` installs it when it is missing, and
 `mfactory doctor` checks for it.

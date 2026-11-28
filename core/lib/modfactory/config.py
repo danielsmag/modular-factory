@@ -308,6 +308,44 @@ class Config:
         return chosen
 
 
+def _pipes_setting(data: dict[str, Any], sources: dict[tuple[str, ...], str]) -> str | None:
+    """The pipes folder factory.toml names, or None for the default, which falls back to 0.32.0's pipelines/."""
+    paths: object = data.get("paths")
+    if not isinstance(paths, dict):
+        return None
+    for key in ("pipes", "pipelines"):
+        if sources.get(("paths", key)) == FILE and isinstance(paths.get(key), str) and paths[key].strip():
+            return paths[key]
+    return None
+
+
+def pipes_setting(cfg: "Config") -> str | None:
+    """The pipes folder the project names in factory.toml, or None for the default."""
+    base: Config = cfg.base_config
+    return _pipes_setting(base.data, base.sources)
+
+
+def pipes_folder(cfg: "Config") -> Path:
+    """The folder the project's pipes are read from."""
+    return pipelines.folder(cfg.repo, pipes_setting(cfg))
+
+
+def old_names(cfg: "Config") -> list[str]:
+    """What still uses 0.32.0's names or places, for doctor. `mfactory migrate layout` moves all of them."""
+    base: Config = cfg.base_config
+    found: list[str] = []
+    if is_legacy_layout(base.repo):
+        found.append(f"{FILE} is at the root of the repository, not in {DIR}/")
+    if pipes_setting(base) is None and pipelines.old_folder_in_use(base.repo):
+        found.append(f"the pipes are in {pipelines.OLD_FOLDER}/, not {pipelines.FOLDER}/")
+    found += [f"{report.path} declares `{pipelines.OLD_KEY}:`, not `{pipelines.KEY}:`"
+              for report in base.pipeline_files if report.old_key]
+    for key_path, name in ((("run", "pipeline"), "[run].pipeline"), (("paths", "pipelines"), "[paths].pipelines")):
+        if base.sources.get(key_path) == FILE:
+            found.append(f"{name} is now {name.replace('pipelines', 'pipes').replace('pipeline', 'pipe')}")
+    return found
+
+
 def all_steps(cfg: "Config") -> dict[str, Any]:
     """Every step name across the project's pipelines, the default pipeline's definition first.
 
@@ -363,9 +401,11 @@ def load(repo, validate=True, text=None):
     legacy_run: dict[str, Any] = {k: run_table.pop(k) for k in ("start", "escalate_to") if k in run_table}
     for old in [p for p in sources if p[:1] == ("steps",) or p in (("run", "start"), ("run", "escalate_to"))]:
         del sources[old]
-    paths_table: object = data.get("paths")
+    # 0.32.0's names for two settings: [run].pipeline and [paths].pipelines.
+    if isinstance(run_table.get("pipeline"), str) and sources.get(("run", "pipe")) != FILE:
+        run_table["pipe"] = run_table["pipeline"]
     pipes, files, pipe_problems = pipelines.load_all(
-        repo, paths_table.get("pipes") if isinstance(paths_table, dict) else None,
+        repo, _pipes_setting(data, sources),
         legacy_steps if isinstance(legacy_steps, dict) else {}, legacy_run, FILE)
     default: pipelines.Pipeline | None = pipes.get(pipelines.DEFAULT)
     if default is not None:
@@ -711,12 +751,14 @@ TABLES = {
                 "pr_title": a_string, "pr_title_pattern": a_regex, "issue_link": one_of("refs", "closes"),
                 "branch_prefix": a_branch_prefix, "branch_pattern": a_regex},
     "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string, "pipe": a_string,
+            "pipeline": a_string,
             "pick": one_of("all", "mine"), "report_problems": a_bool,
             "authors": a_login_list, "assignees": a_login_list},
     "workspace": {"concurrency": an_int(1)},
     "checks": {"commands": a_string_list, "timeout_minutes": an_int(1)},
     "labels": {"queue": a_filled_string, "needs_info": a_filled_string, "needs_human": a_filled_string},
-    "paths": {"worktrees": a_filled_string, "protected": a_string_list, "pipes": a_filled_string},
+    "paths": {"worktrees": a_filled_string, "protected": a_string_list, "pipes": a_filled_string,
+              "pipelines": a_filled_string},
     "ports": {"base": an_int(1024), "step": an_int(3)},
     "skills": {"all": a_string_list},
     "rules": {"all": a_string_list},
@@ -1064,7 +1106,7 @@ def pipelines_json(cfg):
     return {
         "default": chosen or (next(iter(base.pipelines)) if len(base.pipelines) == 1 else None),
         "ask": not chosen and len(base.pipelines) > 1,
-        "folder": str(base.data["paths"].get("pipes") or pipelines.FOLDER),
+        "folder": pipes_folder(base).relative_to(base.repo).as_posix(),
         "legacy": bool(getattr(base, "legacy_pipeline", False)),
         "pipelines": rows,
         "files": [{"path": r.path, "names": r.names, "errors": r.errors, "yaml": r.text}

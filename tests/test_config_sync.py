@@ -135,7 +135,7 @@ reviewer-code = { low = { speed = "fast" } }
 """) == [
         "[run].concurrency must be a whole number of at least 1 (got 0)",
         "[run].max_rounds is not a setting. "
-        "Known: assignees, authors, concurrency, escalate_to, pick, pipe, report_problems, start",
+        "Known: assignees, authors, concurrency, escalate_to, pick, pipe, pipeline, report_problems, start",
         '[checks].commands must be a list of non-empty strings (got "npm test")',
         '[tools].enabled has "copilot", which is not a tool. Known: claude, codex, cursor',
         '[steps.build].port must be true or false (got "yes")',
