@@ -21,6 +21,7 @@ plan the queue across jobs
   plan snapshot [--json] [--label NAME]
   plan collect [--json]
   plan scan [--force] | plan due | plan ingest [--reply]
+  plan release <ref>
 other
   checks | dashboard | start dashboard | stop | version
 several projects
@@ -158,7 +159,7 @@ def parser() -> argparse.ArgumentParser:
     plan: argparse.ArgumentParser = sub.add_parser(
         "plan", help="the planner: duplicates, dependencies and priority across the queue")
     plan_sub: argparse._SubParsersAction[argparse.ArgumentParser] = plan.add_subparsers(
-        dest="plan_what", required=True, metavar="<snapshot|collect|scan|due|ingest>")
+        dest="plan_what", required=True, metavar="<snapshot|collect|scan|due|ingest|release>")
     plan_snapshot: argparse.ArgumentParser = plan_sub.add_parser(
         "snapshot", help="every queued issue and job of this project, as tickets")
     plan_snapshot.add_argument("--json", action="store_true", help="the snapshot as one JSON object")
@@ -173,6 +174,9 @@ def parser() -> argparse.ArgumentParser:
     plan_ingest: argparse.ArgumentParser = plan_sub.add_parser(
         "ingest", help="check the scan agent's draft and merge it into the findings")
     plan_ingest.add_argument("--reply", action="store_true", help="read the draft from standard input")
+    plan_release: argparse.ArgumentParser = plan_sub.add_parser(
+        "release", help="run a held job or issue now, without waiting for the job it waits on")
+    plan_release.add_argument("ref", help="a job id, or an issue key such as 12, #12 or PROJ-7")
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
     sub.add_parser("hook")  # no help text: argparse then leaves it out of the list

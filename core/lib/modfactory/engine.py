@@ -457,6 +457,10 @@ class Factory(Humans, Cards, Scripted, Queue):
         job = self.store.open(ref)
         while True:
             name = job["step"]
+            if job.get("held_by") and name not in graph.END_STATES:
+                self.say(f"held {self.tag(job)}: until {job['held_by'].get('until')} is done. "
+                         f"{CLI} plan release {job['id']} runs it now")
+                return
             if name in graph.END_STATES:
                 self.say(f"finished {self.tag(job)}: {name}" + self._finished_note(job))
                 return

@@ -118,7 +118,6 @@ def test_collect_survives_a_binary_that_cannot_run(pair):
     assert len(snap["errors"]) == 1 and snap["errors"][0].startswith("beta:")
 
 
-@pytest.mark.xfail(strict=True, reason="plan release lands in Task 5")
 def test_collect_releases_cross_project_hold(pair):
     first = pair.a.start(until="done", config_text=AUTO_MERGE, title="Add the tax field")
     with pair.in_b() as b:
@@ -128,10 +127,10 @@ def test_collect_releases_cross_project_hold(pair):
         data["held_by"] = {"until": "repo:#1", "project": str(pair.a.repo), "key": 1, "reason": "needs the API",
                            "since": datetime.now(UTC).isoformat()}
         held.write_text(json.dumps(data))
-        (b.repo / ".factory" / "jobs" / "holds.json").write_text(json.dumps({"1": {"until": "repo:#1"}}))
+        b.factory().store.release()  # the CLI that releases the hold takes the job's lock itself
     assert pair.a.job(first)["step"] == "done"
     snap = pair.collect()
-    assert snap["released"] == ["released beta:#1"]
+    assert snap["released"] == ["beta:#1"]
     assert "held_by" not in json.loads(held.read_text())
 
 

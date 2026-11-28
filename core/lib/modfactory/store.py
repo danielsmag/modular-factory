@@ -106,6 +106,8 @@ class Store:
         return self.cfg.pipeline_of(job)
 
     def holds_slot(self, job):
+        if job.get("held_by"):
+            return False  # a held job waits for another job, and frees its slot meanwhile
         step = self._pipe(job).steps.get(job["step"])
         return bool(step) and step["type"] in RUNNING_TYPES
 

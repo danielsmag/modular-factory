@@ -1,7 +1,6 @@
 """The tickets of one project: its queue, its jobs, and what each job's branch changes."""
 
 import hashlib
-import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -10,7 +9,7 @@ from ..engine import Factory
 from ..graph import END_STATES
 from ..service.tracker.base import key_kind
 from ..util import FactoryError
-from . import priority
+from . import holds, priority
 
 EXCERPT = 1500
 
@@ -27,17 +26,6 @@ def branch_files(repo: Path, base: str, branch: str) -> list[str]:
         if res.returncode == 0:
             return sorted(line for line in res.stdout.splitlines() if line.strip())
     return []
-
-
-def _holds(factory: Factory) -> dict[str, dict[str, Any]]:
-    """The holds file, read tolerantly: missing or corrupt means no holds."""
-    try:
-        found: object = json.loads((factory.cfg.repo / ".factory" / "jobs" / "holds.json").read_text())
-    except (OSError, ValueError):
-        return {}
-    if not isinstance(found, dict):
-        return {}
-    return {str(key): value for key, value in found.items() if isinstance(value, dict)}
 
 
 def _hash(title: str, excerpt: str, labels: list[str], level: str) -> str:
@@ -65,7 +53,7 @@ def project_tickets(factory: Factory, label: str) -> tuple[list[dict[str, Any]],
                                                 str(project.get("field") or "Priority"))
     queued: dict[Any, dict[str, Any]] = {i["number"]: i for i in issues}
     jobs: dict[Any, dict[str, Any]] = {j["issue"]: j for j in factory.store.all()}
-    holds: dict[str, dict[str, Any]] = _holds(factory)
+    fresh: dict[str, dict[str, Any]] = holds.fresh_holds(factory)
     base: str = cfg["project"]["base_branch"]
     out: list[dict[str, Any]] = []
     for key in [*queued, *(k for k in jobs if k not in queued)]:
@@ -101,10 +89,10 @@ def project_tickets(factory: Factory, label: str) -> tuple[list[dict[str, Any]],
         level: str = priority.level_for(kind, issue, settings, values)
         stage: str = job["step"] if job else "queued"
         until: str | None = None
-        hold: dict[str, Any] | None = holds.get(str(key))
-        if hold or (job and job.get("held_by")):
+        hold: dict[str, Any] | None = (job or {}).get("held_by") or fresh.get(str(key))
+        if hold:
             stage = "held" if stage not in END_STATES else stage
-            until = str(hold["until"]) if hold and hold.get("until") is not None else None
+            until = str(hold["until"]) if hold.get("until") is not None else None
         out.append({
             "ref": f"{label}:{ref}", "project": label, "key": key, "tracker": kind, "title": title,
             "excerpt": excerpt, "labels": labels, "priority": level,

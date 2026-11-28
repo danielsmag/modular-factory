@@ -50,7 +50,7 @@ def _project_snapshot(project: Project, label: str) -> tuple[list[dict[str, Any]
 
 
 def _release(group: Workspace, tickets: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
-    """Release each hold whose awaited ticket, in another project, has finished. Returns refs and errors."""
+    """Release each hold whose awaited ticket, in another project, has finished. Returns bare refs and errors."""
     by_ref: dict[str, dict[str, Any]] = {t["ref"]: t for t in tickets}
     released: list[str] = []
     errors: list[str] = []
@@ -72,7 +72,7 @@ def _release(group: Workspace, tickets: list[dict[str, Any]]) -> tuple[list[str]
             errors.append(f"{ticket['project']}: .factory/bin/mfactory could not be run")
             continue
         if result.returncode == 0:
-            released.append(f"released {ticket['ref']}")
+            released.append(str(ticket["ref"]))
         else:
             errors.append(f"{ticket['project']}: could not release {ticket['ref']}: "
                           f"{_last_line(result, 'mfactory plan release failed')}")

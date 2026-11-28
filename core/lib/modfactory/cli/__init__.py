@@ -17,6 +17,7 @@ from .. import board, checks, config, graph, install, pipelines, plan_usage
 from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
+from ..planner import holds as holds_mod
 from ..planner import ingest as ingest_mod
 from ..planner import schedule as schedule_mod
 from ..planner import snapshot as snapshot_mod
@@ -250,6 +251,20 @@ def plan_ingest(cfg: config.Config, reply: bool) -> int:
     return 0
 
 
+def plan_release(factory: Factory, ref: str) -> int:
+    """Lift the hold of a job or a queued issue. `ref` is a job id or an issue key."""
+    key: Any
+    try:
+        key = factory.store.read(factory.store.find(ref))["issue"]
+    except Refused:
+        key = factory.tracker.key(ref)
+    if holds_mod.release(factory, key):
+        print(f"released {ref}")
+        return 0
+    print(f"not held: {ref}")
+    return 0
+
+
 def plan_collect(repo: Path, cfg: config.Config, as_json: bool) -> int:
     """Snapshot every project of the workspace and print what was found."""
     found: dict[str, Any] = _plan_collected(repo, cfg)[0]
@@ -258,8 +273,8 @@ def plan_collect(repo: Path, cfg: config.Config, as_json: bool) -> int:
         return 0
     count: int = len(found["candidates"])
     print(f"{len(found['tickets'])} tickets, {count} pair{'' if count == 1 else 's'}")
-    for line in found["released"]:
-        print(line)
+    for ref in found["released"]:
+        print(f"released {ref}")
     for line in found["errors"]:
         print(f"problem: {line}")
     return 0
@@ -567,6 +582,8 @@ def run(args: argparse.Namespace) -> int:
             name: str = args.label or cfg.repo.name
             found, problems = snapshot_mod.project_tickets(factory, name)
             print(json.dumps({"label": name, "tickets": found, "errors": problems}, indent=None if args.json else 2))
+        elif command == "plan" and args.plan_what == "release":
+            return plan_release(factory, args.ref)
         elif command == "create":
             job = factory.create(args.issue, args.pipe)
             chose: str = f" (pipe {job['pipeline']})" if len(cfg.pipelines) > 1 else ""

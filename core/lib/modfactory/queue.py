@@ -5,6 +5,7 @@ from typing import Any, Protocol
 
 from . import config, graph
 from .config import Config
+from .planner import holds
 from .service import GitHub
 from .service.tracker import Key, Tracker, Trackers
 from .service.tracker.base import LABELS, key_kind
@@ -184,9 +185,11 @@ class Queue:
                 if job:
                     self._adopt_merge(job)
         answered: set[str] = self._settle_cards()
-        jobs = {j["issue"]: j for j in self.store.all()}
         issues = self.tracker.queue()
         open_numbers = {i["number"] for i in issues}
+        holds.lift(self, {str(n) for n in open_numbers})
+        jobs = {j["issue"]: j for j in self.store.all()}
+        fresh_held: dict[str, dict[str, Any]] = holds.fresh_holds(self)
 
         running = [j["id"] for j in self.store.running()]
         rows, replied, waiting, other = [], [], [], []
@@ -207,6 +210,8 @@ class Queue:
                                   f"finished; mfactory delete {j['id']} to run it again"))
             elif step is None:
                 other.append(("skip", n, j["id"], name, "factory.toml no longer has this step"))
+            elif j.get("held_by"):
+                waiting.append(("wait", n, j["id"], name, f"held until {j['held_by'].get('until')} is done"))
             elif step["type"] == "human":
                 note: str = (f"could not read {tracker.label}: {self.tracker.reason(tracker.kind)}" if down
                              else self._reply_note(j, step, tracker, j["id"] in answered))
@@ -224,8 +229,14 @@ class Queue:
                              f"round {j['round']}" if turn else f"concurrency {limit} reached"))
         free = limit - len(running)
         picks: Callable[[dict[str, Any]], bool] = self._picks()
-        fresh = [("new", i["number"], "-", "-", i["title"])
-                 for i in issues if i["number"] not in jobs and picks(i)]
+        fresh = []
+        for i in issues:
+            if i["number"] in jobs or not picks(i):
+                continue
+            if (held := fresh_held.get(str(i["number"]))) is not None:
+                waiting.append(("wait", i["number"], "-", "-", f"held until {held.get('until')} is done"))
+            else:
+                fresh.append(("new", i["number"], "-", "-", i["title"]))
         for row in replied + fresh:
             if free > 0:
                 rows.append(row)
