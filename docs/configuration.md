@@ -925,6 +925,35 @@ Claude prefers the install recorded in `~/.claude/plugins/installed_plugins.json
 when that file names the plugin, and skips a plugin that `~/.claude/settings.json`
 sets to `false` in `enabledPlugins`. Cursor uses its plugin cache.
 
+### Skills and rules for managing issues
+
+When you ask the orchestrator to create, comment on, move or close an issue or
+a Jira card (`mfactory issue ...`, or plain words in `/mfactory plan`), it first
+runs `mfactory issue guide` and follows what it lists: your ticket templates,
+title formats, labels, team rules and Jira plugins. Two keys choose the list,
+with the same entries as above:
+
+```toml
+[skills]
+issues = ["all"]   # the default: every project, user and plugin skill on this machine
+
+[rules]
+issues = ["all"]   # the default: every AGENTS.md, CLAUDE.md and rule file
+```
+
+With `all`, the orchestrator uses only the skills whose description fits the
+request. Narrow the list to name exactly the ones about issues:
+
+```toml
+[skills]
+issues = ["jira-tickets", "user:bug-reports", "atlassian:triage"]
+```
+
+`[skills].all` and `[rules].all` are always included, as for every agent.
+`issues` changes no agent file, so it needs no `mfactory sync`. When a skill
+calls for something `mfactory issue` cannot set, such as labels, an issue type
+or an epic, the orchestrator does that part with the tool the skill names.
+
 ## Tools
 
 A plugin can add skills and MCP tools. Its skills go in `skills`, and its MCP

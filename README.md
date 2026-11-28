@@ -88,10 +88,21 @@ curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/i
 | `/mfactory approve 12` | Answer a job that is waiting |
 | `/mfactory plan summary` | What needs attention, what is held, the last scan |
 | `/mfactory plan` | Talk through findings. Nothing changes until you say so |
+| `/mfactory plan <request>` | Manage issues: create, list, open, move, comment, close |
 | `/mfactory <anything else>` | Ask about jobs, or describe a feature to file as an issue |
 
 The same verbs work from a terminal: `mfactory run`, `mfactory plan summary`,
-`mfactory plan approve F-3`.
+`mfactory plan approve F-3`, `mfactory issue list`.
+
+From `/mfactory plan`, or a terminal, you can also manage your own work on
+GitHub and Jira without starting a job: "create a test issue", "show my open
+Jira cards", "move PROJ-12 to In Progress", "comment on #34". These run
+`mfactory issue list | show | create | comment | move | close`. A new issue
+stays out of the factory's queue unless you ask for `--queue`, and a card with
+a running job is moved by step with `mfactory move`. Before changing an issue,
+the orchestrator runs `mfactory issue guide` and follows your own skills,
+plugin skills and rules for tickets (`[skills].issues` and `[rules].issues`,
+every one on the machine by default).
 
 A job that needs a person stops and says so on the issue or the pull request.
 Answer there, for example `/mfactory changes Use the existing Money type`, or
@@ -201,6 +212,7 @@ mfactory pipes list | show | validate | schema
 mfactory migrate pipes | layout
 mfactory queue | create | next | done | answer
 mfactory plan summary | show | approve | dismiss | release
+mfactory issue list | show | create | comment | move | close | guide
 mfactory checks | telemetry status | events | validate | export | prune
 mfactory dashboard | start dashboard | stop | version
 mfactory workspace add | remove | list | queue | init

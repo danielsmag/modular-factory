@@ -116,6 +116,26 @@ class Trackers:
         return next((problem.removeprefix(f"{label}: ") for problem in self.problems
                      if problem.startswith(f"{label}: ")), "")
 
+    def open_issues(self, mine: bool = False) -> list[dict[str, Any]]:
+        """Every tracker's open issues, one after the other. A tracker that cannot be read is named in `problems`."""
+        found: list[dict[str, Any]] = []
+        for tracker in self.members:
+            if tracker.kind in self.unread:
+                continue
+            try:
+                found += tracker.open_issues(mine)
+            except FactoryError as error:
+                self._unreadable(tracker, error)
+        if len(self.unread) == len(self.members):
+            raise self._errors[self.members[0].kind]
+        return found
+
+    def transitions(self, key: Key) -> list[str] | None:
+        return self.of(key).transitions(key)
+
+    def set_status(self, key: Key, status: str) -> bool:
+        return self.of(key).set_status(key, status)
+
     def watched(self) -> list[dict[str, Any]]:
         """Every tracker's watched issues, for the dashboard. A tracker that cannot be read shows none."""
         found: list[dict[str, Any]] = []

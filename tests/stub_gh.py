@@ -139,6 +139,9 @@ def main(argv):
             wanted = named.get("label")
             rows = [i for i in state["issues"].values()
                     if i["state"] == "OPEN" and (wanted is None or wanted in [label["name"] for label in i["labels"]])]
+            if "assignee" in named:
+                who = state["user"] if named["assignee"] == "@me" else named["assignee"]
+                rows = [i for i in rows if who in [a["login"] for a in i.get("assignees", [])]]
             if "sort:updated-desc" in str(named.get("search", "")):
                 rows.sort(key=lambda i: i.get("updatedAt") or "", reverse=True)
             if "limit" in named:
