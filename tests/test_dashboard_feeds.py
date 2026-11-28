@@ -65,6 +65,11 @@ def test_the_routes_answer_with_json(world, base):
     assert status == 200 and json.loads(body)["title"] == "Add a thing"
     status, body, _ = get(f"{base}/projects/{name}/jobs/{job}/activity")
     assert status == 200 and "runs" in json.loads(body)
+    status, body, _ = get(f"{base}/projects/{name}/jobs/{job}/telemetry")
+    logged = json.loads(body)
+    assert status == 200 and logged["truncated"] is False
+    assert any(event["event_type"] == "job.created" for event in logged["events"])
+    assert get(f"{base}/projects/{name}/jobs/no-such-job/telemetry")[0] == 404
     assert "no-store" in get(base + "/projects.json")[2]["Cache-Control"]
 
 

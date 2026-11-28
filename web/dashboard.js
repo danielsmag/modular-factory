@@ -124,7 +124,7 @@ const state = {
   memo: new Map(), jobsStamp: 0, queueStamp: 0,
   pipelines: null, jobSort: prefs.get("mfactory.jobs.sort", { key: "started", dir: -1 }),
   jobFilter: prefs.get("mfactory.jobs.filter", "all"), jobPipe: "all", jobTab: prefs.get("mfactory.job.tab", "graph"),
-  jobNode: null, dagZoom: {}, pipeView: prefs.get("mfactory.pipeView", "default"),
+  jobNode: null, logType: "all", telemetry: null, dagZoom: {}, pipeView: prefs.get("mfactory.pipeView", "default"),
   cfgPipe: prefs.get("mfactory.cfgPipe", "default"), cfgTab: "dag",
   planner: null, plannerNotify: prefs.get(PLANNER_NOTIFY_KEY, false) === true,
 };
@@ -2701,7 +2701,115 @@ function jobFilesTab(job) {
       fileView({ path: open.path, text: open.text })) : el("p", { class: "dim hint", text: "Pick a file to read it." }));
 }
 function jobLogsTab(job) {
-  return el("div", { class: "panel logs" }, activityBody(job));
+  ensureTelemetry(job);
+  return el("div", { class: "logpage" },
+    telemetryPanel(job),
+    el("div", { class: "panel logs" },
+      el("h2", { text: "Agent activity" }),
+      activityBody(job)));
+}
+function telemetryUrl(job) {
+  if (state.workspace && job.project) {
+    return "/projects/" + encodeURIComponent(job.project) + "/jobs/" + encodeURIComponent(job.id) + "/telemetry";
+  }
+  return "jobs/" + encodeURIComponent(job.id) + "/telemetry";
+}
+function telemetryKey(job) {
+  return (job.project || "") + "\n" + job.id;
+}
+function ensureTelemetry(job) {
+  const key = telemetryKey(job);
+  if (state.telemetry && state.telemetry.key === key) return;
+  state.logType = "all";
+  state.telemetry = { key, events: null, error: null, truncated: false, malformed: 0, seq: 0 };
+  fetchTelemetry(job);
+}
+async function fetchTelemetry(job) {
+  const key = telemetryKey(job);
+  const current = state.telemetry && state.telemetry.key === key ? state.telemetry : { key, seq: 0 };
+  const seq = (current.seq || 0) + 1;
+  state.telemetry = Object.assign({}, current, { key, seq });
+  let body;
+  try {
+    const res = await fetch(telemetryUrl(job), { cache: "no-store" });
+    body = res.ok ? await res.json() : { events: [], error: "Could not load logs (" + res.status + ")." };
+  } catch (error) {
+    body = { events: [], error: "Could not load logs." };
+  }
+  if (!state.telemetry || state.telemetry.key !== key || state.telemetry.seq !== seq) return;
+  state.telemetry.events = Array.isArray(body.events) ? body.events : [];
+  state.telemetry.error = body.error || null;
+  state.telemetry.truncated = !!body.truncated;
+  state.telemetry.malformed = Number(body.malformed) || 0;
+  if (route().view === "jobs" && (state.jobTab || "graph") === "logs") render();
+}
+function refreshTelemetry() {
+  if (route().view !== "jobs" || (state.jobTab || "graph") !== "logs") return;
+  const here = route();
+  const job = jobs().find((item) => sameJob(item, here.project, here.id));
+  if (!job) return;
+  fetchTelemetry(job);
+}
+function telemetryDetail(event) {
+  const payload = event.payload || {};
+  const bits = [];
+  if (payload.outcome) bits.push(String(payload.outcome) + (payload.to_step ? " → " + payload.to_step : ""));
+  if (payload.verdict) bits.push(String(payload.verdict));
+  if (payload.reviewer) bits.push(String(payload.reviewer));
+  if (Array.isArray(payload.skipped) && payload.skipped.length) bits.push("skipped " + payload.skipped.join(", "));
+  if (payload.skipped_step) bits.push("skipped " + payload.skipped_step);
+  if (payload.exit_code != null) bits.push("exit " + payload.exit_code);
+  if (payload.cost_kind) bits.push(payload.cost_kind + (payload.cost_usd != null ? " $" + payload.cost_usd : ""));
+  if (payload.reason_code) bits.push(String(payload.reason_code));
+  if (payload.path) bits.push(String(payload.path));
+  if (payload.issue_ref) bits.push(String(payload.issue_ref));
+  if (payload.pipeline && event.event_type === "job.created") bits.push(String(payload.pipeline));
+  if (event.attempt > 1) bits.push("attempt " + event.attempt);
+  if (event.round > 1) bits.push("round " + event.round);
+  return bits.join("  ");
+}
+function telemetryTone(event) {
+  const payload = event.payload || {};
+  const bad = event.event_type === "error.occurred" || payload.outcome === "FAIL" || payload.outcome === "REJECT" || payload.verdict === "CHANGES";
+  if (bad) return "bad";
+  if (payload.outcome === "PASS" || payload.verdict === "PASS" || event.event_type === "job.completed") return "done";
+  return "";
+}
+function telemetryPanel(job) {
+  const data = state.telemetry && state.telemetry.key === telemetryKey(job) ? state.telemetry : null;
+  if (!data || data.events === null) {
+    return el("div", { class: "panel" }, el("p", { class: "kempty", text: "Loading logs..." }));
+  }
+  if (data.error && !data.events.length) {
+    return el("div", { class: "panel" }, el("p", { class: "error", text: data.error }));
+  }
+  const events = data.events;
+  if (!events.length) {
+    return el("div", { class: "panel" }, el("p", { class: "kempty", text: "No telemetry yet. Events appear after create, next, and done." }));
+  }
+  const types = [];
+  events.forEach((event) => { if (types.indexOf(event.event_type) < 0) types.push(event.event_type); });
+  const chosen = types.indexOf(state.logType) >= 0 ? state.logType : "all";
+  const shown = chosen === "all" ? events : events.filter((event) => event.event_type === chosen);
+  const filter = (id, label) => el("button", {
+    type: "button", role: "tab", "aria-selected": String(chosen === id), "aria-pressed": chosen === id ? "true" : "false",
+    "data-focus": "logtype:" + id,
+    onclick: () => { state.logType = id; render(); },
+  }, label);
+  return el("div", { class: "panel" },
+    el("div", { class: "tabs log-types", role: "tablist", "aria-label": "Event type" },
+      filter("all", "All"), ...types.map((type) => filter(type, type))),
+    data.truncated ? el("p", { class: "dim log-note", text: "Showing the latest 400 events." }) : null,
+    data.malformed ? el("p", { class: "dim log-note", text: data.malformed + " unreadable line" + (data.malformed === 1 ? "" : "s") + " skipped." }) : null,
+    shown.length
+      ? el("div", { class: "scroll" }, el("table", { class: "logs-table" },
+        el("thead", {}, el("tr", {}, ["Time", "Event", "Step", "Detail"].map((title) => el("th", { scope: "col", text: title })))),
+        el("tbody", {}, shown.map((event) => el("tr", {},
+          el("td", { class: "mono dim", text: shortStamp(event.timestamp) }),
+          el("td", {}, el("span", { class: "chip" + (telemetryTone(event) ? " " + telemetryTone(event) : ""), text: event.event_type || "-" })),
+          el("td", { class: "mono", text: event.step || "-" }),
+          el("td", { class: "dim detail", text: telemetryDetail(event) }))))))
+      : el("p", { class: "kempty", text: "No " + chosen + " events." }));
 }
 function jobTabButton(id, label) {
   const on = (state.jobTab || "graph") === id;
@@ -3299,6 +3407,7 @@ async function refreshWorkspace() {
     paintLive();
   }
   refreshActivity();
+  refreshTelemetry();
   refreshNow();
 }
 async function refreshSingle() {
@@ -3316,6 +3425,7 @@ async function refreshSingle() {
     refetchDrawer();
   } else paintLive();
   refreshActivity();
+  refreshTelemetry();
   refreshNow();
 }
 async function tryProjects() {

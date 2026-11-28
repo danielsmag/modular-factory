@@ -620,6 +620,14 @@ table.files-table td .dot { display: inline-block; vertical-align: 1px; }
 .file-open .close { position: static; }
 .logs { padding: 0; overflow: hidden; }
 .logs .d-body { min-height: 420px; max-height: 76vh; }
+.logpage { display: flex; flex-direction: column; gap: 14px; }
+.logpage h2 { margin: 0 0 10px; font: 500 var(--fs-meta) var(--sans); color: var(--text-2); }
+.tabs.log-types { flex-wrap: wrap; margin-bottom: 12px; }
+.log-note { margin: 8px 0 0; }
+table.logs-table { width: 100%; border-collapse: collapse; }
+table.logs-table th, table.logs-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.logs-table th { font: 500 var(--fs-floor) var(--sans); color: var(--text-2); }
+table.logs-table td.detail { overflow-wrap: anywhere; }
 
 @media (max-width: 1180px) {
   .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }

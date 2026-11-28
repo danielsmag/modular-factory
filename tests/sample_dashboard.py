@@ -156,6 +156,36 @@ def stamp(t):
     return t.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _write_telemetry(folder: Path, job: dict[str, object]) -> None:
+    """A short event log so the sample dashboard's Logs tab has rows."""
+    target: Path = folder / "telemetry"
+    target.mkdir(exist_ok=True)
+    rows: list[dict[str, object]] = [{
+        "schema_version": 1, "event_id": f"{job['id']}-created", "event_type": "job.created",
+        "timestamp": job["created_at"], "source": "core", "project_id": "sample", "job_id": job["id"],
+        "step": None, "payload": {"pipeline": job.get("pipeline") or "default", "issue_ref": f"#{job['issue']}"},
+    }]
+    history: object = job.get("history") or []
+    if isinstance(history, list):
+        for index, entry in enumerate(history):
+            if not isinstance(entry, dict):
+                continue
+            rows.append({
+                "schema_version": 1, "event_id": f"{job['id']}-{index}", "event_type": "step.completed",
+                "timestamp": entry.get("at") or job["created_at"], "source": "core", "project_id": "sample",
+                "job_id": job["id"], "step": entry.get("step"), "attempt": 1, "round": 1,
+                "payload": {"outcome": entry.get("outcome"), "to_step": entry.get("to")},
+            })
+    step: object = job.get("step")
+    if step not in ("done", "rejected", "failed"):
+        rows.append({
+            "schema_version": 1, "event_id": f"{job['id']}-entered", "event_type": "step.entered",
+            "timestamp": job.get("entered_at") or job["created_at"], "source": "core", "project_id": "sample",
+            "job_id": job["id"], "step": step, "payload": {"pipeline": job.get("pipeline") or "default"},
+        })
+    (target / "events.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+
 def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=False, pipeline="default"):
     """One job that went along its pipeline's usual path and stopped at `stop`."""
     words = "-".join(title.lower().replace(",", "").split()[:4])
@@ -225,6 +255,7 @@ def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=Fals
     folder = jobs_dir / job_id
     (folder / "round-1").mkdir(parents=True)
     (folder / "job.json").write_text(json.dumps(job, indent=1))
+    _write_telemetry(folder, job)
     (folder / "issue.md").write_text(f"# Issue #{job['issue']}: {title}\n\n## Body\n\n> Please add this.\n")
     names = {h["step"] for h in history}
     if "intake" in names:
