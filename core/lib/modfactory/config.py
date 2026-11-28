@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from . import board, graph, pipelines
+from .telemetry.settings import COLLECT_NAMES, PRIVACY_NAMES
 from .util import CORE, ConfigError, Refused, adapters_dir
 
 SCHEMA = 1
@@ -790,7 +791,7 @@ REVIEWER_KEYS = {"enabled": a_bool, "focus": a_filled_string, "prompt": a_filled
                  "skills": a_string_list, "rules": a_string_list, "tools": a_tool_list, "port": a_bool}
 SURFACE_KEYS = {"enabled": a_bool, "when": a_filled_string, "reviewers": a_string_list}
 BUILTIN_REVIEWERS = ("code", "security", "ux", "ui")
-TOP = set(TABLES) | {"schema", "tools", "steps", "reviewers", "surfaces", "models", "tracker", "planner"}
+TOP = set(TABLES) | {"schema", "tools", "steps", "reviewers", "surfaces", "models", "tracker", "planner", "telemetry"}
 
 
 def _path_inside(path: Path, root: Path) -> bool:
@@ -819,6 +820,12 @@ PLANNER_KEYS = {"enabled": a_bool, "frequency": one_of(*PLANNER_FREQUENCIES),
                 "alert_at": one_of("low", "medium", "high"), "max_pairs": an_int(1),
                 "max_extra": an_int(1), "priority": lambda value: None}
 PLANNER_LEVELS = ("critical", "high", "normal", "low")
+TELEMETRY_KEYS = {
+    "enabled": a_bool, "storage": one_of("jsonl"), "retention_days": an_int(1), "fail_open": a_bool,
+    "collect": lambda value: None, "privacy": lambda value: None,
+}
+COLLECT_KEYS = {name: a_bool for name in COLLECT_NAMES}
+PRIVACY_KEYS = {name: a_bool for name in PRIVACY_NAMES}
 
 
 def _planner_priority_problems(value: object) -> list[str]:
@@ -933,6 +940,12 @@ def check(cfg):
     test_table("planner", planner, PLANNER_KEYS)
     if isinstance(planner, dict) and "priority" in planner:
         out.extend(_planner_priority_problems(planner["priority"]))
+
+    telemetry = d.get("telemetry", {})
+    test_table("telemetry", telemetry, TELEMETRY_KEYS)
+    if isinstance(telemetry, dict):
+        test_table("telemetry.collect", telemetry.get("collect", {}), COLLECT_KEYS)
+        test_table("telemetry.privacy", telemetry.get("privacy", {}), PRIVACY_KEYS)
 
     # tools
     tools = d.get("tools", {})

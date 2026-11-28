@@ -115,6 +115,29 @@
     <p>Run <code>[checks].commands</code> in the current directory.</p>
   </div>
 
+  <h2 id="telemetry">Telemetry</h2>
+  <p>Local records of what a job did. They do not choose the next step, and a write failure does not fail the job. Nothing is sent off the machine. Prompts, transcripts, tool arguments, tool outputs, and feedback text are not stored. Unavailable usage is null, not zero. Claude cost is an estimate from the adapter price table. Cursor contributes tokens only when a transcript has a <code>usage</code> object, with no price, so its cost is null. Codex reports no usage.</p>
+  <div class="def">
+    <div class="def-h"><code>telemetry status</code></div>
+    <p>Whether collection is on, how many events are on disk, and any collection errors.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>telemetry events &lt;job&gt;</code> <span class="chip">--type TYPE</span></div>
+    <p>Print one job's events as JSONL. <code>--type</code> keeps one event type, such as <code>step.completed</code>.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>telemetry validate</code></div>
+    <p>Report malformed lines, duplicate ids, and schema problems. Exits 1 when it finds any.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>telemetry export</code> <span class="chip">--format jsonl|csv</span> <span class="chip">--type TYPE</span> <span class="chip">--job JOB</span> <span class="chip">--output FILE</span></div>
+    <p>Write the retained events. JSONL is the full record. CSV is the envelope plus, when <code>--type</code> is set, that type's fields. Repeated occurrences are collapsed. Cumulative usage must not be summed; use <code>delta_*</code> or the latest snapshot.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>telemetry prune</code> <span class="chip">--dry-run</span></div>
+    <p>Delete events older than <code>[telemetry] retention_days</code>. Jobs that are not finished are kept. This is the only prune; nothing expires by itself.</p>
+  </div>
+
   <h2 id="dashboard">Dashboard</h2>
   <div class="def">
     <div class="def-h"><code>dashboard</code> <span class="chip">--port</span> <span class="chip">--no-open</span></div>

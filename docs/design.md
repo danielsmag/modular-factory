@@ -79,6 +79,7 @@ core/lib/modfactory/      the factory's code
   jsonschema_lite.py      the JSON Schema keywords the pipe schema uses
   runstate.py             each step's state in a job, for the dashboard's job graph
   store.py, cost.py, util.py
+  telemetry/              local JSONL events; observational, not the job's state
 core/roles/*.md           one prompt per agent step and reviewer
 core/skill/SKILL.md       the orchestrator
 core/defaults.toml        the default settings
@@ -342,7 +343,11 @@ They do not cover anything that needs a real tool or the real GitHub:
 
 - **No job has run in Claude Code, Cursor or Codex.** None of them was
   available where this was built. The generated agent files follow each
-  tool's documentation, but no tool has loaded them.
+  tool's documentation, but no tool has loaded them. Telemetry's Claude cost
+  and token fields reuse the transcript reader, and that path is covered with
+  fixture files; a live Claude Code job has not been recorded. Cursor tokens
+  are read only when a transcript message has a `usage` object. Codex has no
+  usage interface here, so those fields stay null.
 - Whether each tool's main agent follows the orchestrator skill reliably:
   starts agents by the exact name, in parallel, in the background, and passes
   prompts unchanged.

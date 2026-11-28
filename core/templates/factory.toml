@@ -215,3 +215,8 @@ all = ["all"]
 # owner = "acme"
 # number = 3
 # field = "Priority"
+#
+# [telemetry] is local only. Defaults record lifecycle, checks, usage and
+# fingerprints under .factory/ and never send them anywhere. See docs/telemetry.md.
+# enabled = false
+

@@ -20,6 +20,7 @@ from .service import GitHub, Humans
 from .service import tracker as trackers
 from .service.cards import Cards
 from .store import Store
+from .telemetry.observe import Observer
 from .util import Refused, body, first_line, header, now, quote, run, section
 
 CLI = ".factory/bin/mfactory"
@@ -32,12 +33,13 @@ ROLE_FILES = {"intake": "intake.md", "spec": "spec.md", "build": "build.md",
 
 
 class Factory(Humans, Cards, Scripted, Queue):
-    def __init__(self, cfg, say=None):
+    def __init__(self, cfg, say=None, observer=None):
         self.cfg = cfg
         self.gh = GitHub(cfg.repo)
         self.tracker = trackers.make(cfg, self.gh)
         self.store = Store(cfg)
         self.say = say or (lambda line: print(line, flush=True))
+        self.observer = observer if observer is not None else Observer.for_config(cfg)
 
     # ---- Small helpers -----------------------------------------------------
 
@@ -264,6 +266,11 @@ class Factory(Humans, Cards, Scripted, Queue):
             limit_reason = f"[steps.{name}].on.{outcome} max = {edge['max']} reached"
         else:
             job["taken"][key] = job["taken"].get(key, 0) + 1
+        prior: dict[str, Any] = {
+            "type": step["type"], "round": job["round"], "attempt": job["attempt"],
+            "reason_present": bool(limit_reason or reason),
+            "reason_kind": "limit" if limit_reason else None,
+        }
 
         self._leave(job, name, step)
         self._measure_plan(job, name)
@@ -278,6 +285,7 @@ class Factory(Humans, Cards, Scripted, Queue):
         if target == escalate:
             self._report_problem(job, name, outcome)
         self.store.save(job)
+        self.observer.after_transition(self, job, prior)
 
         notes = []
         if limit_reason:
@@ -452,12 +460,17 @@ class Factory(Humans, Cards, Scripted, Queue):
         self.say(f"then: {CLI} done {job['id']}" + (" --reply" if reply else ""))
         if reply:
             self.say("stdin: the agent's whole reply")
+        self.observer.step_dispatched(self, job, [agent for agent, _prompt in agents])
 
     # ---- next --------------------------------------------------------------
 
     def next(self, ref):
         """Say what the orchestrator must do for this job now, running script steps on the way."""
         job = self.store.open(ref)
+        with self.observer.session(self, job):
+            self._drive(job)
+
+    def _drive(self, job):
         while True:
             name = job["step"]
             if job.get("held_by") and name not in graph.END_STATES:
@@ -549,6 +562,7 @@ class Factory(Humans, Cards, Scripted, Queue):
             reason = f"The checks failed in round {r}, attempt {a}. See round-{r}/checks.md."
             job["handoff"].append(f"The checks failed (round {r}, attempt {a}): read round-{r}/checks.md "
                                   f"and round-{r}/checks.log, fix the cause, push, and update build.md.")
+        self.observer.check_completed(self, job, verdict)
         line = self._move(job, verdict, reason)
         if job["step"] in graph.END_STATES or self._pipe(job).steps[job["step"]]["type"] == "human":
             job["gate_failed"] = False
@@ -560,6 +574,10 @@ class Factory(Humans, Cards, Scripted, Queue):
     def done(self, ref, reply=None):
         """Read the outcome of the step an agent just finished and follow its edge."""
         job = self.store.open(ref)
+        with self.observer.session(self, job):
+            self._done_open(job, reply)
+
+    def _done_open(self, job, reply):
         name = job["step"]
         step = self._pipe(job).steps.get(name)
         if step is None:
@@ -768,6 +786,10 @@ class Factory(Humans, Cards, Scripted, Queue):
         GitHub, and the job records it as its pull request and merge.
         """
         job: dict[str, Any] = self.store.open(ref)
+        with self.observer.session(self, job):
+            self._close_open(job, merged)
+
+    def _close_open(self, job: dict[str, Any], merged: int | None) -> None:
         old: str = job["step"]
         if old in graph.END_STATES:
             raise Refused(f"{job['id']} is already finished ({old})")
@@ -784,6 +806,10 @@ class Factory(Humans, Cards, Scripted, Queue):
             job["merge_sha"] = (pr.get("mergeCommit") or {}).get("oid")
             reason += f"; merged in PR #{pr['number']} ({(job['merge_sha'] or 'unknown')[:7]})"
         step: dict[str, Any] | None = self._pipe(job).steps.get(old)
+        prior: dict[str, Any] = {
+            "type": step["type"] if step else None, "round": job["round"], "attempt": job["attempt"],
+            "reason_present": True, "reason_kind": "hand",
+        }
         if step is not None:
             self._leave(job, old, step)
         entry: dict[str, Any] = {"step": old, "outcome": "CLOSED-BY-HAND", "entered_at": job["entered_at"],
@@ -793,6 +819,7 @@ class Factory(Humans, Cards, Scripted, Queue):
         job["history"].append(entry | {"to": landed, "skipped": skipped})
         self._update_cost(job)
         self.store.save(job)
+        self.observer.after_transition(self, job, prior)
         self.say(f"{self.tag(job)}: {old} CLOSED-BY-HAND -> {landed}")
         if replaced:
             self.say(f"note: PR #{job['pr']} replaces PR #{replaced} on the job")
@@ -894,6 +921,10 @@ class Factory(Humans, Cards, Scripted, Queue):
     def move(self, ref: str, target: str, note: str = "") -> None:
         """`mfactory move`: put an unfinished job at any enabled step, whatever the graph's edges say."""
         job: dict[str, Any] = self.store.open(ref)
+        with self.observer.session(self, job):
+            self._move_open(job, target, note)
+
+    def _move_open(self, job: dict[str, Any], target: str, note: str) -> None:
         old: str = job["step"]
         if old in graph.END_STATES:
             raise Refused(f"{job['id']} is finished ({old}); its worktree and branch are gone, so it can't move")
@@ -914,6 +945,10 @@ class Factory(Humans, Cards, Scripted, Queue):
             raise Refused(f"{target} checks a merged change and pull request #{job['pr']} is not merged")
         note = note.strip()
         step: dict[str, Any] | None = self._pipe(job).steps.get(old)
+        prior: dict[str, Any] = {
+            "type": step["type"] if step else None, "round": job["round"], "attempt": job["attempt"],
+            "reason_present": True, "reason_kind": "hand",
+        }
         if step is not None:
             self._leave(job, old, step)
         self._measure_plan(job, old)
@@ -929,6 +964,7 @@ class Factory(Humans, Cards, Scripted, Queue):
         job["history"].append(entry | {"to": landed, "skipped": skipped})
         self._update_cost(job)
         self.store.save(job)
+        self.observer.after_transition(self, job, prior)
         self.say(f"{self.tag(job)}: {old} MOVED-BY-HAND -> {landed}")
         self.say(f"then: {CLI} next {job['id']}")
 

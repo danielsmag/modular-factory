@@ -14,6 +14,7 @@ import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 
 def transcripts_dir(repo):
@@ -37,44 +38,89 @@ def _price(usage, p):
             + usage.get("cache_read_input_tokens", 0) * p["cache_read"]) / 1e6
 
 
-def job_cost(cfg, job, job_dir):
-    """(total USD, USD by step, models with no price), or None when cost isn't available."""
+def _token(usage: dict[str, Any], key: str) -> int | None:
+    if key not in usage:
+        return None
+    value: object = usage.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def claude_usage(cfg: Any, job: dict[str, Any], job_dir: Path) -> list[dict[str, Any]] | None:
+    """Per-message Claude usage for this job, or None when transcripts cannot be read.
+
+    An empty list means the folder was readable and no transcript belonged to the job.
+    That is not zero tokens and not zero cost. Rows are cumulative: reading the same
+    transcripts again returns the same rows. ``cost_usd`` is an estimate from the
+    adapter price table, or None when the model has no price.
+    """
     if "claude" not in cfg.tools or not cfg["tools"].get("claude", {}).get("cost", True):
         return None
-    root = transcripts_dir(cfg.repo)
+    root: Path = transcripts_dir(cfg.repo)
     if not root.is_dir():
         return None
-    prices = cfg.adapters["claude"].get("prices", {})
-    needle = f"Job folder: {job_dir}/"
-    created = _created(job)
-    by_step, unpriced = {}, set()
+    prices: dict[str, Any] = cfg.adapters["claude"].get("prices", {})
+    needle: str = f"Job folder: {job_dir}/"
+    created: datetime | None = _created(job)
+    rows: list[dict[str, Any]] = []
     try:
         for path in root.glob("*/subagents/agent-*.jsonl"):
-            with path.open() as f:
-                first = f.readline()
-                prompt = _prompt(first) if first else ""
+            with path.open() as handle:
+                first: str = handle.readline()
+                prompt: str = _prompt(first) if first else ""
                 if needle not in prompt:
                     continue
-                m = re.search(r"Step: ([a-z0-9-]+)\.", prompt)
-                step = m.group(1) if m else "other"
-                started = json.loads(first).get("timestamp")
-                usage_by_message = {}
-                for line in f:
-                    entry = json.loads(line)
+                matched: re.Match[str] | None = re.search(r"Step: ([a-z0-9-]+)\.", prompt)
+                step: str = matched.group(1) if matched else "other"
+                started: object = json.loads(first).get("timestamp")
+                usage_by_message: dict[str, tuple[Any, dict[str, Any]]] = {}
+                for line in handle:
+                    entry: dict[str, Any] = json.loads(line)
                     started = started or entry.get("timestamp")
-                    msg = entry.get("message")
-                    if entry.get("type") == "assistant" and isinstance(msg, dict) and msg.get("usage"):
-                        usage_by_message[msg["id"]] = (msg["model"], msg["usage"])
+                    message: object = entry.get("message")
+                    if entry.get("type") == "assistant" and isinstance(message, dict) and message.get("usage"):
+                        usage: object = message.get("usage")
+                        if isinstance(usage, dict):
+                            usage_by_message[str(message["id"])] = (message.get("model"), usage)
             if _earlier(started, created):
                 continue
             for model, usage in usage_by_message.values():
-                if model not in prices:
-                    unpriced.add(model)
-                    continue
-                by_step[step] = by_step.get(step, 0.0) + _price(usage, prices[model])
+                priced: bool = model in prices
+                rows.append({
+                    "step": step,
+                    "model": model if isinstance(model, str) else "",
+                    "priced": priced,
+                    "cost_usd": _price(usage, prices[model]) if priced else None,
+                    "input_tokens": _token(usage, "input_tokens"),
+                    "output_tokens": _token(usage, "output_tokens"),
+                    "cache_read_input_tokens": _token(usage, "cache_read_input_tokens"),
+                    "cache_creation_input_tokens": _token(usage, "cache_creation_input_tokens"),
+                })
     except (OSError, ValueError, KeyError, TypeError):
         return None
-    return round(sum(by_step.values()), 2), {k: round(v, 2) for k, v in by_step.items()}, sorted(unpriced)
+    return rows
+
+
+def job_cost(cfg: Any, job: dict[str, Any], job_dir: Path) -> tuple[float, dict[str, float], list[str]] | None:
+    """(total USD, USD by step, models with no price), or None when cost isn't available."""
+    rows: list[dict[str, Any]] | None = claude_usage(cfg, job, job_dir)
+    if rows is None:
+        return None
+    by_step: dict[str, float] = {}
+    unpriced: set[str] = set()
+    for row in rows:
+        model: object = row.get("model")
+        if not row.get("priced"):
+            if isinstance(model, str) and model:
+                unpriced.add(model)
+            continue
+        cost: object = row.get("cost_usd")
+        if isinstance(cost, bool) or not isinstance(cost, (int, float)):
+            continue
+        step: str = str(row.get("step") or "other")
+        by_step[step] = by_step.get(step, 0.0) + float(cost)
+    return round(sum(by_step.values()), 2), {key: round(value, 2) for key, value in by_step.items()}, sorted(unpriced)
 
 
 def _created(job):

@@ -63,7 +63,7 @@ def test_init_installs_everything_a_project_needs(bare):
     builtin = pipelines.normalise_edges(shipped["pipes"]["default"]["steps"])
     assert cfg.steps == builtin  # the starter is the built-in pipeline, spelled out
     assert (repo / ".gitignore").read_text() == (
-        "node_modules/\n\n# software factory runtime state\n/.factory/jobs/\n/.worktrees/\n")
+        "node_modules/\n\n# software factory runtime state\n/.factory/jobs/\n/.factory/telemetry/\n/.worktrees/\n")
     assert (repo / ".claude/agents/mfactory-build.md").exists()
     assert (repo / ".codex/agents/mfactory-build.toml").exists()
     assert not (repo / ".cursor").exists()

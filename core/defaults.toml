@@ -47,6 +47,33 @@ max_extra = 10            # extra tickets a scan may read beyond those pairs
 # A GitHub Projects field: priority = { github_project = { owner = "acme", number = 3, field = "Priority" } }
 priority = { labels = {}, jira = {}, github_project = {} }
 
+[telemetry]
+enabled = true            # local JSONL only; a telemetry failure does not fail the job
+storage = "jsonl"
+retention_days = 90       # `mfactory telemetry prune` deletes events older than this; job files stay
+fail_open = true
+
+[telemetry.collect]
+lifecycle = true
+performance = true
+usage = true
+cost = true
+checks = true
+reviews = true
+human_feedback = true
+git_metrics = true
+config_fingerprints = true
+artifact_metadata = true
+
+[telemetry.privacy]
+store_prompts = false     # v1 has no prompt, transcript, tool, or feedback-text fields
+store_transcripts = false
+store_tool_arguments = false
+store_tool_outputs = false
+store_config_content = false
+store_feedback_text = false
+redact_secrets = true
+
 [workspace]
 concurrency = 3           # new and resume rows across every project; workspace.toml or --concurrency overrides
 

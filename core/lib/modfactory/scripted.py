@@ -30,7 +30,11 @@ class Scripted:
             self.git(job, "merge", "--abort", check=False)
             return "FAILED", f"The branch conflicts with {base}:\n\n```\n{merged.stdout.strip()}\n```"
         # Another job may have merged since this one was tested.
-        if checks.gate(self.cfg, job, self.round_dir(job), "merge-checks") != "PASS":
+        verdict: checks.GateVerdict = checks.gate(self.cfg, job, self.round_dir(job), "merge-checks")
+        observer: Any = getattr(self, "observer", None)
+        if observer is not None:
+            observer.check_completed(self, job, verdict)
+        if verdict != "PASS":
             job["last_file"] = f"round-{job['round']}/merge-checks.md"
             return "FAILED", f"The checks failed after syncing with {base}."
         try:

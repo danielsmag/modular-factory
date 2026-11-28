@@ -31,6 +31,8 @@ from ..service import tracker as trackers
 from ..service.gh import GitHub
 from ..service.tracker.base import key_kind
 from ..service.tracker.jira_api import Client, account_email, account_token
+from ..telemetry.errors import TelemetryError
+from ..telemetry.storage import read_jsonl
 from ..util import FactoryError, Refused, dashboard_page, user_dir
 from . import feeds
 from .jobs import read_pipelines
@@ -327,6 +329,11 @@ def _routes(page: bytes, cache: QueueCache, blocks: Feeds | None = None) -> list
         body: dict[str, object] | None = job_activity_response(project, found["job"]) if project else None
         return NOT_FOUND if body is None else json_reply(body)
 
+    def telemetry(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        project: Project | None = workspace.project(found["project"])
+        body: dict[str, object] | None = job_telemetry_response(project, found["job"]) if project else None
+        return NOT_FOUND if body is None else json_reply(body)
+
     def job_file(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
         project: Project | None = workspace.project(found["project"])
         if project is None:
@@ -358,6 +365,7 @@ def _routes(page: bytes, cache: QueueCache, blocks: Feeds | None = None) -> list
         (re.compile(r"/projects/(?P<project>[^/]+)/jira/boards/(?P<board>[^/]+)"), jira_board),
         (re.compile(r"/projects/(?P<project>[^/]+)/github/issues"), github_issues),
         (re.compile(r"/projects/(?P<project>[^/]+)/jobs/(?P<job>.+)/activity"), activity),
+        (re.compile(r"/projects/(?P<project>[^/]+)/jobs/(?P<job>.+)/telemetry"), telemetry),
         (re.compile(r"/projects/(?P<project>[^/]+)/jobs/(?P<path>.+)"), job_file),
     ]
 
@@ -415,6 +423,34 @@ def job_activity_response(project: Project, job_id: str) -> dict[str, object] | 
         return {"runs": [], "error": "job.json unreadable"}
     cfg: Config = load_config(project.path)
     return activity.job_activity(cfg, loaded, job_dir)
+
+
+_TELEMETRY_CAP: int = 400
+
+
+def job_telemetry_response(project: Project | None, job_id: str) -> dict[str, object] | None:
+    """Telemetry events for one job. None when the job id leaves the jobs folder.
+
+    Records are already allowlisted on disk. Only the latest ``_TELEMETRY_CAP`` are returned.
+    """
+    if project is None or not job_id or "/" in job_id or job_id in {".", ".."}:
+        return None
+    root: Path = project.jobs_dir.resolve()
+    job_dir: Path = (project.jobs_dir / job_id).resolve()
+    if not job_dir.is_relative_to(root) or not (job_dir / "job.json").is_file():
+        return None
+    path: Path = job_dir / "telemetry" / "events.jsonl"
+    if not path.is_file():
+        return {"events": [], "truncated": False, "malformed": 0}
+    try:
+        rows: list[dict[str, Any]]
+        problems: list[str]
+        rows, problems = read_jsonl(path)
+    except TelemetryError:
+        return {"events": [], "truncated": False, "malformed": 0, "error": "telemetry log unreadable"}
+    truncated: bool = len(rows) > _TELEMETRY_CAP
+    shown: list[dict[str, Any]] = rows[-_TELEMETRY_CAP:]
+    return {"events": shown, "truncated": truncated, "malformed": len(problems)}
 
 
 def handler(file: Path) -> type[BaseHTTPRequestHandler]:

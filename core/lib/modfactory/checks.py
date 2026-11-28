@@ -14,6 +14,28 @@ from .util import Refused, run, tail
 
 TAIL = 80
 
+
+class GateVerdict(str):
+    """Check result that still compares equal to ``PASS`` or ``FAIL``."""
+
+    exit_code: int
+    seconds: int
+    timed_out: bool
+    commit: str
+    name: str
+
+    def __new__(
+        cls, verdict: str, *, exit_code: int, seconds: int, timed_out: bool, commit: str, name: str,
+    ) -> "GateVerdict":
+        created: GateVerdict = str.__new__(cls, verdict)
+        created.exit_code = exit_code
+        created.seconds = seconds
+        created.timed_out = timed_out
+        created.commit = commit
+        created.name = name
+        return created
+
+
 # Paths the factory owns. A job branch may not add, change or delete anything
 # here, or it could rewrite the pipeline, the checks or the agents that judge it.
 OWNED = ["factory/*", "factory.toml", ".factory/*",
@@ -108,7 +130,8 @@ def gate(cfg, job, round_dir, name="checks"):
         "## Protected paths\n" + ("\n".join(f"- {p}" for p in protected) if protected else "None changed.")
         + f"\n\n## Commands\nExit {code} in {seconds}s. Last {TAIL} lines of {name}.log:\n\n"
         f"```\n{tail(log, TAIL)}\n```\n")
-    return verdict
+    return GateVerdict(
+        verdict, exit_code=code, seconds=seconds, timed_out=code == 124, commit=commit, name=name)
 
 
 def hook(cfg, store):
