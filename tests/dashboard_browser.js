@@ -32,6 +32,8 @@ async function main() {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   context.on("page", watch);
   const page = await board(context);
+  await page.waitForSelector("#filters", { timeout: 15000 });
+  check("one project shows its name", (await page.textContent("#filters .filters-one")) === "project: clinic-invoices");
 
   // ---- the three blocks, and the project's own board until one is chosen
   check("three blocks in order", JSON.stringify(await texts(page, "section.block > .block-head .fold-title")) === JSON.stringify(["Jira", "GitHub issues", "Factory"]));

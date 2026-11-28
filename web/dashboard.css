@@ -407,6 +407,9 @@ pre.file { font: var(--fs-body)/var(--lh-prose) var(--mono); white-space: pre-wr
 .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .filters button { font: var(--fs-floor) var(--mono); border: 1px solid var(--line-2); padding: 3px 9px; border-radius: 3px; color: var(--text-2); }
 .filters button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.filters-one { font: var(--fs-floor) var(--mono); color: var(--text-2); }
+.filters-pick { font: var(--fs-floor) var(--mono); color: var(--text-2); }
+.filters-select { font: var(--fs-floor) var(--mono); color: var(--text-2); max-width: 100%; }
 .src { font: var(--fs-floor) var(--mono); color: var(--text-2); white-space: nowrap; }
 .src.mine { color: var(--accent); }
 

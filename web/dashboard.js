@@ -50,6 +50,32 @@ function writeChoice(id) {
     localStorage.setItem(CHOICE_KEY, id);
   } catch (error) {}
 }
+function projectHref(href, id) {
+  try {
+    const url = new URL(href);
+    if (id === "all") url.searchParams.delete("project");
+    else url.searchParams.set("project", id);
+    return url.pathname + url.search + url.hash;
+  } catch (error) {
+    return href;
+  }
+}
+function writeUrl(id) {
+  try {
+    if (typeof history === "undefined" || typeof location === "undefined") return;
+    const next = projectHref(location.href, id);
+    const current = location.pathname + location.search + location.hash;
+    if (next !== current) history.replaceState(history.state, "", next);
+  } catch (error) {}
+}
+function chooseProject(id) {
+  state.selected = id;
+  writeChoice(id);
+  writeUrl(id);
+  render();
+  refreshNow();
+  refreshFeeds(false);
+}
 // View settings kept in this browser, as JSON. Storage can be missing or refuse, so every read has a fallback.
 const prefs = {
   get(key, fallback) {
@@ -2894,24 +2920,33 @@ function normalizeSelection() {
   if (state.selected !== "all" && !state.projects.some((project) => project.id === state.selected)) {
     state.selected = "all";
     writeChoice("all");
+    writeUrl("all");
   }
-}
-function filterButton(id, text) {
-  return el("button", {
-    type: "button", text, "aria-pressed": state.selected === id ? "true" : "false",
-    onclick: () => { state.selected = id; writeChoice(id); render(); refreshNow(); refreshFeeds(false); },
-  });
 }
 function renderFilters() {
   const box = document.getElementById("filters");
   if (!box) return;
-  if (!state.workspace || state.projects.length < 2) {
+  if (!state.workspace || !state.projects.length) {
     box.replaceChildren();
     return;
   }
-  const buttons = [filterButton("all", "all")];
-  state.projects.forEach((project) => buttons.push(filterButton(project.id, projectLabel(project))));
-  box.replaceChildren(...buttons);
+  if (state.projects.length === 1) {
+    const project = state.projects[0];
+    box.replaceChildren(el("span", { class: "filters-one", text: "project: " + projectLabel(project) }));
+    return;
+  }
+  const select = el("select", {
+    class: "filters-select",
+    onchange: (event) => chooseProject(event.target.value),
+  }, [
+    el("option", { value: "all", text: "all projects", selected: state.selected === "all" }),
+    ...state.projects.map((project) => el("option", {
+      value: project.id,
+      text: projectLabel(project),
+      selected: state.selected === project.id,
+    })),
+  ]);
+  box.replaceChildren(el("label", { class: "filters-pick" }, "Project ", select));
 }
 function connectionLabel() {
   if (state.error) return "not connected";
