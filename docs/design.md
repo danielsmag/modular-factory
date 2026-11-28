@@ -306,7 +306,8 @@ Intake reads an issue nobody has reviewed. Each tool can limit what it may do.
   are used when that project has written them. With no `graph.json`, the
   pipeline is read from `factory.toml`, so an empty project still draws.
 - **A workspace is a list of checkouts.** The default file is
-  `~/.mfactory/workspace.toml`. `install.sh --global` creates `~/.mfactory`.
+  `~/.mfactory/workspace.toml`. `uv tool install modular-factory` installs the
+  command. `mfactory install` creates `~/.mfactory` for that file.
   `mfactory install` and `mfactory workspace add` write the workspace file.
   A `workspace.toml` in the current directory or a parent, or
   `FACTORY_WORKSPACE`, wins. The workspace runs each project's own

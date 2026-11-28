@@ -4,7 +4,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --global
 #   curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --tool claude
 #
-# --global installs the mfactory command for your user. Without it, the script
+# --global installs the mfactory command for your user: uv, then pipx, then a
+# copy in ~/.mfactory when neither is installed. Without --global, the script
 # copies the factory into the git repository you run it in.
 set -euo pipefail
 
@@ -61,6 +62,35 @@ if [ "$GLOBAL" = 1 ] && [ "$PERSONAL" = 1 ]; then
 fi
 if [ "$GLOBAL" != 1 ]; then
   git rev-parse --show-toplevel >/dev/null 2>&1 || fail "run this inside the git repository you want the factory in"
+fi
+
+# A package install. The tree under share/modular-factory is the factory.
+# ~/.mfactory then holds only the user's files (workspace.toml and the dashboard state).
+if [ "$GLOBAL" = 1 ] && command -v uv >/dev/null 2>&1; then
+  if [ -n "$SOURCE" ]; then
+    [ -f "$SOURCE/core/bin/mfactory" ] || fail "$SOURCE is not a copy of the factory"
+    uv tool install --from "$SOURCE" modular-factory
+  elif [ "$VERSION" = latest ]; then
+    uv tool install modular-factory
+  else
+    uv tool install "modular-factory==${VERSION#v}"
+  fi
+  echo "ok    mfactory installed with uv"
+  echo "Next: in a repository, run \`mfactory install --tool claude\`."
+  exit 0
+fi
+if [ "$GLOBAL" = 1 ] && command -v pipx >/dev/null 2>&1; then
+  if [ -n "$SOURCE" ]; then
+    [ -f "$SOURCE/core/bin/mfactory" ] || fail "$SOURCE is not a copy of the factory"
+    pipx install --force "$SOURCE"
+  elif [ "$VERSION" = latest ]; then
+    pipx install modular-factory
+  else
+    pipx install --force "modular-factory==${VERSION#v}"
+  fi
+  echo "ok    mfactory installed with pipx"
+  echo "Next: in a repository, run \`mfactory install --tool claude\`."
+  exit 0
 fi
 
 PYTHON=""

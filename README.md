@@ -42,18 +42,25 @@ Everything a project changes lives in `factory/`: pipelines as YAML in
 - One of Claude Code, Cursor, or Codex
 
 The factory adds nothing to the project's dependencies. Pipelines need PyYAML.
-`install.sh` installs it when it is missing, and `mfactory doctor` checks for it.
+A `uv tool` or `pipx` install brings it. `mfactory doctor` checks for it.
 
 ## Install
 
 Install the `mfactory` command once:
 
 ```bash
+uv tool install modular-factory
+```
+
+`pipx install modular-factory` is the same install. The
+[install guide](docs/install.md) has both, and a script for a machine without
+either:
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --global
 ```
 
-Read the script before you pipe it to a shell. The [install guide](docs/install.md)
-has the download-first commands and every flag.
+Read the script before you pipe it to a shell.
 
 Then, in each repository:
 
@@ -181,7 +188,7 @@ mfactory start dashboard
 mfactory stop
 ```
 
-The page comes with the global install (`install.sh --global`). It is
+The page comes with the global install (`uv tool install modular-factory`). It is
 read-only and stays on your machine. Approvals and feedback go through
 `/mfactory` or an issue comment.
 

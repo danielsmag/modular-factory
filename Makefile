@@ -45,7 +45,7 @@ help: ## list checks and mfactory targets
 	@echo "  make version"
 	@echo "  make install               TOOL=claude  or  TOOLS=\"claude cursor\"  PERSONAL=1"
 	@echo "  make init                  same command as install"
-	@echo "  make upgrade               global CLI and every project in the workspace"
+	@echo "  make upgrade               package command and every project in the workspace"
 	@echo "                             SOURCE=.          install from this tree"
 	@echo "                             SELF=1            global CLI only"
 	@echo "                             ALL=1             workspace projects only"

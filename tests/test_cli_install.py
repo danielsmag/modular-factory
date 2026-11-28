@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from conftest import ROOT, git
 from modfactory import config, install, pipelines
-from modfactory.cli.maintain import _changelog_note, status_all, upgrade_everything
+from modfactory.cli.maintain import _changelog_note, status_all, tool_upgrade_command, upgrade_everything
 from modfactory.util import dashboard_page
 from modfactory.workspace.service import DashboardServer, one_handler
 
@@ -486,11 +486,11 @@ def test_upgrade_updates_the_global_cli_and_every_workspace_project(world):
     result = world.cli("upgrade", "--source", str(ROOT), cwd=world.tmp)
     assert result.returncode == 0, result.stderr + result.stdout
     expected: str = (ROOT / "core" / "VERSION").read_text().strip()
-    assert (home / "core" / "VERSION").read_text().strip() == expected
+    assert (home / "core" / "VERSION").read_text().strip() == "0.0.0"
     assert (world.repo / ".factory" / "VERSION").read_text().strip() == expected
     assert (other / ".factory" / "VERSION").read_text().strip() == expected
-    assert "global install 0.0.0 ->" in result.stdout
-    assert "3 upgraded, 0 current" in result.stdout
+    assert "uv tool install modular-factory" in result.stdout
+    assert "2 upgraded, 0 current" in result.stdout
     assert str(world.repo.resolve()) in (home / "workspace.toml").read_text()
     assert str(other.resolve()) in (home / "workspace.toml").read_text()
 
@@ -540,7 +540,8 @@ def test_upgrade_downloads_the_release_once(world, monkeypatch):
     expected: str = (ROOT / "core" / "VERSION").read_text().strip()
     for repo in repos:
         assert (repo / ".factory" / "VERSION").read_text().strip() == expected
-    assert "4 upgraded, 0 current" in lines
+    assert any("uv tool install modular-factory" in line for line in lines)
+    assert "3 upgraded, 0 current" in lines
 
 
 def test_upgrade_dry_run_writes_nothing(world):
@@ -579,7 +580,7 @@ def _sleeper() -> subprocess.Popen:
     return child
 
 
-def test_upgrade_self_keeps_the_user_files_and_replaces_the_release(world):
+def test_upgrade_self_leaves_a_copied_install_and_keeps_user_files(world):
     home: Path = _global_home()
     child: subprocess.Popen = _sleeper()
     try:
@@ -591,15 +592,16 @@ def test_upgrade_self_keeps_the_user_files_and_replaces_the_release(world):
         assert result.returncode == 0, result.stderr + result.stdout
         for name, text in files.items():
             assert (home / name).read_text() == text, name
-        assert (home / "core" / "VERSION").read_text() == (ROOT / "core" / "VERSION").read_text()
+        assert (home / "core" / "VERSION").read_text() == "0.0.0\n"
+        assert (home / "old-layout" / "x").read_text() == "old\n"
+        assert (home / "core" / "stale.py").read_text() == "old\n"
+        assert "uv tool install modular-factory" in result.stdout
         assert not home.with_name(home.name + ".previous").exists()
-        assert not (home / "old-layout").exists()
-        assert not (home / "core" / "stale.py").exists()
     finally:
         child.kill()
 
 
-def test_upgrade_says_a_running_dashboard_is_on_the_old_version_and_stop_still_works(world):
+def test_upgrade_self_leaves_a_running_dashboard_and_stop_still_works(world):
     home: Path = _global_home()
     child: subprocess.Popen = _sleeper()
     url: str = "http://127.0.0.1:5999/"
@@ -607,11 +609,8 @@ def test_upgrade_says_a_running_dashboard_is_on_the_old_version_and_stop_still_w
         _user_files(home, child.pid, url)
         result = world.cli("upgrade", "--self", "--source", str(ROOT), cwd=world.tmp)
         assert result.returncode == 0, result.stderr + result.stdout
-        lines: list[str] = [line for line in result.stdout.splitlines() if line.strip()]
-        assert lines[-1] == (
-            f"note  dashboard at {url} still runs the old version. "
-            "Restart it: mfactory stop dashboard && mfactory start dashboard"
-        )
+        assert "uv tool install modular-factory" in result.stdout
+        assert RESTART_NOTE not in result.stdout
         assert child.poll() is None
         stopped = world.cli("stop", cwd=world.tmp)
         assert stopped.returncode == 0, stopped.stderr + stopped.stdout
@@ -626,15 +625,15 @@ def test_upgrade_prints_no_restart_note_without_a_live_dashboard(world):
     home: Path = _global_home()
     missing = world.cli("upgrade", "--self", "--source", str(ROOT), cwd=world.tmp)
     assert missing.returncode == 0, missing.stderr + missing.stdout
-    assert "ok    global install" in missing.stdout
+    assert "uv tool install modular-factory" in missing.stdout
     assert RESTART_NOTE not in missing.stdout
-    (home / "core" / "VERSION").write_text("0.0.0\n")
+    assert (home / "core" / "VERSION").read_text() == "0.0.0\n"
     dead = subprocess.Popen(["true"])
     dead.wait()
     _user_files(home, dead.pid)
     stale = world.cli("upgrade", "--self", "--source", str(ROOT), cwd=world.tmp)
     assert stale.returncode == 0, stale.stderr + stale.stdout
-    assert "ok    global install" in stale.stdout
+    assert "uv tool install modular-factory" in stale.stdout
     assert RESTART_NOTE not in stale.stdout
 
 
@@ -673,7 +672,7 @@ def test_upgrade_skips_a_project_whose_schema_differs(world):
     assert "set schema = 1" in result.stdout
     assert (other / ".factory" / "VERSION").read_text().strip() == "0.0.0"
     assert (world.repo / ".factory" / "VERSION").read_text().strip() == expected.strip()
-    assert "1 upgraded, 1 current, 1 skipped" in result.stdout
+    assert "1 upgraded, 0 current, 1 skipped" in result.stdout
 
 
 def test_upgrade_leaves_a_current_project_in_place(world):
@@ -688,7 +687,7 @@ def test_upgrade_leaves_a_current_project_in_place(world):
     assert result.returncode == 0, result.stderr + result.stdout
     assert binary.stat().st_mtime_ns == before
     assert "already" in result.stdout
-    assert "0 upgraded, 2 current" in result.stdout
+    assert "0 upgraded, 1 current" in result.stdout
 
 
 def test_upgrade_repairs_a_project_missing_templates(world):
@@ -702,7 +701,7 @@ def test_upgrade_repairs_a_project_missing_templates(world):
     result = world.cli("upgrade", "--source", str(ROOT), cwd=world.tmp)
     assert result.returncode == 0, result.stderr + result.stdout
     assert "repair, missing: templates" in result.stdout
-    assert "0 upgraded, 1 repaired, 1 current" in result.stdout
+    assert "0 upgraded, 1 repaired, 0 current" in result.stdout
     assert "commit .factory/ and the generated files" in result.stdout
     assert (world.repo / ".factory" / "templates" / "factory.toml").is_file()
     for item in install.ITEMS + ["adapters"]:
@@ -757,11 +756,30 @@ def test_uninstall_keeps_factory_toml_unless_asked(world):
     assert world.gh["labels"] == []
 
 
+def _path_hiding(dest: Path, *names: str) -> str:
+    """A PATH of symlinks to the current tools, without the commands in `names`."""
+    dest.mkdir(parents=True)
+    blocked: set[str] = set(names)
+    for entry in os.environ["PATH"].split(os.pathsep):
+        directory: Path = Path(entry)
+        if not directory.is_dir():
+            continue
+        for tool in directory.iterdir():
+            link: Path = dest / tool.name
+            if tool.name in blocked or link.exists():
+                continue
+            if not tool.is_file() or not os.access(tool, os.X_OK):
+                continue
+            link.symlink_to(tool)
+    return str(dest)
+
+
 def test_install_sh_global_links_a_command_that_can_install(bare, tmp_path):
     home = tmp_path / "home"
     data = tmp_path / "data"
     bindir = tmp_path / "bin"
-    env = dict(os.environ, HOME=str(home), FACTORY_HOME=str(data), FACTORY_BIN_DIR=str(bindir))
+    env = dict(os.environ, HOME=str(home), FACTORY_HOME=str(data), FACTORY_BIN_DIR=str(bindir),
+               PATH=_path_hiding(tmp_path / "path", "uv", "pipx"))
     res = subprocess.run(["bash", str(ROOT / "install.sh"), "--global", "--source", str(ROOT)],
                          cwd=tmp_path, capture_output=True, text=True, env=env)
     assert res.returncode == 0, res.stderr
@@ -790,3 +808,41 @@ def test_install_sh_global_links_a_command_that_can_install(bare, tmp_path):
                                cwd=bare.repo, capture_output=True, text=True)
     assert installed.returncode == 0, installed.stderr
     assert 'enabled = ["cursor"]' in bare.config_file.read_text()
+
+
+def test_package_upgrade_command_is_uv_or_pipx(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("modfactory.cli.maintain.running_distribution", lambda: Path("/tmp/share/modular-factory"))
+
+    def which(name: str) -> str | None:
+        return "/usr/bin/uv" if name == "uv" else None
+
+    monkeypatch.setattr("modfactory.cli.maintain.shutil.which", which)
+    assert tool_upgrade_command("latest") == ["uv", "tool", "upgrade", "modular-factory"]
+    assert tool_upgrade_command("v0.2.0") == ["uv", "tool", "install", "modular-factory==0.2.0"]
+
+    def pipx_only(name: str) -> str | None:
+        return "/usr/bin/pipx" if name == "pipx" else None
+
+    monkeypatch.setattr("modfactory.cli.maintain.shutil.which", pipx_only)
+    assert tool_upgrade_command("latest") == ["pipx", "upgrade", "modular-factory"]
+    assert tool_upgrade_command("0.2.0") == ["pipx", "install", "--force", "modular-factory==0.2.0"]
+
+
+def test_install_sh_global_uses_uv_when_it_is_on_path(tmp_path: Path) -> None:
+    bindir: Path = tmp_path / "bin"
+    bindir.mkdir()
+    log: Path = tmp_path / "uv.log"
+    script: Path = bindir / "uv"
+    script.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$UV_LOG\"\n")
+    script.chmod(0o755)
+    env: dict[str, str] = dict(
+        os.environ, PATH=f"{bindir}{os.pathsep}{_path_hiding(tmp_path / 'rest', 'uv', 'pipx')}",
+        UV_LOG=str(log), HOME=str(tmp_path / "home"))
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        ["bash", str(ROOT / "install.sh"), "--global", "--source", str(ROOT)],
+        cwd=tmp_path, capture_output=True, text=True, env=env)
+    assert result.returncode == 0, result.stderr
+    assert "installed with uv" in result.stdout
+    recorded: str = log.read_text()
+    assert recorded.splitlines() == [f"tool install --from {ROOT} modular-factory"]
+    assert not (tmp_path / "home" / ".mfactory").exists()

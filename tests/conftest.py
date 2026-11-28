@@ -25,6 +25,7 @@ CLI = ROOT / "core" / "bin" / "mfactory"
 def isolated_user_config(tmp_path, monkeypatch):
     """Workspace commands and rule lookup must not read the developer's real home."""
     monkeypatch.setenv("FACTORY_HOME", str(tmp_path / "mfactory"))
+    monkeypatch.setenv("FACTORY_SKIP_TOOL_SEARCH", "1")
     home = tmp_path / "skill-home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))

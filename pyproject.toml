@@ -1,11 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "modular-factory"
+description = "A software factory for a git repository"
+readme = "README.md"
 requires-python = ">=3.11"
-dynamic = ["version"]
+license = "GPL-3.0-only"
 dependencies = ["pyyaml>=6"]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/danielsmag/modular-factory"
+Documentation = "https://danielsmag.github.io/modular-factory/docs/"
+Issues = "https://github.com/danielsmag/modular-factory/issues"
+
+[project.scripts]
+mfactory = "modular_factory.bootstrap:main"
+
+[tool.hatch.version]
+source = "regex"
+path = "core/VERSION"
+pattern = "(?P<version>\\S+)"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/modular_factory"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"core" = "share/modular-factory/core"
+"adapters" = "share/modular-factory/adapters"
+"web" = "share/modular-factory/web"
+"LICENSE" = "share/modular-factory/LICENSE"
+"NOTICE" = "share/modular-factory/NOTICE"
+
+[tool.hatch.build.targets.sdist]
+only-include = [
+  "src/modular_factory",
+  "core",
+  "adapters",
+  "web",
+  "LICENSE",
+  "NOTICE",
+  "README.md",
+  "pyproject.toml",
+]
 
 [tool.uv]
-package = false   # a folder copied into each repository, not a package
+package = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
