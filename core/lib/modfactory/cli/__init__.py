@@ -459,7 +459,9 @@ def _hand_off(argv: list[str]) -> None:
     """Run a dashboard command with the global `mfactory`, which has the page. Does not return."""
     binary: Path | None = global_binary()
     if binary is None:
-        raise Refused("the dashboard comes with the global install. Run install.sh --global.")
+        raise Refused(
+            "the dashboard comes with the global install. Run `uv tool install modular-factory`."
+        )
     if binary.resolve() == Path(sys.argv[0]).resolve():
         raise Refused(f"{binary.parents[2] / 'web'} is missing. Run `mfactory upgrade --self`.")
     os.execv(sys.executable, [sys.executable, str(binary), *argv])

@@ -26,25 +26,42 @@ Setup fills in `factory/factory.toml`. `mfactory doctor` checks that a run can s
 
 The factory adds nothing to your project's dependencies. It is a folder of
 Python files that need one package besides the standard library: PyYAML, to
-read the pipelines in `factory/pipes/*.yaml`. `install.sh` installs it with
-`pip install --user pyyaml` when it is missing, and `mfactory doctor` checks it
-is there. Your OS package (`python3-yaml`) works as well.
+read the pipelines in `factory/pipes/*.yaml`. A `uv tool` or `pipx` install
+brings PyYAML with the command. `install.sh`, when it copies the factory
+instead of installing the package, installs PyYAML with `pip install --user
+pyyaml` when it is missing. `mfactory doctor` checks it is there. Your OS
+package (`python3-yaml`) works as well.
 
 ## 1. Install
 
 Install the command once, for your user:
 
 ```bash
+uv tool install modular-factory
+```
+
+`pipx install modular-factory` does the same. The command lives in its own
+environment. `~/.mfactory` (`FACTORY_HOME` when set) holds your files only:
+`workspace.toml`, `dashboard.json`, `dashboard.log`, and `plan-usage.json`.
+The first `mfactory install` creates that directory. The dashboard is served
+by this command.
+
+On a machine with neither `uv` nor `pipx`:
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/install.sh | bash -s -- --global
 ```
+
+When `uv` or `pipx` is on `PATH`, that script installs the package. Otherwise
+it copies the factory into `~/.mfactory` and links `~/.local/bin/mfactory`.
 
 | Option | Meaning |
 | --- | --- |
 | `--global` | Install `mfactory` for your user. It must not be combined with `--tool`. |
-| `--version v0.1.0` | Install that release. Default: the latest release, or the `master` branch before the first release. |
-| `--source DIR` | Install from a local copy of this repository instead of downloading. |
+| `--version v0.1.0` | Install that release. Default: the latest release. |
+| `--source DIR` | Install from a local copy of this repository instead of PyPI. |
 
-This creates `~/.mfactory` (`FACTORY_HOME` when set) and links `~/.local/bin/mfactory`. It also serves the dashboard. The workspace, the list of your projects, is `~/.mfactory/workspace.toml`. Then, in each repository:
+The workspace, the list of your projects, is `~/.mfactory/workspace.toml`. Then, in each repository:
 
 ```bash
 mfactory install --tool claude
@@ -269,7 +286,7 @@ mfactory dashboard
 
 `start dashboard` serves the page in the background and returns. `stop` ends that process. `dashboard` serves the same page in the foreground until Ctrl C.
 
-The page comes with the global install (`install.sh --global`), so there is one dashboard per machine and no copy in `.factory/`. `.factory/bin/mfactory dashboard`, `start` and `stop` hand off to the global `mfactory`. Without a global install they say to run `install.sh --global`.
+The page comes with the global install (`uv tool install modular-factory`), so there is one dashboard per machine and no copy in `.factory/`. `.factory/bin/mfactory dashboard`, `start` and `stop` hand off to the global `mfactory`. Without a global install they say to run `uv tool install modular-factory`.
 
 ## Several projects
 
@@ -330,19 +347,20 @@ mfactory upgrade --self                       # global CLI only
 mfactory upgrade --all                        # workspace projects only
 ```
 
-`mfactory upgrade` downloads one release and updates the CLI from `install.sh --global`
-and every project in the workspace. Standing in an installed checkout that is not listed
-updates that checkout too. It prints a plan first, then replaces `.factory/` (not
-`.factory/jobs/`), runs `sync`, and leaves `factory/factory.toml` alone. A checkout already on
-that version is left as it is, unless its `.factory/` is missing files (for example after an
-upgrade from an old CLI). The plan then shows `repair, missing: ...`, and upgrade copies
-`.factory/` again and runs `sync`. The copy takes its item list from the release it installs,
-not from the CLI that runs it.
+`mfactory upgrade` updates the global command with `uv tool upgrade modular-factory`
+(or `pipx upgrade modular-factory`) and copies that same tree into every project in the
+workspace. Standing in an installed checkout that is not listed updates that checkout too.
+It prints a plan first, then replaces `.factory/` (not `.factory/jobs/`), runs `sync`, and
+leaves `factory/factory.toml` alone. A checkout already on that version is left as it is,
+unless its `.factory/` is missing files (for example after an upgrade from an old CLI). The
+plan then shows `repair, missing: ...`, and upgrade copies `.factory/` again and runs `sync`.
+The copy takes its item list from the release it installs, not from the CLI that runs it.
 
-The global upgrade and `install.sh --global` keep `workspace.toml`, `dashboard.json`,
-`dashboard.log` and `plan-usage.json` in `~/.mfactory` and replace everything else. A
-dashboard left running is still on the old code, and the output ends with
-`mfactory stop dashboard && mfactory start dashboard` to restart it.
+`workspace.toml`, `dashboard.json`, `dashboard.log` and `plan-usage.json` stay in
+`~/.mfactory`. A copied install from an older `install.sh --global` is left in place, and
+upgrade prints `uv tool install modular-factory`. A dashboard left running is still on the
+old code, and a package upgrade ends with `mfactory stop dashboard && mfactory start dashboard`
+to restart it.
 
 A project whose `schema` differs from the release is skipped. The others still upgrade.
 The summary points to that version's [release notes](https://github.com/danielsmag/modular-factory/releases) and tells you to set

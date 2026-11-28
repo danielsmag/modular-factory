@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,7 @@ from ..util import (
     find_repo,
     is_generated,
     run,
+    running_distribution,
     user_dir,
     version,
 )
@@ -44,7 +46,10 @@ def global_home() -> Path | None:
 
 
 def global_install() -> Path | None:
-    """The global CLI tree: this process when it is that copy, otherwise the user directory."""
+    """The global CLI tree: the PyPI install when this process is that copy, otherwise a copied home."""
+    running: Path | None = running_distribution()
+    if running is not None:
+        return running
     here: Path | None = global_home()
     if here is not None:
         return here
@@ -52,6 +57,89 @@ def global_install() -> Path | None:
     if (home / ".global").is_file() and (home / "core" / "bin" / "mfactory").is_file():
         return home
     return None
+
+
+def legacy_global() -> Path | None:
+    """A copied ``~/.mfactory`` tree. The PyPI install does not use this layout."""
+    here: Path | None = global_home()
+    if here is not None:
+        return here
+    home: Path = user_dir()
+    if (home / ".global").is_file() and (home / "core" / "bin" / "mfactory").is_file():
+        return home
+    return None
+
+
+PACKAGE: str = "modular-factory"
+KEPT_GLOBAL: tuple[str, ...] = ("workspace.toml", "dashboard.json", "dashboard.log", "plan-usage.json")
+"""User files in ``~/.mfactory``. A package upgrade leaves them there. ``install.sh`` keeps the same list."""
+
+
+def legacy_install_note() -> str:
+    """What to print when upgrade finds a copied global install. User files stay."""
+    home: Path = user_dir()
+    kept: str = ", ".join(KEPT_GLOBAL)
+    return (
+        f"note  {home} is a copied install. {kept} stay. "
+        f"Install the package: `uv tool install {PACKAGE}`"
+    )
+
+
+def _installer() -> str | None:
+    """``uv`` or ``pipx`` when this process is the package and that tool is on ``PATH``."""
+    if running_distribution() is None:
+        return None
+    prefix: str = str(Path(sys.prefix).resolve())
+    sep: str = os.sep
+    if f"{sep}uv{sep}tools{sep}" in prefix and shutil.which("uv"):
+        return "uv"
+    if f"{sep}pipx{sep}" in prefix and shutil.which("pipx"):
+        return "pipx"
+    if shutil.which("uv"):
+        return "uv"
+    if shutil.which("pipx"):
+        return "pipx"
+    return None
+
+
+def tool_upgrade_command(ref: str) -> list[str] | None:
+    """The command that moves the global package to ``ref``. None when uv and pipx are both absent."""
+    kind: str | None = _installer()
+    if kind is None:
+        return None
+    pinned: str = ref[1:] if ref.startswith("v") else ref
+    if kind == "uv":
+        if pinned == "latest":
+            return ["uv", "tool", "upgrade", PACKAGE]
+        return ["uv", "tool", "install", f"{PACKAGE}=={pinned}"]
+    if pinned == "latest":
+        return ["pipx", "upgrade", PACKAGE]
+    return ["pipx", "install", "--force", f"{PACKAGE}=={pinned}"]
+
+
+def _upgrade_tool(ref: str, say: Callable[[str], None], *, dry_run: bool) -> int:
+    """Upgrade the global package with uv or pipx. A dry run prints the command."""
+    command: list[str] | None = tool_upgrade_command(ref)
+    if command is None:
+        say("note  this is the package install, and uv or pipx is not on PATH.")
+        return 1
+    shown: str = " ".join(command)
+    if dry_run:
+        say(f"would  {shown}")
+        return 0
+    say(shown)
+    result: subprocess.CompletedProcess[str] = subprocess.run(command, check=False)
+    if result.returncode != 0:
+        say(f"FAIL  {shown}")
+        return result.returncode
+    say(f"ok    {shown}")
+    dashboard: workspace_http.RunningDashboard | None = workspace_http.running()
+    if dashboard is not None:
+        say(
+            f"note  dashboard at {dashboard.url} still runs the old version. "
+            "Restart it: mfactory stop dashboard && mfactory start dashboard"
+        )
+    return 0
 
 
 def latest_release() -> str | None:
@@ -304,9 +392,16 @@ class Target:
 
 @contextmanager
 def _release_root(ref: str, source: str | None) -> Iterator[Path]:
-    """Yield one factory tree. A source path is used as given; otherwise the release is downloaded once."""
+    """Yield one factory tree. A source path is used as given.
+
+    The PyPI install at ``latest`` uses its own tree. Any other request downloads the release once.
+    """
     if source is not None:
         yield Path(source).resolve()
+        return
+    dist: Path | None = running_distribution()
+    if dist is not None and ref == "latest":
+        yield dist
         return
     temporary: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
     try:
@@ -328,13 +423,6 @@ def _release_required(root: Path) -> list[str]:
     """The items a project's `.factory/` needs for this release: its ITEMS plus adapters, as doctor checks."""
     located: tuple[Path, Path, Path, Path] = layout(root)
     return release_items(located[0]) + ["adapters"]
-
-
-def _global_target(home: Path, after: str) -> Target:
-    version_file: Path = home / "core" / "VERSION"
-    before: str = version_file.read_text().strip() if version_file.is_file() else ""
-    action: Literal["upgrade", "current"] = "current" if before and before == after else "upgrade"
-    return Target("global", "global", home, before, after, action)
 
 
 def _project_base(repo: Path) -> str:
@@ -453,54 +541,6 @@ def _project_followup(target: Target) -> str:
     )
 
 
-KEPT_GLOBAL: tuple[str, ...] = ("workspace.toml", "dashboard.json", "dashboard.log", "plan-usage.json")
-"""The user's files in the global home. A global upgrade carries these over; the release replaces the rest."""
-
-
-def _replace_global(home: Path, root: Path, before: str, after: str, say: Callable[[str], None]) -> None:
-    """Replace the global CLI tree with root, keeping the files in KEPT_GLOBAL."""
-    located: tuple[Path, Path, Path, Path] = layout(root)
-    core: Path = located[0]
-    adapters: Path = located[1]
-    web: Path = located[2]
-    licence: Path = located[3]
-    with tempfile.TemporaryDirectory() as tmp:
-        tree: Path = Path(tmp) / "next"
-        tree.mkdir()
-        ignored: Callable[..., set[str]] = shutil.ignore_patterns("__pycache__", "*.pyc")
-        shutil.copytree(core, tree / "core", ignore=ignored)
-        shutil.copytree(adapters, tree / "adapters", ignore=ignored)
-        shutil.copytree(web, tree / "web", ignore=ignored)
-        for name in ("LICENSE", "NOTICE"):
-            src: Path = licence / name
-            if src.is_file():
-                shutil.copy2(src, tree / name)
-        (tree / ".global").write_text(f"{home}\n")
-        for name in KEPT_GLOBAL:
-            kept: Path = home / name
-            if kept.is_file():
-                shutil.copy2(kept, tree / name)
-        legacy: Path = home / "fleet.toml"
-        if not (tree / "workspace.toml").exists() and legacy.is_file():
-            shutil.copy2(legacy, tree / "workspace.toml")
-        previous: Path = home.with_name(home.name + ".previous")
-        if previous.exists():
-            shutil.rmtree(previous)
-        try:
-            home.rename(previous)
-        except OSError as error:
-            raise Refused(f"could not replace {home}: {error}") from error
-        try:
-            shutil.copytree(tree, home)
-        except Exception:
-            if not home.exists():
-                previous.rename(home)
-            raise
-        shutil.rmtree(previous, ignore_errors=True)
-    shown: str = before or "unknown"
-    say(f"ok    global install {shown} -> {after}  {home}")
-
-
 def _apply(
     target: Target, root: Path, say: Callable[[str], None],
 ) -> Literal["upgraded", "repaired", "current", "schema", "failed"]:
@@ -519,7 +559,8 @@ def _apply(
 
     try:
         if target.kind == "global":
-            _replace_global(target.path, root, target.before, target.after, say)
+            say(legacy_install_note())
+            return "current"
         else:
             upgrade(target.path, source=str(root), say=report)
     except FactoryError as error:
@@ -612,14 +653,13 @@ def upgrade_self(
     *,
     dry_run: bool = False,
 ) -> int:
-    """Replace the global CLI tree from `install.sh --global`."""
-    home: Path | None = global_install()
-    if home is None:
-        raise Refused("no global install. `install.sh --global` installs mfactory for your user.")
-    with _release_root(ref, source) as root:
-        facts: tuple[str, object] = _release_facts(root)
-        after: str = facts[0]
-        return _run_upgrade([_global_target(home, after)], root, dry_run, say)
+    """Upgrade the global command. A package install uses uv or pipx. A copied home is left in place."""
+    if running_distribution() is not None and source is None:
+        return _upgrade_tool(ref, say, dry_run=dry_run)
+    if legacy_global() is not None:
+        say(legacy_install_note())
+        return 0
+    raise Refused(f"no global install. `uv tool install {PACKAGE}` installs mfactory for your user.")
 
 
 def upgrade_all(
@@ -653,21 +693,29 @@ def upgrade_everything(
     *,
     dry_run: bool = False,
 ) -> int:
-    """Upgrade the global CLI, every project in the workspace, and this checkout when it is not listed.
+    """Upgrade the global command, every project in the workspace, and this checkout when it is not listed.
 
-    One download covers every target. One failure does not stop the others. A missing global install
-    or an empty workspace is reported and the rest still runs.
+    A package install upgrades itself with uv or pipx, then copies that tree into each project.
+    A copied ``~/.mfactory`` is left in place. One failure does not stop the others.
     """
     home: Path | None = global_install()
+    copied: Path | None = legacy_global()
     group: workspace_mod.Workspace | None = _workspace()
     projects: list[workspace_mod.Project] = group.projects if group is not None else []
     checkout: Path | None = _installed_checkout()
     covered: set[Path] = {project.path for project in projects}
     extra: Path | None = None if checkout is None or checkout.resolve() in covered else checkout.resolve()
-    if home is None and not projects and extra is None:
-        raise Refused("nothing to upgrade. Install the factory in a project, or run `install.sh --global`.")
-    if home is None:
-        say("warn  no global install. `install.sh --global` installs mfactory for your user.")
+    if home is None and copied is None and not projects and extra is None:
+        raise Refused(
+            f"nothing to upgrade. Install the factory in a project, or run `uv tool install {PACKAGE}`."
+        )
+    tool_code: int = 0
+    if running_distribution() is not None and source is None:
+        tool_code = _upgrade_tool(ref, say, dry_run=dry_run)
+    if copied is not None:
+        say(legacy_install_note())
+    elif home is None:
+        say(f"warn  no global install. `uv tool install {PACKAGE}` installs mfactory for your user.")
     if not projects:
         say("no projects in the workspace. Run `mfactory workspace add` inside a project.")
     with _release_root(ref, source) as root:
@@ -676,11 +724,10 @@ def upgrade_everything(
         need: object = facts[1]
         required: list[str] = _release_required(root)
         targets: list[Target] = []
-        if home is not None:
-            targets.append(_global_target(home, after))
         if group is not None:
             for project in projects:
                 targets.append(_project_target(project.path, group.label(project), after, need, required))
         if extra is not None:
             targets.append(_project_target(extra, extra.name, after, need, required))
-        return _run_upgrade(targets, root, dry_run, say)
+        code: int = _run_upgrade(targets, root, dry_run, say)
+    return code if code else tool_code
