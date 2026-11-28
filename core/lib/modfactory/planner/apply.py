@@ -70,7 +70,8 @@ def first_target(action: dict[str, Any]) -> str:
 
 
 def _short(text: str, limit: int = 80) -> str:
-    one: str = " ".join(text.split())
+    # The text comes from the scan agent: drop control characters so it cannot move the cursor or recolour the terminal.
+    one: str = " ".join("".join(c for c in text if c.isprintable() or c.isspace()).split())
     return one if len(one) <= limit else one[:limit - 1] + "…"
 
 

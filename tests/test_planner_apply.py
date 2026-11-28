@@ -232,3 +232,9 @@ def test_link_to_another_project_uses_its_url(world, tmp_path):
     apply.apply_action(factory, {"type": "link", "from": "repo:#1", "to": "beta:#9", "relation": "blocks"}, known, urls)
     assert any("Blocks https://github.test/acme/beta/issues/9" in c for c in world.comments(1))
     assert world.comments(2) == []
+
+
+def test_describe_strips_control_characters_from_agent_text():
+    from modfactory.planner.apply import describe
+    line = describe({"type": "comment", "on": "repo:#1", "text": "hello \x1b[31mred\x07 world"})
+    assert "\x1b" not in line and "\x07" not in line and "hello" in line and "world" in line
