@@ -1,4 +1,4 @@
-"""`/planner.json`: the planner's open findings for the dashboard, redacted, with links filtered."""
+"""`/planner.json`: the planner's open findings, notes, holds and pipeline for the dashboard, redacted."""
 
 from __future__ import annotations
 
@@ -46,8 +46,12 @@ def planner_payload(state: PlannerState, at: datetime | None = None) -> dict[str
     for finding in opened:
         if finding.get("severity") in SEVERITIES:
             counts[str(finding["severity"])] += 1
-    settings: dict[str, Any] = {"frequency": findings.get("frequency") or "medium"}
-    scan: dict[str, Any] = summary._scan(snapshot, findings, settings, at or datetime.now(UTC))
+    settings: dict[str, Any] = {"frequency": findings.get("frequency") or "medium",
+                                "alert_at": findings.get("alert_at") or "high"}
+    clean: dict[str, Any] = {**snapshot, "tickets": list(by_ref.values())}
+    found: dict[str, Any] = {**findings, "findings": [f for f in findings.get("findings") or [] if isinstance(f, dict)]}
+    report: dict[str, Any] = summary.build(clean, found, settings, None, at or datetime.now(UTC))
+    scan: dict[str, Any] = report["scan"]
     errors: object = snapshot.get("errors")
     return {
         "scanned_at": scan["scanned_at"],
@@ -56,5 +60,12 @@ def planner_payload(state: PlannerState, at: datetime | None = None) -> dict[str
         "next_due": scan["next_due"],
         "counts": counts,
         "findings": [_finding(f, by_ref) for f in opened],
+        "checked": [{"tickets": [_ticket(str(r), by_ref) for r in n.get("tickets") or []],
+                     "text": text(n.get("text")) or ""} for n in report["checked"]],
+        "held": [{"ticket": _ticket(str(h["ref"]), by_ref), "until": _ticket(str(h.get("until")), by_ref),
+                  "since": text(h.get("since"))} for h in report["held"]],
+        "projects": [{"label": text(p["label"]) or "", **{k: p[k] for k in ("queued", "running", "waiting", "held")},
+                      "by_step": {text(k) or "": v for k, v in p["by_step"].items()},
+                      "urgent": [_ticket(str(u["ref"]), by_ref) for u in p["urgent"]]} for p in report["projects"]],
         "errors": [text(e) for e in errors if isinstance(e, str)] if isinstance(errors, list) else [],
     }

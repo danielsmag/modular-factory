@@ -442,9 +442,10 @@ def sample_planner(root: Path, label: str, now: datetime) -> None:
          "severity": "medium", "confidence": 0.7, "summary": "IBAN checks reuse the payment form that #47 changes.",
          "evidence": ["mentions #47"], "action": {"type": "hold", "job": f"{label}:#9", "until": f"{label}:#47"},
          "status": "open"}]
+    notes = [{"tickets": [f"{label}:#9", f"{label}:#45"], "text": "not related: different screens"}]
     (root / "findings.json").write_text(json.dumps({"schema": 1, "scanned_at": stamp(now), "snapshot_hash": "sample",
                                                     "frequency": "medium", "alert_at": "high", "next_id": 3,
-                                                    "findings": findings}))
+                                                    "findings": findings, "notes": notes}))
 
 
 def build_sample_repo(tmp: Path, name: str, empty: bool, rng: random.Random, jira: stub_jira.FakeJira,
