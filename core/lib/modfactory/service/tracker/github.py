@@ -124,6 +124,15 @@ class GitHubTracker(OneTracker):
         self.gh.call("issue", "close", key, "--reason", reason)
         return True
 
+    def open_issues(self, mine: bool = False) -> list[dict[str, Any]]:
+        return [dict(issue, state="OPEN") for issue in self.gh.open_issues(assignee="@me" if mine else None)]
+
+    def transitions(self, key: Key) -> list[str] | None:
+        return None
+
+    def set_status(self, key: Key, status: str) -> bool:
+        raise Refused(f"GitHub issues have no status to move #{key} to; close it with `mfactory issue close {key}`")
+
     # -- comments
 
     def comments(self, key: Key) -> list[dict[str, Any]]:

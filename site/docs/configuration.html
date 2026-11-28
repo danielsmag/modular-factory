@@ -322,6 +322,14 @@ skills = ["auth-rules"]</code></pre>
         skills: [testing, migrations]</code></pre>
   <p>Each agent's prompt names the <code>SKILL.md</code> files to read. This works the same in every tool. In Claude Code, a skill in <code>.claude/skills</code> is also loaded up front. <code>mfactory sync</code> refuses a name that matches no skill and says where it looked.</p>
 
+  <h3 id="issue-skills">Skills and rules for managing issues</h3>
+  <p>When you ask the orchestrator to create, comment on, move or close an issue or a Jira card, it runs <code>mfactory issue guide</code> first and follows what it lists: your ticket templates, title formats, labels, team rules and Jira plugins. By default that is every skill (project, user and plugin) and every instruction file on the machine. Narrow it with <code>[skills].issues</code> and <code>[rules].issues</code>:</p>
+  <pre data-lang="toml"><code>[skills]
+issues = ["jira-tickets", "user:bug-reports", "atlassian:triage"]
+
+[rules]
+issues = ["all"]</code></pre>
+
   <h2 id="tracker-a-jira-board">Tracker: a Jira board</h2>
   <p>By default the tracker is GitHub issues: jobs come from open issues with the queue label, and people reply in issue and pull request comments. With <code>kind = "jira"</code>, a Jira kanban board is the tracker. New jobs are the cards in its queue column, each step's card sits in a column of the board, and people reply in Jira comments or by moving the card. Code, branches and pull requests stay on GitHub. A project can also take jobs from both: see <a href="#tracker-both">GitHub issues and a Jira board together</a>.</p>
   <pre data-lang="toml"><code>[tracker]

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from .. import board, checks, config, graph, install, pipelines, plan_usage
+from .. import issues as issues_mod
 from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
@@ -322,6 +323,22 @@ def plan_suggest(cfg: config.Config) -> int:
     state.write_findings(merged)
     print(f"{added['id']} open")
     return 0
+
+
+def _issue_command(factory: Factory, args: argparse.Namespace) -> int:
+    """`mfactory issue ...`: a person's own issues; see `issues`."""
+    what: str = args.issue_what
+    if what == "list":
+        return issues_mod.list_issues(factory, args.tracker, args.mine, args.json)
+    if what == "show":
+        return issues_mod.show_issue(factory, args.issue, args.json)
+    if what == "create":
+        return issues_mod.create_issue(factory, args.tracker, " ".join(args.title), _stdin_text(), args.queue)
+    if what == "comment":
+        return issues_mod.comment_issue(factory, args.issue, " ".join(args.text) or _stdin_text())
+    if what == "move":
+        return issues_mod.move_issue(factory, args.issue, " ".join(args.status))
+    return issues_mod.close_issue(factory, args.issue, args.not_planned)
 
 
 def plan_release(factory: Factory, ref: str) -> int:
@@ -713,6 +730,8 @@ def run(args: argparse.Namespace) -> int:
         return plan_approve(repo, cfg, args.finding)
     elif command == "plan" and args.plan_what == "dismiss":
         return plan_dismiss(cfg, args.finding, args.reason)
+    elif command == "issue" and args.issue_what == "guide":
+        return issues_mod.guide(cfg, args.json)
     elif command == "dashboard":
         listed: tuple[workspace_mod.Workspace, str] | None = _listed(repo)
         if listed is None:
@@ -757,6 +776,8 @@ def run(args: argparse.Namespace) -> int:
                 raise Refused("the issue's text goes on stdin")
             target: Tracker = factory.tracker.member(args.tracker) if args.tracker else factory.tracker.primary
             print(target.create_issue(" ".join(args.title), text, queue=True))
+        elif command == "issue":
+            return _issue_command(factory, args)
         elif command == "next":
             factory.next(args.job)
         elif command == "done":

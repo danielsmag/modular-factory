@@ -765,8 +765,8 @@ TABLES = {
     "paths": {"worktrees": a_filled_string, "protected": a_string_list, "pipes": a_filled_string,
               "pipelines": a_filled_string},
     "ports": {"base": an_int(1024), "step": an_int(3)},
-    "skills": {"all": a_string_list},
-    "rules": {"all": a_string_list},
+    "skills": {"all": a_string_list, "issues": a_string_list},
+    "rules": {"all": a_string_list, "issues": a_string_list},
 }
 TOOL_KEYS = {"claude": {"stop_hook": a_bool, "cost": a_bool, "plan_usage": a_bool, "resume_builder": a_bool,
                         "agent_tools": a_tool_list},
