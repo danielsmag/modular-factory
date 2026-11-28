@@ -47,7 +47,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
 /* ---- top bar ---- */
 .top {
-  display: flex; align-items: center; gap: 28px; padding: 14px 28px; max-width: 1280px; margin: 0 auto;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 12px 28px; padding: 14px 28px; max-width: 1280px; margin: 0 auto;
   font-family: var(--mono); background: var(--bg); border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 10px; font: 600 19px var(--sans); letter-spacing: -.01em; text-decoration: none; }
@@ -58,13 +58,13 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .nav a::after { content: "]"; }
 .nav a:hover { color: var(--accent); }
 .nav a[aria-current="page"] { background: var(--text); color: var(--bg); }
-.top .filters { margin-bottom: 0; flex: 1; min-width: 0; }
+.top .filters { margin-bottom: 0; flex: 0 0 auto; min-width: max-content; max-width: 100%; }
 .top .filters:empty { display: none; }
-.tools { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-.search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-2); padding: 6px 10px; background: var(--bg); flex: none; }
+.tools { margin-left: auto; display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex: 1 1 280px; min-width: 280px; max-width: 100%; }
+.search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-2); padding: 6px 10px; background: var(--bg); flex: 1 1 160px; min-width: 0; max-width: 320px; }
 .search:focus-within { border-color: var(--accent); }
 .search svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
-.search input { width: 26ch; background: none; border: 0; outline: 0; color: var(--text); font: var(--fs-meta) var(--mono); appearance: none; }
+.search input { width: 100%; min-width: 0; background: none; border: 0; outline: 0; color: var(--text); font: var(--fs-meta) var(--mono); appearance: none; }
 .search input::placeholder { color: var(--muted); }
 kbd { font: var(--fs-floor) var(--mono); color: var(--muted); border: 1px solid var(--line-2); padding: 0 5px; border-radius: 2px; white-space: nowrap; }
 .cta { background: var(--text); color: var(--bg); font: 600 var(--fs-floor) var(--mono); letter-spacing: .02em; padding: 9px 14px; text-decoration: none; white-space: nowrap; }
@@ -407,9 +407,9 @@ pre.file { font: var(--fs-body)/var(--lh-prose) var(--mono); white-space: pre-wr
 .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .filters button { font: var(--fs-floor) var(--mono); border: 1px solid var(--line-2); padding: 3px 9px; border-radius: 3px; color: var(--text-2); }
 .filters button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
-.filters-one { font: var(--fs-floor) var(--mono); color: var(--text-2); }
-.filters-pick { font: var(--fs-floor) var(--mono); color: var(--text-2); }
-.filters-select { font: var(--fs-floor) var(--mono); color: var(--text-2); max-width: 100%; }
+.filters-one { font: var(--fs-floor) var(--mono); color: var(--text-2); white-space: nowrap; }
+.filters-pick { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; font: var(--fs-floor) var(--mono); color: var(--text-2); white-space: nowrap; }
+.filters-select { font: var(--fs-floor) var(--mono); color: var(--text); background: var(--bg); max-width: min(28ch, 100%); }
 .src { font: var(--fs-floor) var(--mono); color: var(--text-2); white-space: nowrap; }
 .src.mine { color: var(--accent); }
 
@@ -620,8 +620,6 @@ table.files-table td .dot { display: inline-block; vertical-align: 1px; }
 .file-open .close { position: static; }
 .logs { padding: 0; overflow: hidden; }
 .logs .d-body { min-height: 420px; max-height: 76vh; }
-.logpage { display: flex; flex-direction: column; gap: 14px; }
-.logpage h2 { margin: 0 0 10px; font: 500 var(--fs-meta) var(--sans); color: var(--text-2); }
 .tabs.log-types { flex-wrap: wrap; margin-bottom: 12px; }
 .log-note { margin: 8px 0 0; }
 table.logs-table { width: 100%; border-collapse: collapse; }
@@ -636,7 +634,7 @@ table.logs-table td.detail { overflow-wrap: anywhere; }
 }
 @media (max-width: 900px) {
   .top { flex-wrap: wrap; gap: 12px 18px; padding: 12px 16px; }
-  .tools { margin-left: 0; width: 100%; flex-wrap: wrap; }
+  .tools { margin-left: 0; width: 100%; min-width: 0; flex-wrap: wrap; }
   .search { flex: 1 1 180px; min-width: 0; }
   .search input { width: 100%; min-width: 0; }
   .page { padding: 16px 14px 28px; }
