@@ -32,7 +32,19 @@ from modfactory.graph import as_json as graph_as_json  # noqa: E402
 from modfactory.store import SCHEMA  # noqa: E402
 from modfactory.util import version  # noqa: E402
 from modfactory.workspace.jobs import file_rows  # noqa: E402
-from modfactory.workspace.service import serve_one  # noqa: E402
+from modfactory.workspace.registry import Project, Workspace  # noqa: E402
+from modfactory.workspace.service import _listen, serve_one  # noqa: E402
+
+SAMPLE_PROJECT_IDS: list[str] = [
+    "billing",
+    "portal",
+    "ops & tools",
+    "inventory",
+    "payroll",
+    "crm",
+    "support",
+    "analytics",
+]
 
 CONFIG = """\
 schema = 1
@@ -406,46 +418,72 @@ def publish(repo: Path, jobs_dir: Path, queue: list[dict[str, object]]) -> None:
     binary.chmod(0o755)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+def build_sample_repo(tmp: Path, name: str, empty: bool, rng: random.Random, jira: stub_jira.FakeJira,
+                      building: str, queue: list[dict[str, object]]) -> Path:
+    repo: Path = tmp / name
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    (repo / "factory" / "pipes").mkdir(parents=True)
+    (repo / "factory" / "factory.toml").write_text(CONFIG.replace("{site}", jira.url))
+    for pipe_name, text in PIPELINES.items():
+        (repo / "factory" / "pipes" / pipe_name).write_text(text)
+    jobs_dir: Path = repo / ".factory" / "jobs"
+    jobs_dir.mkdir(parents=True)
+    if not empty:
+        plan: list[tuple[object, ...]] = [("done", d, None, d % 3 == 0) for d in (27, 24, 21, 20, 16, 13, 12, 9, 6, 5, 3, 1)]
+        plan += [("rejected", 8, None, False), ("failed", 2, None, False), ("build", 0, None, False),
+                 ("review", 0, None, True)]
+        plan += [("spec-approval", 0, "maintainer", False), ("escalated", 1, "maintainer", True)]
+        plan = [row + ("default",) for row in plan]
+        plan += [("gate", 0, None, False, "hotfix"), ("done", 4, None, False, "hotfix")]
+        for number, (stop, days_ago, waiting, detour, pipe) in enumerate(plan, 1):
+            make(jobs_dir, number, TITLES[(number - 1) % len(TITLES)], stop, days_ago, rng, waiting, detour, pipe)
+        from_jira(jobs_dir, 16, jira, building)
+    publish(repo, jobs_dir, queue)
+    return repo
+
+
+def main() -> None:
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--port", type=int, default=4747)
     parser.add_argument("--empty", action="store_true", help="no jobs, to see the empty state")
-    args = parser.parse_args()
-    rng = random.Random(7)
+    parser.add_argument("--projects", type=int, default=1, help="how many sample projects to serve (1–8)")
+    args: argparse.Namespace = parser.parse_args()
+    if args.projects < 1 or args.projects > 8:
+        parser.error("--projects must be between 1 and 8")
+    rng: random.Random = random.Random(7)
     with tempfile.TemporaryDirectory() as tmp:
-        repo = Path(tmp) / "clinic-invoices"
-        repo.mkdir()
-        subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+        tmp_root: Path = Path(tmp)
+        jira: stub_jira.FakeJira
+        building: str
         jira, building = sample_jira(datetime.now(UTC))
         os.environ["JIRA_EMAIL"], os.environ["JIRA_API_TOKEN"] = stub_jira.EMAIL, stub_jira.TOKEN
-        (repo / "factory" / "pipes").mkdir(parents=True)
-        (repo / "factory" / "factory.toml").write_text(CONFIG.replace("{site}", jira.url))
-        for name, text in PIPELINES.items():
-            (repo / "factory" / "pipes" / name).write_text(text)
-        jobs_dir = repo / ".factory" / "jobs"
-        jobs_dir.mkdir(parents=True)
-        if not args.empty:
-            plan = [("done", d, None, d % 3 == 0) for d in (27, 24, 21, 20, 16, 13, 12, 9, 6, 5, 3, 1)]
-            plan += [("rejected", 8, None, False), ("failed", 2, None, False), ("build", 0, None, False),
-                     ("review", 0, None, True)]
-            plan += [("spec-approval", 0, "maintainer", False), ("escalated", 1, "maintainer", True)]
-            plan = [row + ("default",) for row in plan]
-            plan += [("gate", 0, None, False, "hotfix"), ("done", 4, None, False, "hotfix")]
-            for number, (stop, days_ago, waiting, detour, pipe) in enumerate(plan, 1):
-                make(jobs_dir, number, TITLES[(number - 1) % len(TITLES)], stop, days_ago, rng, waiting, detour,
-                     pipe)
-            from_jira(jobs_dir, 16, jira, building)
-        os.environ["FACTORY_HOME"] = str(Path(tmp) / "home")
-        (Path(tmp) / "home").mkdir()
-        resets = datetime.now(UTC) + timedelta(hours=2, minutes=10)
-        (Path(tmp) / "home" / "plan-usage.json").write_text(json.dumps({
+        os.environ["FACTORY_HOME"] = str(tmp_root / "home")
+        (tmp_root / "home").mkdir()
+        resets: datetime = datetime.now(UTC) + timedelta(hours=2, minutes=10)
+        (tmp_root / "home" / "plan-usage.json").write_text(json.dumps({
             "at": stamp(datetime.now(UTC)),
             "five_hour": {"used_percentage": 37.0, "resets_at": int(resets.timestamp())},
             "seven_day": {"used_percentage": 64.5, "resets_at": int((resets + timedelta(days=3)).timestamp())}}))
+        queue: list[dict[str, object]]
+        issues: dict[str, dict[str, object]]
         queue, issues = sample_queue(datetime.now(UTC))
-        stub_github(Path(tmp), issues | more_issues(datetime.now(UTC)))
-        publish(repo, jobs_dir, [] if args.empty else queue)
-        serve_one(repo, args.port, open_browser=False)
+        stub_github(tmp_root, issues | more_issues(datetime.now(UTC)))
+        seed_name: str = "clinic-invoices"
+        repo: Path = build_sample_repo(tmp_root, seed_name, args.empty, rng, jira, building,
+                                       [] if args.empty else queue)
+        if args.projects == 1:
+            serve_one(repo, args.port, open_browser=False)
+            return
+        ids: list[str] = SAMPLE_PROJECT_IDS[: args.projects]
+        dirs: list[Path] = []
+        for project_id in ids:
+            dest: Path = tmp_root / project_id
+            shutil.copytree(repo, dest)
+            dirs.append(dest)
+        shutil.rmtree(repo)
+        group: Workspace = Workspace(tmp_root / "workspace.toml", [Project(path) for path in dirs])
+        _listen(lambda: group, args.port, False, print, None, "mfactory dashboard")
 
 
 if __name__ == "__main__":
