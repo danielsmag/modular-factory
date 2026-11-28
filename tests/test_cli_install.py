@@ -30,7 +30,8 @@ def bare(world):
 
 
 def installed(world):
-    return subprocess.run([str(world.repo / ".factory/bin/mfactory"), "version"], capture_output=True, text=True)
+    return subprocess.run(
+        [sys.executable, str(world.repo / ".factory/bin/mfactory"), "version"], capture_output=True, text=True)
 
 
 # ---- init ------------------------------------------------------------------
@@ -172,7 +173,8 @@ def test_the_installed_cli_works_from_a_worktree_of_a_job(bare):
     bare.cli("init")
     tree = bare.tmp / "tree"
     git("worktree", "add", "-q", "--detach", str(tree), cwd=bare.repo)
-    res = subprocess.run([str(bare.repo / ".factory/bin/mfactory"), "graph"], cwd=tree, capture_output=True, text=True)
+    res = subprocess.run(
+        [sys.executable, str(bare.repo / ".factory/bin/mfactory"), "graph"], cwd=tree, capture_output=True, text=True)
     assert res.returncode == 0 and res.stdout.startswith("intake ")
 
 
@@ -258,8 +260,9 @@ def ready(world):
 
 
 def doctor(world, *args):
-    return subprocess.run([str(world.repo / ".factory/bin/mfactory"), "doctor", *args], cwd=world.repo,
-                          capture_output=True, text=True)
+    return subprocess.run(
+        [sys.executable, str(world.repo / ".factory/bin/mfactory"), "doctor", *args], cwd=world.repo,
+        capture_output=True, text=True)
 
 
 def test_doctor_passes_on_a_ready_project(world):
