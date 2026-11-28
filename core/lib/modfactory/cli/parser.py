@@ -160,7 +160,8 @@ def parser() -> argparse.ArgumentParser:
     plan: argparse.ArgumentParser = sub.add_parser(
         "plan", help="the planner: duplicates, dependencies and priority across the queue")
     plan_sub: argparse._SubParsersAction[argparse.ArgumentParser] = plan.add_subparsers(
-        dest="plan_what", required=True, metavar="<snapshot|collect|scan|due|ingest|release|approve|dismiss|apply>")
+        dest="plan_what", required=True,
+        metavar="<snapshot|collect|scan|due|summary|show|suggest|ingest|release|approve|dismiss|apply>")
     plan_snapshot: argparse.ArgumentParser = plan_sub.add_parser(
         "snapshot", help="every queued issue and job of this project, as tickets")
     plan_snapshot.add_argument("--json", action="store_true", help="the snapshot as one JSON object")
@@ -172,6 +173,14 @@ def parser() -> argparse.ArgumentParser:
         "scan", help="collect, then say whether the scan agent should run")
     plan_scan.add_argument("--force", action="store_true", help="scan even if nothing changed or it is not time")
     plan_sub.add_parser("due", help="print scan or not due")
+    plan_summary: argparse.ArgumentParser = plan_sub.add_parser(
+        "summary", help="what needs attention, what is held, the pipeline and the last scan")
+    plan_summary.add_argument("--fresh", action="store_true",
+                              help="when tickets changed since the last scan, print the scan agent's start lines")
+    plan_summary.add_argument("--project", help="only this project, as named in refs")
+    plan_summary.add_argument("--json", action="store_true", help="the report as one JSON object")
+    plan_show: argparse.ArgumentParser = plan_sub.add_parser("show", help="the findings and their status")
+    plan_show.add_argument("--json", action="store_true", help="the findings file as one JSON object")
     plan_ingest: argparse.ArgumentParser = plan_sub.add_parser(
         "ingest", help="check the scan agent's draft and merge it into the findings")
     plan_ingest.add_argument("--reply", action="store_true", help="read the draft from standard input")

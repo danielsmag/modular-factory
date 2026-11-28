@@ -22,6 +22,7 @@ from ..planner import holds as holds_mod
 from ..planner import ingest as ingest_mod
 from ..planner import schedule as schedule_mod
 from ..planner import snapshot as snapshot_mod
+from ..planner import summary as summary_mod
 from ..planner.state import PlannerState
 from ..queue import queue_json
 from ..service.tracker import Tracker
@@ -193,6 +194,15 @@ def _planner_on(cfg: config.Config) -> None:
         raise Refused("the planner is off: [planner] enabled = false")
 
 
+def _print_scan_lines(state: PlannerState, then: str) -> None:
+    """Freeze the snapshot for the scan agent and print the three lines that start it."""
+    # The agent reads a frozen copy: a collect during its scan rewrites snapshot.json.
+    state.scan_snapshot_path.write_text(state.snapshot_path.read_text())
+    print("start-agent mfactory-planner-scan")
+    print(f"prompt: Planner scan. Snapshot: {state.scan_snapshot_path}. Write: {state.draft_path}.")
+    print(f"then: {then}")
+
+
 def plan_scan(repo: Path, cfg: config.Config, force: bool, only_due: bool) -> int:
     """Collect, then say whether the scan agent is due: `scan` / `not due`, or the lines that start it."""
     _planner_on(cfg)
@@ -203,13 +213,38 @@ def plan_scan(repo: Path, cfg: config.Config, force: bool, only_due: bool) -> in
     if only_due:
         print("scan" if due else "not due")
     elif due:
-        # The agent reads a frozen copy: a collect during its scan rewrites snapshot.json.
-        state.scan_snapshot_path.write_text(state.snapshot_path.read_text())
-        print("start-agent mfactory-planner-scan")
-        print(f"prompt: Planner scan. Snapshot: {state.scan_snapshot_path}. Write: {state.draft_path}.")
-        print("then: mfactory plan ingest")
+        _print_scan_lines(state, "mfactory plan ingest")
     else:
         print(f"up to date: nothing changed since the scan at {findings.get('scanned_at')}")
+    return 0
+
+
+def plan_summary(repo: Path, cfg: config.Config, fresh: bool, project: str | None, as_json: bool) -> int:
+    """The whole picture. With --fresh, a scan the snapshot has outgrown comes first, as the agent's start lines."""
+    _planner_on(cfg)
+    snapshot, state = _plan_collected(repo, cfg)
+    findings: dict[str, Any] = state.read_findings()
+    if fresh and (not findings.get("scanned_at") or findings.get("snapshot_hash") != snapshot["hash"]):
+        _print_scan_lines(state, "mfactory plan summary")
+        return 0
+    report: dict[str, Any] = summary_mod.build(snapshot, findings, cfg["planner"], project, datetime.now(UTC))
+    print(json.dumps(report, indent=2) if as_json else summary_mod.render(report), end="\n" if as_json else "")
+    return 0
+
+
+def plan_show(cfg: config.Config, as_json: bool) -> int:
+    """The findings file, as it is: every finding and its status."""
+    _planner_on(cfg)
+    state: PlannerState = PlannerState(user_dir() / "planner")
+    found: dict[str, Any] = state.read_findings()
+    if as_json:
+        print(json.dumps({**found, "snapshot_path": str(state.snapshot_path)}, indent=2))
+        return 0
+    if not found["findings"]:
+        print("no findings")
+    for f in found["findings"]:
+        print(f"{f['id']} {f.get('status')} {f.get('severity')} {f.get('kind')}  {' ↔ '.join(f.get('tickets', []))}"
+              f" — {f.get('summary', '')}")
     return 0
 
 
@@ -629,6 +664,10 @@ def run(args: argparse.Namespace) -> int:
         return plan_collect(repo, cfg, args.json)
     elif command == "plan" and args.plan_what in ("scan", "due"):
         return plan_scan(repo, cfg, args.plan_what == "scan" and args.force, args.plan_what == "due")
+    elif command == "plan" and args.plan_what == "summary":
+        return plan_summary(repo, cfg, args.fresh, args.project, args.json)
+    elif command == "plan" and args.plan_what == "show":
+        return plan_show(cfg, args.json)
     elif command == "plan" and args.plan_what == "ingest":
         return plan_ingest(cfg, args.reply)
     elif command == "plan" and args.plan_what == "approve":
