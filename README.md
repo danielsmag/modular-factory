@@ -350,7 +350,7 @@ mfactory workspace list
 mfactory start dashboard
 ```
 
-The dashboard lists every project in the workspace, and a filter can show one of them. Inside a listed checkout, it opens with that project selected. A checkout that is not listed still opens its own page. A project whose job files were written by an older factory shows a note to upgrade it, and its jobs still show. `mfactory status` outside a repository shows every project in the workspace. `mfactory upgrade` upgrades the global CLI and each of those projects. Each job stays in its own checkout. Open that project and run `/mfactory run` there. The [install guide](docs/install.md#several-projects) has the rest.
+The dashboard lists every project in the workspace, and a filter can show one of them. Inside a listed checkout, it opens with that project selected. A checkout that is not listed still opens its own page. A project whose job files were written by an older factory shows a note to upgrade it, and its jobs still show. `mfactory status` outside a repository shows every project in the workspace. `mfactory upgrade` upgrades the global CLI and each of those projects. Each job stays in its own checkout. Open that project and run `/mfactory run` there. The [install guide](docs/install.md#several-projects) has the rest. The choice is kept in the address bar as ?project=<name>, so a reload or a shared link opens the same project. The filter is a drop-down.
 
 ## Commands
 
