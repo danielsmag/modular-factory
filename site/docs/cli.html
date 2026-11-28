@@ -15,11 +15,11 @@
   <h2 id="install-and-maintain">Install and maintain</h2>
   <div class="def">
     <div class="def-h"><code>install</code> <code>--tool TOOL</code></div>
-    <p>Install the factory into this repository. <code>--tool</code> is <code>claude</code>, <code>cursor</code>, or <code>codex</code>. Repeat it for several. Default: <code>claude</code>. Never overwrites <code>factory.toml</code>.</p>
+    <p>Install the factory into this repository. <code>--tool</code> is <code>claude</code>, <code>cursor</code>, or <code>codex</code>. Repeat it for several. Default: <code>claude</code>. Never overwrites <code>factory/factory.toml</code> or a pipe that is already there.</p>
   </div>
   <div class="def">
     <div class="def-h"><code>sync</code> <span class="chip">--check</span></div>
-    <p>Write the agent and skill files from <code>factory.toml</code>. <code>--check</code> changes nothing and exits 1 if anything is out of date.</p>
+    <p>Write the agent and skill files from <code>factory/factory.toml</code>. <code>--check</code> changes nothing and exits 1 if anything is out of date.</p>
   </div>
   <div class="def">
     <div class="def-h"><code>doctor</code> <span class="chip">--skip-checks</span></div>
@@ -27,11 +27,11 @@
   </div>
   <div class="def">
     <div class="def-h"><code>upgrade</code> <span class="chip">--version</span> <span class="chip">--source</span> <span class="chip">--self</span> <span class="chip">--all</span></div>
-    <p>Upgrade the global CLI, every project in the workspace, and the checkout you are in when that checkout is installed and not listed. Leaves <code>factory.toml</code> and <code>.factory/jobs/</code> alone. <code>--version</code> is a tag such as <code>v0.2.0</code> (default <code>latest</code>). <code>--source</code> is a local copy. <code>--self</code> updates only the global CLI. <code>--all</code> upgrades only the projects in the workspace. One project failing does not stop the others.</p>
+    <p>Upgrade the global CLI, every project in the workspace, and the checkout you are in when that checkout is installed and not listed. Leaves <code>factory/</code> and <code>.factory/jobs/</code> alone. <code>--version</code> is a tag (default <code>latest</code>). <code>--source</code> is a local copy. <code>--self</code> updates only the global CLI. <code>--all</code> upgrades only the projects in the workspace. One project failing does not stop the others.</p>
   </div>
   <div class="def">
     <div class="def-h"><code>uninstall</code> <span class="chip">--config</span> <span class="chip">--labels</span></div>
-    <p>Remove the factory from this repository. <code>factory.toml</code> stays unless <code>--config</code> is set. <code>--labels</code> deletes the factory labels on GitHub.</p>
+    <p>Remove the factory from this repository. <code>factory/</code> stays unless <code>--config</code> is set. <code>--labels</code> deletes the factory labels on GitHub.</p>
   </div>
   <div class="def">
     <div class="def-h"><code>status</code> <span class="chip">--all</span></div>
@@ -48,8 +48,8 @@
     <p>The merged configuration, and which file set each value.</p>
   </div>
   <div class="def">
-    <div class="def-h"><code>graph</code> <span class="chip">--json</span></div>
-    <p>The pipeline in effect.</p>
+    <div class="def-h"><code>graph</code> <span class="chip">--pipe NAME</span> <span class="chip">--json</span></div>
+    <p>The pipeline in effect. <code>--pipe</code> prints one named pipe.</p>
   </div>
   <div class="def">
     <div class="def-h"><code>models</code></div>
@@ -60,6 +60,28 @@
     <p>The project's skills and which agents read them.</p>
   </div>
 
+  <h2 id="pipes">Pipes</h2>
+  <div class="def">
+    <div class="def-h"><code>pipes list</code> <span class="chip">--json</span></div>
+    <p>Every pipe, its file, and its steps. <code>pipelines</code> is the old name of this command.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>pipes show &lt;name&gt;</code></div>
+    <p>One pipe after <code>extends</code>, as YAML.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>pipes validate</code></div>
+    <p>Check every file in <code>factory/pipes/</code> against the schema and the graph rules.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>pipes schema</code></div>
+    <p>Print the JSON Schema of a pipe file.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>migrate layout</code> <span class="chip">pipes</span></div>
+    <p><code>layout</code> moves a root <code>factory.toml</code> into <code>factory/</code>. <code>pipes</code> moves <code>[steps.*]</code> tables into <code>factory/pipes/default.yaml</code>.</p>
+  </div>
+
   <h2 id="run-jobs">Run jobs</h2>
   <p>The <code>/mfactory</code> skill uses these. You can run them yourself. The orchestrator is still what starts agents.</p>
   <div class="def">
@@ -67,8 +89,8 @@
     <p>What to run now. <code>--json</code> prints one JSON array with each issue's title, URL, dates, author and labels.</p>
   </div>
   <div class="def">
-    <div class="def-h"><code>create &lt;issue&gt;</code></div>
-    <p>Start a job for a labeled issue.</p>
+    <div class="def-h"><code>create &lt;issue&gt;</code> <span class="chip">--pipe NAME</span></div>
+    <p>Start a job for a labeled issue. <code>--pipe</code> chooses the pipe. Default: <code>[run].pipe</code>, or the only pipe.</p>
   </div>
   <div class="def">
     <div class="def-h"><code>file &lt;title&gt;</code> <span class="chip">--tracker github|jira</span></div>
@@ -80,7 +102,7 @@
   </div>
   <div class="def">
     <div class="def-h"><code>tracker suggest</code> <span class="chip">--json</span></div>
-    <p>The Jira board that works well for this pipeline, left to right, and the <code>[tracker.jira.columns]</code> to paste. Reads only <code>factory.toml</code>.</p>
+    <p>The Jira board that works well for this pipeline, left to right, and the <code>[tracker.jira.columns]</code> to paste. Reads the project configuration only.</p>
   </div>
   <div class="def">
     <div class="def-h"><code>tracker sync</code></div>
@@ -141,6 +163,33 @@
   <div class="def">
     <div class="def-h"><code>checks</code></div>
     <p>Run <code>[checks].commands</code> in the current directory.</p>
+  </div>
+
+  <h2 id="plan">Planner</h2>
+  <p>Suggestions across the workspace queue. Nothing in a tracker or a job changes until <code>approve</code> or <code>release</code>. See <a href="workspace.html#planner">how to use it</a>.</p>
+  <div class="def">
+    <div class="def-h"><code>plan summary</code> <span class="chip">--fresh</span> <span class="chip">--project NAME</span> <span class="chip">--json</span></div>
+    <p>What needs attention, what is held, the pipeline, and the last scan. <code>--fresh</code> prints the scan agent's start lines when tickets changed.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>plan show</code> <span class="chip">--json</span></div>
+    <p>The findings and their status.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>plan approve &lt;F-n&gt;</code></div>
+    <p>Carry out the action of an open finding, in the project that owns its first ticket.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>plan dismiss &lt;F-n&gt; [reason...]</code></div>
+    <p>Drop a finding until one of its tickets changes.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>plan release &lt;ref&gt;</code></div>
+    <p>Run a held job or issue now. <code>ref</code> is a job id, or an issue key such as <code>12</code>, <code>#12</code>, or <code>PROJ-7</code>.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>plan scan</code> <span class="chip">--force</span></div>
+    <p>Collect the queue, then say whether the scan agent should run. <code>plan due</code> prints <code>scan</code> or <code>not due</code>.</p>
   </div>
 
   <h2 id="telemetry">Telemetry</h2>

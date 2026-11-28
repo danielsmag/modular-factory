@@ -10,6 +10,17 @@ was observed after a save. A missing event grants nothing and spends nothing.
 Collection uses the Python standard library. It stays on this machine. There is
 no Hub upload, database, or dashboard in this version.
 
+## Contents
+
+- [What is recorded](#what-is-recorded)
+- [Configuration fingerprint](#configuration-fingerprint)
+- [Usage and cost](#usage-and-cost)
+- [Files](#files)
+- [Privacy](#privacy)
+- [Commands](#commands)
+- [Failure behavior](#failure-behavior)
+- [Extension](#extension)
+
 ## What is recorded
 
 Each record is one JSON object in an append-only JSONL file. The envelope is

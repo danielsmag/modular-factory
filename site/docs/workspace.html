@@ -31,6 +31,13 @@ mfactory dashboard --port 4747 --no-open</code></pre>
   <p>Each project's own factory writes its job files. When those files come from an older factory, the page says to run <code>mfactory upgrade</code> in that project and still shows its jobs. When they come from a newer factory than the global one, the page says to run <code>mfactory upgrade --self</code> and hides that project's jobs until then.</p>
   <p>The sample you can open without installing is the <a href="../index.html">dashboard</a> in this site. Those jobs are made up.</p>
 
+  <h2 id="planner">Planner</h2>
+  <p>The planner reads the queue across every project in the workspace. It reports what one job cannot see: duplicates, an issue that must wait for another, two issues that touch the same files, a low-priority job ahead of a critical one. It only suggests. Nothing in a tracker or a job changes until you approve a finding.</p>
+  <pre data-lang="text"><code>/mfactory plan summary
+/mfactory plan</code></pre>
+  <p><code>plan summary</code> scans when tickets changed, then reports with Needs attention first. In <code>/mfactory plan</code> you can ask about a finding. The orchestrator runs <code>plan approve</code>, <code>plan dismiss</code>, or <code>plan release</code> only when you say so, and shows what it will do first. Between queue passes, <code>/mfactory run</code> runs a due scan without holding up a job. The same verbs work in a terminal: <code>mfactory plan summary</code>, <code>plan show</code>, <code>plan approve F-3</code>.</p>
+  <p>The dashboard badge counts open findings at or above <code>[planner] alert_at</code>. The Planner view (<code>#/planner</code>) lists each finding and the action it proposes. Browser notifications are opt-in. Settings are in <a href="configuration.html#planner">Configuration</a>.</p>
+
   <h2 id="add-a-project">Add a project</h2>
   <p><code>mfactory install</code> adds the checkout it installs into. The list lives in <code>~/.mfactory/workspace.toml</code>. To add a project that was installed earlier, run this inside it:</p>
   <pre data-lang="bash"><code>cd /path/to/project-a && mfactory workspace add
