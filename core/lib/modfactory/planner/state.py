@@ -18,6 +18,11 @@ class PlannerState:
         return self.root / "snapshot.json"
 
     @property
+    def scan_snapshot_path(self) -> Path:
+        """The copy of the snapshot a scan agent reads. A later collect does not change it."""
+        return self.root / "snapshot-scan.json"
+
+    @property
     def findings_path(self) -> Path:
         return self.root / "findings.json"
 
@@ -29,9 +34,9 @@ class PlannerState:
         self.root.mkdir(parents=True, exist_ok=True)
         write_atomic(path, json.dumps(data, indent=2) + "\n")
 
-    def read_snapshot(self) -> dict[str, Any] | None:
+    def read_snapshot(self, path: Path | None = None) -> dict[str, Any] | None:
         try:
-            found: object = json.loads(self.snapshot_path.read_text())
+            found: object = json.loads((path or self.snapshot_path).read_text())
         except (OSError, ValueError):
             return None
         return found if isinstance(found, dict) else None

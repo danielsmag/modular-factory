@@ -184,8 +184,14 @@ def _plan_collected(repo: Path, cfg: config.Config) -> tuple[dict[str, Any], Pla
     return workspace_planner.collect(group, cfg["planner"], state), state
 
 
+def _planner_on(cfg: config.Config) -> None:
+    if cfg["planner"].get("enabled", True) is False:
+        raise Refused("the planner is off: [planner] enabled = false")
+
+
 def plan_scan(repo: Path, cfg: config.Config, force: bool, only_due: bool) -> int:
     """Collect, then say whether the scan agent is due: `scan` / `not due`, or the lines that start it."""
+    _planner_on(cfg)
     snapshot, state = _plan_collected(repo, cfg)
     findings: dict[str, Any] = state.read_findings()
     due: bool = force or schedule_mod.is_due(
@@ -193,8 +199,10 @@ def plan_scan(repo: Path, cfg: config.Config, force: bool, only_due: bool) -> in
     if only_due:
         print("scan" if due else "not due")
     elif due:
+        # The agent reads a frozen copy: a collect during its scan rewrites snapshot.json.
+        state.scan_snapshot_path.write_text(state.snapshot_path.read_text())
         print("start-agent mfactory-planner-scan")
-        print(f"prompt: Planner scan. Snapshot: {state.snapshot_path}. Write: {state.draft_path}.")
+        print(f"prompt: Planner scan. Snapshot: {state.scan_snapshot_path}. Write: {state.draft_path}.")
         print("then: mfactory plan ingest")
     else:
         print(f"up to date: nothing changed since the scan at {findings.get('scanned_at')}")
@@ -214,8 +222,9 @@ def _draft_json(text: str) -> object:
 
 def plan_ingest(cfg: config.Config, reply: bool) -> int:
     """Check the draft, merge it into the findings and report what is open."""
+    _planner_on(cfg)
     state: PlannerState = PlannerState(user_dir() / "planner")
-    snapshot: dict[str, Any] | None = state.read_snapshot()
+    snapshot: dict[str, Any] | None = state.read_snapshot(state.scan_snapshot_path) or state.read_snapshot()
     if snapshot is None:
         raise Refused("there is no snapshot: run `mfactory plan scan` first")
     if reply:
@@ -226,7 +235,10 @@ def plan_ingest(cfg: config.Config, reply: bool) -> int:
         except OSError:
             raise Refused(f"there is no draft at {state.draft_path}") from None
     settings: dict[str, Any] = cfg["planner"]
-    kept, dropped = ingest_mod.validate(_draft_json(text), snapshot, int(settings["max_extra"]))
+    draft: object = _draft_json(text)
+    if not isinstance(draft, dict) or not isinstance(draft.get("findings"), list):
+        raise Refused("the draft is not a JSON object with a findings list; nothing was changed")
+    kept, dropped = ingest_mod.validate(draft, snapshot, int(settings["max_extra"]))
     merged: dict[str, Any] = ingest_mod.merge(state.read_findings(), kept, snapshot, settings, now())
     state.write_findings(merged)
     state.draft_path.unlink(missing_ok=True)

@@ -97,6 +97,6 @@ def collect(group: Workspace, settings: dict[str, Any], state: PlannerState) -> 
         "schema": 1, "generated_at": datetime.now(UTC).isoformat(timespec="seconds"), "hash": digest,
         "projects": labels, "tickets": tickets,
         "candidates": candidates.pairs(tickets, int(settings.get("max_pairs", 40))), "errors": errors,
-        "released": released}
+        "released": released, "max_extra": int(settings.get("max_extra", 10))}
     state.write_snapshot(snapshot)
     return snapshot

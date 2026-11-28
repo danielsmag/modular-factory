@@ -11,10 +11,18 @@ ACTIONS: tuple[str, ...] = ("link", "hold", "close-duplicate", "context", "move"
 SEVERITIES: tuple[str, ...] = ("low", "medium", "high")
 BASE: dict[str, str] = {"conflict": "high", "duplicate": "medium", "dependency": "medium",
                         "priority-inversion": "medium", "overlap": "low"}
-# The action fields that name a ticket; every other string field of an action is text.
+# Per action type: the fields that name a ticket, then the other fields it may carry.
 REF_FIELDS: dict[str, tuple[str, ...]] = {
     "link": ("from", "to"), "hold": ("job", "until"), "close-duplicate": ("close", "keep"),
     "context": ("job",), "move": ("job",), "comment": ("on",)}
+OTHER_FIELDS: dict[str, tuple[str, ...]] = {"link": ("relation",), "move": ("step",), "context": ("text",),
+                                            "comment": ("text",)}
+PAIRED: dict[str, tuple[str, str]] = {"link": ("from", "to"), "hold": ("job", "until"),
+                                      "close-duplicate": ("close", "keep")}
+RELATIONS: tuple[str, ...] = ("duplicate", "blocks", "relates")
+MAX_STEP = 64
+MAX_EVIDENCE = 10
+MAX_EVIDENCE_TEXT = 1000
 MAX_TEXT = 4000
 
 
@@ -30,6 +38,10 @@ def severity(kind: str, tickets: list[dict[str, Any]]) -> str:
     if tickets and all(t.get("job") and t.get("stage") not in END_STATES for t in tickets):
         level = _raise(level)
     return level
+
+
+def finding_key(kind: str, refs: list[str]) -> str:
+    return f"{kind}|{','.join(sorted(refs))}"
 
 
 def _pair_key(refs: list[str]) -> frozenset[str]:
@@ -65,11 +77,30 @@ def _entry_problem(entry: object, known: set[str]) -> str | None:
         value: object = action.get(name)
         if not isinstance(value, str) or value not in known:
             return f"action {kind_of_action}: {name} {value!r} is not in the snapshot"
-    for name, value in action.items():
-        if name in names or name == "type":
-            continue
-        if isinstance(value, str) and len(value) > MAX_TEXT:
-            return f"action {kind_of_action}: {name} is longer than {MAX_TEXT} characters"
+        if value not in refs:
+            return f"action {kind_of_action}: {name} {value} is not one of the finding's tickets"
+    pair: tuple[str, str] | None = PAIRED.get(str(kind_of_action))
+    if pair and action[pair[0]] == action[pair[1]]:
+        return f"action {kind_of_action}: {pair[0]} and {pair[1]} are the same ticket"
+    if kind_of_action == "link" and action.get("relation") not in RELATIONS:
+        return f"action link: relation {action.get('relation')!r} is not one of {', '.join(RELATIONS)}"
+    if kind_of_action == "move":
+        # Task 7 must also check the step against the job's pipeline and refuse END_STATES.
+        step: object = action.get("step")
+        if not isinstance(step, str) or not step or len(step) > MAX_STEP:
+            return f"action move: step must be a name of 1 to {MAX_STEP} characters"
+    if kind_of_action in ("context", "comment"):
+        text: object = action.get("text")
+        if not isinstance(text, str) or len(text) > MAX_TEXT:
+            return f"action {kind_of_action}: text must be a string of at most {MAX_TEXT} characters"
+    summary: object = entry.get("summary", "")
+    if not isinstance(summary, str) or len(summary) > MAX_TEXT:
+        return f"{kind} {' '.join(refs)}: summary must be a string of at most {MAX_TEXT} characters"
+    evidence: object = entry.get("evidence", [])
+    if not isinstance(evidence, list) or len(evidence) > MAX_EVIDENCE or not all(
+            isinstance(e, str) and len(e) <= MAX_EVIDENCE_TEXT for e in evidence):
+        return (f"{kind} {' '.join(refs)}: evidence must be at most {MAX_EVIDENCE} strings "
+                f"of at most {MAX_EVIDENCE_TEXT} characters")
     return None
 
 
@@ -83,8 +114,15 @@ def validate(draft: object, snapshot: dict[str, Any], max_extra: int) -> tuple[l
     kept: list[dict[str, Any]] = []
     dropped: list[str] = []
     extra = 0
+    keys: set[str] = set()
     for entry in entries:
         problem: str | None = _entry_problem(entry, known)
+        if problem is None:
+            key: str = finding_key(entry["kind"], entry["tickets"])
+            if key in keys:
+                problem = f"{entry['kind']} {' '.join(entry['tickets'])}: listed twice"
+            else:
+                keys.add(key)
         if problem is None and _pair_key(entry["tickets"]) not in candidates:
             if extra >= max_extra:
                 problem = f"{entry['kind']} {' '.join(entry['tickets'])}: more than {max_extra} extra pairs"
@@ -93,17 +131,13 @@ def validate(draft: object, snapshot: dict[str, Any], max_extra: int) -> tuple[l
         if problem is not None:
             dropped.append(problem)
             continue
-        evidence: object = entry.get("evidence")
+        action: dict[str, Any] = entry["action"]
+        fields: tuple[str, ...] = REF_FIELDS[action["type"]] + OTHER_FIELDS.get(action["type"], ())
         kept.append({
             "kind": entry["kind"], "tickets": list(entry["tickets"]), "confidence": float(entry["confidence"]),
-            "summary": str(entry.get("summary") or ""),
-            "evidence": [str(e) for e in evidence] if isinstance(evidence, list) else [],
-            "action": dict(entry["action"])})
+            "summary": entry.get("summary", ""), "evidence": list(entry.get("evidence", [])),
+            "action": {"type": action["type"], **{f: action[f] for f in fields}}})
     return kept, dropped
-
-
-def finding_key(kind: str, refs: list[str]) -> str:
-    return f"{kind}|{','.join(sorted(refs))}"
 
 
 def merge(old: dict[str, Any], kept: list[dict[str, Any]], snapshot: dict[str, Any], settings: dict[str, Any],

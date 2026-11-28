@@ -59,6 +59,49 @@ def test_validate_drops_bad_confidence_text_and_junk():
     assert ingest.validate("junk", snapshot, 5)[0] == []
 
 
+def checked(action, *extra_tickets):
+    tickets = [ticket("shop:#1"), ticket("shop:#2"), *extra_tickets]
+    snapshot = snap(*tickets, candidates=[("shop:#1", "shop:#2")])
+    return ingest.validate({"findings": [entry(action=action)]}, snapshot, 5)
+
+
+def test_validate_confines_actions_to_the_finding():
+    far = ticket("shop:#40")
+    cases = [{"type": "hold", "job": "shop:#40", "until": "shop:#1"},
+             {"type": "close-duplicate", "close": "shop:#1", "keep": "shop:#40"},
+             {"type": "comment", "on": "shop:#40", "text": "hi"},
+             {"type": "link", "from": "shop:#1", "to": "shop:#1", "relation": "blocks"},
+             {"type": "close-duplicate", "close": "shop:#2", "keep": "shop:#2"},
+             {"type": "hold", "job": "shop:#1", "until": "shop:#1"}]
+    for action in cases:
+        kept, dropped = checked(action, far)
+        assert kept == [] and len(dropped) == 1, action
+    assert checked({"type": "hold", "job": "shop:#1", "until": "shop:#2"})[0]
+
+
+def test_validate_checks_action_values_and_strips_extras():
+    link = {"type": "link", "from": "shop:#1", "to": "shop:#2"}
+    assert checked({**link, "relation": "owns"})[0] == []
+    assert checked({"type": "hold", "job": "shop:#1", "until": "shop:#999"})[0] == []
+    assert checked({"type": "comment", "on": "shop:#1", "text": 5})[0] == []
+    assert checked({"type": "context", "job": "shop:#1", "text": "x" * 4001})[0] == []
+    assert checked({"type": "move", "job": "shop:#1", "step": ""})[0] == []
+    assert checked({"type": "move", "job": "shop:#1", "step": "s" * 65})[0] == []
+    kept, _ = checked({**link, "relation": "blocks", "shell": "rm -rf /"})
+    assert kept[0]["action"] == {**link, "relation": "blocks"}
+    assert checked({"type": "move", "job": "shop:#1", "step": "build"})[0]
+
+
+def test_validate_drops_repeats_and_oversize_text():
+    snapshot = snap(ticket("shop:#1"), ticket("shop:#2"), candidates=[("shop:#1", "shop:#2")])
+    again = entry("shop:#2", "shop:#1")
+    kept, dropped = ingest.validate({"findings": [entry(), again]}, snapshot, 5)
+    assert len(kept) == 1 and "twice" in dropped[0]
+    for bad in ({"summary": "x" * 4001}, {"summary": 3}, {"evidence": ["x"] * 11}, {"evidence": ["x" * 1001]},
+                {"evidence": [1]}, {"evidence": "text"}):
+        assert ingest.validate({"findings": [{**entry(), **bad}]}, snapshot, 5)[0] == []
+
+
 def test_validate_caps_extra_pairs():
     tickets = [ticket(f"shop:#{n}") for n in range(1, 7)]
     snapshot = snap(*tickets)
@@ -118,7 +161,7 @@ def test_scan_prints_agent_lines_then_up_to_date(world):
     world.issue("Add VAT field to the invoice API")
     world.issue("Show VAT field from invoice API")
     root = Path(os.environ["FACTORY_HOME"]) / "planner"
-    lines = AGENT_LINES.format(snap=root / "snapshot.json", draft=root / "findings-draft.json")
+    lines = AGENT_LINES.format(snap=root / "snapshot-scan.json", draft=root / "findings-draft.json")
     res = world.cli("plan", "scan")
     assert res.returncode == 0, res.stderr
     assert res.stdout == lines
@@ -157,3 +200,61 @@ def test_planner_scan_agent_is_generated(world):
     world.configure("[planner]\nenabled = false\n")
     world.cli("sync")
     assert not (world.repo / ".claude" / "agents" / "mfactory-planner-scan.md").exists()
+
+
+def test_cursor_and_codex_planner_agents_have_no_shell(world):
+    world.configure('[tools]\nenabled = ["cursor", "codex"]\n')
+    res = world.cli("sync")
+    assert res.returncode == 0, res.stderr
+    cursor = (world.repo / ".cursor" / "agents" / "mfactory-planner-scan.md").read_text()
+    assert "readonly: true" in cursor and "reply with" in cursor
+    codex = (world.repo / ".codex" / "agents" / "mfactory-planner-scan.toml").read_text()
+    assert "shell_tool = false" in codex and 'model_reasoning_effort = "low"' in codex
+
+
+def test_collect_puts_max_extra_in_the_snapshot(world):
+    launcher(world.repo)
+    world.cli("plan", "scan")
+    root = Path(os.environ["FACTORY_HOME"]) / "planner"
+    assert json.loads((root / "snapshot.json").read_text())["max_extra"] == 10
+
+
+def test_a_malformed_reply_changes_nothing(world):
+    launcher(world.repo)
+    world.issue("Add VAT field to the invoice API")
+    world.cli("plan", "scan")
+    root = Path(os.environ["FACTORY_HOME"]) / "planner"
+    world.cli("plan", "ingest", "--reply", input=json.dumps({"findings": []}))
+    before = (root / "findings.json").read_bytes()
+    (root / "findings-draft.json").write_text("{}")
+    for text in ("not json", "[]", '{"findings": 3}'):
+        res = world.cli("plan", "ingest", "--reply", input=text)
+        assert res.returncode != 0 and (root / "findings.json").read_bytes() == before
+    res = world.cli("plan", "ingest")
+    assert res.returncode != 0 and (root / "findings-draft.json").exists()
+    assert (root / "findings.json").read_bytes() == before
+
+
+def test_ingest_records_the_scanned_snapshot_not_a_later_one(world):
+    launcher(world.repo)
+    number = world.issue("Add VAT field to the invoice API")
+    world.cli("plan", "scan")
+    root = Path(os.environ["FACTORY_HOME"]) / "planner"
+    frozen = json.loads((root / "snapshot-scan.json").read_text())["hash"]
+    world.set_gh(lambda state: state["issues"][str(number)].update(title="Something else entirely"))
+    world.cli("plan", "collect")
+    assert json.loads((root / "snapshot.json").read_text())["hash"] != frozen
+    world.cli("plan", "ingest", "--reply", input='{"findings": []}')
+    assert json.loads((root / "findings.json").read_text())["snapshot_hash"] == frozen
+    later = json.loads((root / "snapshot.json").read_text())["hash"]
+    findings = json.loads((root / "findings.json").read_text())
+    soon = datetime.now(UTC) + timedelta(minutes=31)
+    assert schedule.is_due("medium", findings, later, soon)
+
+
+def test_planner_commands_refuse_when_off(world):
+    launcher(world.repo)
+    world.configure("[planner]\nenabled = false\n")
+    for verb in (("scan",), ("due",), ("ingest",)):
+        res = world.cli("plan", *verb)
+        assert res.returncode != 0 and "the planner is off" in res.stderr + res.stdout
