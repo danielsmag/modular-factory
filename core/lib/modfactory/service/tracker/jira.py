@@ -22,7 +22,7 @@ KEY = JIRA_KEY
 # whichever way Jira is reached.
 SIGNATURE = "— mfactory"
 FIELDS = "summary,description,status,reporter,assignee,labels,created,updated"
-LIST_FIELDS = "summary,status,reporter,assignee,labels,created,updated"
+LIST_FIELDS = "summary,status,reporter,assignee,labels,priority,created,updated"
 # Issue keys in one JQL `key in (...)`.
 KEYS_PER_CALL = 50
 # Cards read from the board to find one in each status, for checking the workflow's transitions.
@@ -182,6 +182,7 @@ class JiraTracker(OneTracker):
         status: object = fields.get("status")
         category: object = (status.get("statusCategory") or {}).get("key") if isinstance(status, dict) else None
         assignee: object = fields.get("assignee")
+        rank: object = fields.get("priority")
         return {
             "number": raw["key"], "title": fields.get("summary") or "", "url": self._url(raw["key"]),
             "body": _text(fields.get("description")), "state": "CLOSED" if category == "done" else "OPEN",
@@ -189,6 +190,7 @@ class JiraTracker(OneTracker):
             "assignees": [self._person(assignee)] if assignee else [],
             "labels": [{"name": str(name)} for name in fields.get("labels") or []],
             "createdAt": fields.get("created"), "updatedAt": fields.get("updated"),
+            "priority": rank.get("name") if isinstance(rank, dict) else None,
         }
 
     # -- issues and the queue

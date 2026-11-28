@@ -111,6 +111,15 @@ def main(argv):
             out = json.dumps({"permission": state["permissions"].get(login, "read")})
         else:
             sys.exit(f"stub gh: unknown api call {action}")
+    elif group == "project":
+        if action != "item-list":
+            sys.exit(f"stub gh: unknown project action {action}")
+        board = state.get("projects", {}).get(f"{named['owner']}/{pos[0]}")
+        if board is None:
+            save(state)
+            sys.exit(f"stub gh: no project {named['owner']}/{pos[0]}")
+        items = board["items"][:int(named["limit"])] if "limit" in named else board["items"]
+        out = json.dumps({"items": items, "totalCount": len(board["items"])})
     elif group == "repo" and action == "view":
         out = json.dumps(pick({"url": "https://github.test/acme/app", "nameWithOwner": "acme/app"}, named["json"]))
     elif group == "label":
