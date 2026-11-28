@@ -17,10 +17,21 @@ from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
 from ..planner import snapshot as snapshot_mod
+from ..planner.state import PlannerState
 from ..queue import queue_json
 from ..service.tracker import Tracker
 from ..store import Store
-from ..util import ConfigError, FactoryError, Refused, find_repo, global_binary, has_dashboard_page, version
+from ..util import (
+    ConfigError,
+    FactoryError,
+    Refused,
+    find_repo,
+    global_binary,
+    has_dashboard_page,
+    user_dir,
+    version,
+)
+from ..workspace import planner as workspace_planner
 from ..workspace import service as workspace_http
 from ..workspace.command import workspace_command
 from .maintain import status, status_all, uninstall, upgrade_all, upgrade_everything, upgrade_self
@@ -155,6 +166,27 @@ def _listed(repo: Path) -> tuple[workspace_mod.Workspace, str] | None:
         if project.path == resolved:
             return group, group.label(project)
     return None
+
+
+def plan_collect(repo: Path, cfg: config.Config, as_json: bool) -> int:
+    """Snapshot every project of the workspace. A checkout the workspace does not list is collected on its own."""
+    listed: tuple[workspace_mod.Workspace, str] | None = _listed(repo)
+    group: workspace_mod.Workspace
+    if listed is None:
+        group = workspace_mod.Workspace(Path(), [workspace_mod.Project(repo.resolve())])
+    else:
+        group = listed[0]
+    found: dict[str, Any] = workspace_planner.collect(group, cfg["planner"], PlannerState(user_dir() / "planner"))
+    if as_json:
+        print(json.dumps(found, indent=2))
+        return 0
+    count: int = len(found["candidates"])
+    print(f"{len(found['tickets'])} tickets, {count} pair{'' if count == 1 else 's'}")
+    for line in found["released"]:
+        print(line)
+    for line in found["errors"]:
+        print(f"problem: {line}")
+    return 0
 
 
 def _add_to_workspace(repo: Path) -> None:
@@ -423,6 +455,8 @@ def run(args: argparse.Namespace) -> int:
         return 1 if args.check and actions else 0
     elif command == "checks":
         return checks.run_here(cfg)
+    elif command == "plan" and args.plan_what == "collect":
+        return plan_collect(repo, cfg, args.json)
     elif command == "dashboard":
         listed: tuple[workspace_mod.Workspace, str] | None = _listed(repo)
         if listed is None:

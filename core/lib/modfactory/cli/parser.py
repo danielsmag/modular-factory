@@ -19,6 +19,7 @@ run jobs (the orchestrator skill uses these)
   tracker show [--json] | tracker sync | tracker suggest [--json]
 plan the queue across jobs
   plan snapshot [--json] [--label NAME]
+  plan collect [--json]
 other
   checks | dashboard | start dashboard | stop | version
 several projects
@@ -156,11 +157,14 @@ def parser() -> argparse.ArgumentParser:
     plan: argparse.ArgumentParser = sub.add_parser(
         "plan", help="the planner: duplicates, dependencies and priority across the queue")
     plan_sub: argparse._SubParsersAction[argparse.ArgumentParser] = plan.add_subparsers(
-        dest="plan_what", required=True, metavar="<snapshot>")
+        dest="plan_what", required=True, metavar="<snapshot|collect>")
     plan_snapshot: argparse.ArgumentParser = plan_sub.add_parser(
         "snapshot", help="every queued issue and job of this project, as tickets")
     plan_snapshot.add_argument("--json", action="store_true", help="the snapshot as one JSON object")
     plan_snapshot.add_argument("--label", help="the project's name in refs; the repository's folder by default")
+    plan_collect: argparse.ArgumentParser = plan_sub.add_parser(
+        "collect", help="every project of the workspace as one snapshot, with candidate pairs")
+    plan_collect.add_argument("--json", action="store_true", help="the snapshot as one JSON object")
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
     sub.add_parser("hook")  # no help text: argparse then leaves it out of the list
