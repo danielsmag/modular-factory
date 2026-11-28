@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
-from subprocess import CompletedProcess
+from subprocess import CompletedProcess, TimeoutExpired
 from typing import Any
 
 from ..graph import END_STATES
@@ -15,6 +15,8 @@ from ..util import run
 from .project import Project
 from .registry import Workspace
 
+SNAPSHOT_TIMEOUT = 120
+RELEASE_TIMEOUT = 60
 TOO_OLD = "its factory is too old for the planner; run mfactory upgrade"
 
 
@@ -29,8 +31,11 @@ def _project_snapshot(project: Project, label: str) -> tuple[list[dict[str, Any]
         return [], [f"{label}: .factory/bin/mfactory is missing"]
     try:
         result: CompletedProcess[str] = run(
-            [str(project.binary), "plan", "snapshot", "--json", "--label", label], cwd=project.path, check=False)
-    except FileNotFoundError:
+            [str(project.binary), "plan", "snapshot", "--json", "--label", label], cwd=project.path, check=False,
+            timeout=SNAPSHOT_TIMEOUT)
+    except TimeoutExpired:
+        return [], [f"{label}: timed out"]
+    except OSError:
         return [], [f"{label}: .factory/bin/mfactory could not be run"]
     if result.returncode != 0:
         line: str = _last_line(result, "mfactory plan snapshot failed")
@@ -58,8 +63,12 @@ def _release(group: Workspace, tickets: list[dict[str, Any]]) -> tuple[list[str]
             continue
         try:
             result: CompletedProcess[str] = run(
-                [str(project.binary), "plan", "release", str(ticket["key"])], cwd=project.path, check=False)
-        except FileNotFoundError:
+                [str(project.binary), "plan", "release", str(ticket["key"])], cwd=project.path, check=False,
+                timeout=RELEASE_TIMEOUT)
+        except TimeoutExpired:
+            errors.append(f"{ticket['project']}: timed out")
+            continue
+        except OSError:
             errors.append(f"{ticket['project']}: .factory/bin/mfactory could not be run")
             continue
         if result.returncode == 0:
@@ -83,7 +92,7 @@ def collect(group: Workspace, settings: dict[str, Any], state: PlannerState) -> 
         errors += problems
     released, release_errors = _release(group, tickets)
     errors += release_errors
-    digest: str = hashlib.sha256(",".join(sorted(str(t["hash"]) for t in tickets)).encode()).hexdigest()
+    digest: str = hashlib.sha256(",".join(sorted(f"{t['hash']}:{t['stage']}" for t in tickets)).encode()).hexdigest()
     snapshot: dict[str, Any] = {
         "schema": 1, "generated_at": datetime.now(UTC).isoformat(timespec="seconds"), "hash": digest,
         "projects": labels, "tickets": tickets,

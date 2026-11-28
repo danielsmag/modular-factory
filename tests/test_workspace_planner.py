@@ -93,6 +93,31 @@ def test_collect_hash_changes_only_when_tickets_change(pair):
     assert pair.collect()["hash"] != first
 
 
+def test_collect_hash_changes_when_a_stage_changes(pair):
+    job = pair.a.create(pair.a.issue("Add VAT field to the invoice API"))
+    first = pair.collect()["hash"]
+    assert pair.collect()["hash"] == first
+    pair.a.play(job, until="spec")
+    assert pair.collect()["hash"] != first
+
+
+def test_collect_times_out_a_hung_project(pair, monkeypatch):
+    pair.a.issue("Add VAT field to the invoice API")
+    (pair.b.repo / ".factory" / "bin" / "mfactory").write_text("#!/bin/sh\nsleep 30\n")
+    monkeypatch.setattr(workspace_planner, "SNAPSHOT_TIMEOUT", 1)
+    snap = pair.collect()
+    assert [t["ref"] for t in snap["tickets"]] == ["repo:#1"]
+    assert snap["errors"] == ["beta: timed out"]
+
+
+def test_collect_survives_a_binary_that_cannot_run(pair):
+    pair.a.issue("Add VAT field to the invoice API")
+    (pair.b.repo / ".factory" / "bin" / "mfactory").chmod(0)
+    snap = pair.collect()
+    assert [t["ref"] for t in snap["tickets"]] == ["repo:#1"]
+    assert len(snap["errors"]) == 1 and snap["errors"][0].startswith("beta:")
+
+
 @pytest.mark.xfail(strict=True, reason="plan release lands in Task 5")
 def test_collect_releases_cross_project_hold(pair):
     first = pair.a.start(until="done", config_text=AUTO_MERGE, title="Add the tax field")
