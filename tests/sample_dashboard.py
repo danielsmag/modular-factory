@@ -430,7 +430,9 @@ def build_sample_repo(tmp: Path, name: str, empty: bool, rng: random.Random, jir
     jobs_dir: Path = repo / ".factory" / "jobs"
     jobs_dir.mkdir(parents=True)
     if not empty:
-        plan: list[tuple[object, ...]] = [("done", d, None, d % 3 == 0) for d in (27, 24, 21, 20, 16, 13, 12, 9, 6, 5, 3, 1)]
+        plan: list[tuple[object, ...]] = [
+            ("done", d, None, d % 3 == 0) for d in (27, 24, 21, 20, 16, 13, 12, 9, 6, 5, 3, 1)
+        ]
         plan += [("rejected", 8, None, False), ("failed", 2, None, False), ("build", 0, None, False),
                  ("review", 0, None, True)]
         plan += [("spec-approval", 0, "maintainer", False), ("escalated", 1, "maintainer", True)]
