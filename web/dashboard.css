@@ -674,6 +674,11 @@ table.files-table td .dot { display: inline-block; vertical-align: 1px; }
 .finding-summary, .finding-action { margin: 0; overflow-wrap: anywhere; }
 .finding-evidence { margin: 0; padding-left: 18px; color: var(--text-2); }
 .finding-command code { font-family: var(--mono); color: var(--code); }
+.planner-section { display: flex; flex-direction: column; gap: 8px; margin-top: 22px; max-width: 980px; }
+.planner-section > .dim { margin: 0; }
+.planner-note { border-left: 2px solid var(--line-2); padding: 2px 0 2px 12px; display: flex; flex-direction: column; gap: 4px; }
+.planner-note p, .planner-line { margin: 0; overflow-wrap: anywhere; }
+.planner-urgent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 0 12px; }
 .finding .chip.hot { border-color: rgba(255, 90, 79, .5); color: var(--bad); }
 .copy { font: var(--fs-floor) var(--mono); background: none; border: 1px solid var(--line-2); border-radius: 3px; color: var(--text-2); padding: 1px 7px; cursor: pointer; }
 .notify-toggle { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 12px; color: var(--text-2); }

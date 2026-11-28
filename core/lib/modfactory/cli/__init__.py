@@ -279,6 +279,7 @@ def plan_ingest(cfg: config.Config, reply: bool) -> int:
         raise Refused("the draft is not a JSON object with a findings list; nothing was changed")
     kept, dropped = ingest_mod.validate(draft, snapshot, int(settings["max_extra"]))
     merged: dict[str, Any] = ingest_mod.merge(state.read_findings(), kept, snapshot, settings, now())
+    merged["notes"] = ingest_mod.notes(draft, snapshot)
     state.write_findings(merged)
     state.draft_path.unlink(missing_ok=True)
     opened: list[dict[str, Any]] = [f for f in merged["findings"] if f.get("status") == "open"]
@@ -311,7 +312,7 @@ def plan_suggest(cfg: config.Config) -> int:
     here: set[str] = {str(f.get("id")) for f in merged["findings"]}
     merged["findings"] += [f for f in old["findings"] if f.get("status") == "open" and f.get("id") not in here]
     merged["findings"].sort(key=lambda f: int(str(f.get("id")).partition("-")[2] or 0))
-    merged.update(scanned_at=old.get("scanned_at"), snapshot_hash=old.get("snapshot_hash"))
+    merged.update(scanned_at=old.get("scanned_at"), snapshot_hash=old.get("snapshot_hash"), notes=old.get("notes", []))
     key: str = ingest_mod.finding_key(kept[0]["kind"], kept[0]["tickets"])
     added: dict[str, Any] = next(f for f in merged["findings"] if f.get("key") == key)
     if added.get("status") != "open":

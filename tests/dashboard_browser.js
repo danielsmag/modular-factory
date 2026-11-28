@@ -224,6 +224,8 @@ async function main() {
   check("the planner badge counts open findings", (await plan.textContent("#planner-count")) === "2" && !(await plan.$eval("#planner-badge", (n) => n.hidden)));
   check("the badge dot is red at alert_at", (await plan.getAttribute("#planner-dot", "class")).includes("stop"));
   check("the planner view lists one row per finding", (await plan.$$(".finding")).length === 2);
+  check("the planner view shows every summary section", (await texts(plan, ".planner-section h2")).join("|") === "Needs attention|Other findings|Checked|Held|Pipeline");
+  check("a scan note is shown under Checked", (await texts(plan, ".planner-note p")).includes("not related: different screens"));
   check("each row carries its approve command", (await texts(plan, ".finding-command code")).includes("mfactory plan approve F-1"));
   for (const theme of ["light", "dark"]) {
     await plan.emulateMedia({ colorScheme: theme });

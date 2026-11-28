@@ -459,10 +459,15 @@ def test_planner_route_shape_and_redaction(world, base):
                                           "relation": "duplicate"}, "status": "open"},
                               {"id": "F-2", "kind": "overlap", "tickets": ["repo:#1", "repo:#2"],
                                "severity": "low", "summary": "x", "evidence": [], "action": {},
-                               "status": "dismissed"}]})
+                               "status": "dismissed"}],
+                          "notes": [{"tickets": ["repo:#1", "repo:#2"], "text": f"not related {token}"}]})
     status, body, _ = get(base + "/planner.json")
     assert status == 200
     answer = json.loads(body)
+    assert [t["ref"] for t in answer["checked"][0]["tickets"]] == ["repo:#1", "repo:#2"]
+    assert answer["checked"][0]["text"].startswith("not related ")
+    pipeline = answer["projects"][0]
+    assert (pipeline["label"], pipeline["queued"], pipeline["running"]) == ("repo", 1, 1) and answer["held"] == []
     assert token not in body
     assert answer["counts"] == {"open": 1, "low": 0, "medium": 0, "high": 1}
     assert [f["id"] for f in answer["findings"]] == ["F-1"]

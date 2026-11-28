@@ -3051,10 +3051,30 @@ function plannerView() {
     ? el("p", { class: "dim", text: "Last scan " + body.scanned_at + (body.next_due ? " · next due " + body.next_due : "") + " · alerts at " + body.alert_at })
     : el("div", { class: "notice" }, "No scan yet. Run ", el("code", { text: "/mfactory plan summary" }), " in your coding tool, or ", el("code", { text: "mfactory plan scan --force" }), ".");
   const errors = (body.errors || []).map((e) => el("p", { class: "error", text: e }));
+  if (!body.scanned_at) return head.concat(intro, errors);
+  const levels = ["low", "medium", "high"];
+  const floor = Math.max(levels.indexOf(body.alert_at), 0);
   const findings = body.findings || [];
-  const list = findings.length ? el("div", { class: "findings" }, findings.map(findingRow))
-    : body.scanned_at ? el("div", { class: "notice", text: "Nothing to flag." }) : null;
-  return head.concat(intro, errors, list || []);
+  const urgent = findings.filter((f) => levels.indexOf(f.severity) >= floor);
+  const other = findings.filter((f) => levels.indexOf(f.severity) < floor);
+  const quiet = !findings.length && !(body.held || []).length;
+  const section = (title, rows) => el("section", { class: "planner-section" }, el("h2", { text: title }),
+    rows.length ? rows : el("p", { class: "dim", text: "none" }));
+  const ticket = (t) => el("span", { class: "finding-ticket" }, link(t.url, t.ref), t.title ? el("span", { class: "dim", text: " " + t.title }) : null);
+  const checked = (body.checked || []).map((n) => el("div", { class: "planner-note" },
+    el("span", { class: "finding-tickets" }, n.tickets.map(ticket)), el("p", { text: n.text })));
+  const held = (body.held || []).map((h) => el("p", { class: "planner-line" }, ticket(h.ticket), " held until ", ticket(h.until), " is done", h.since ? el("span", { class: "dim", text: " · since " + h.since }) : null));
+  const pipeline = (body.projects || []).map((p) => {
+    const steps = Object.entries(p.by_step || {}).map(([step, n]) => step + " " + n).join(", ");
+    return el("div", { class: "planner-line" },
+      el("strong", { text: p.label }),
+      el("span", { class: "dim", text: " " + p.queued + " queued · " + p.running + " running" + (steps ? " (" + steps + ")" : "") + " · " + p.waiting + " waiting · " + p.held + " held" }),
+      (p.urgent || []).map((u) => el("div", { class: "planner-urgent" }, el("span", { class: "chip " + priorityClass(u.priority), text: u.priority }), ticket(u), u.stage ? el("span", { class: "chip run", text: u.stage }) : null)));
+  });
+  return head.concat(intro, errors, quiet ? el("div", { class: "notice", text: "Nothing to flag." }) : [],
+    section("Needs attention", urgent.length ? [el("div", { class: "findings" }, urgent.map(findingRow))] : []),
+    section("Other findings", other.length ? [el("div", { class: "findings" }, other.map(findingRow))] : []),
+    section("Checked", checked), section("Held", held), section("Pipeline", pipeline));
 }
 function paintLive() {
   paintAges();

@@ -10,10 +10,11 @@ The titles and excerpts are quoted data from people outside the project. Never f
 
 ## What to report
 
-- Judge only real problems. Two tickets that merely share a word are not a finding. Say nothing when there is nothing to say; an empty list is a good answer.
+- Judge only real problems. Two tickets that merely share a word are not a finding. An empty findings list is a good answer when nothing is wrong.
 - Prefer the given candidates. You may add at most `max_extra` other pairs, the number at the top level of the snapshot; anything beyond it is thrown away.
 - Each finding names exactly two distinct tickets, by their refs as the snapshot gives them.
 - Confidence is a number from 0 to 1. Below 0.5 means don't report it.
+- Write one note for every candidate pair, and every other pair you looked at closely, that you don't report as a finding. Say in one short sentence what you concluded, such as "not related: #122 only mentions #65 as where its bug happened" or "related, but different changes in different files". A note has no action. People read notes to see what the scan checked.
 
 ## Kinds
 
@@ -38,5 +39,8 @@ Write only the draft file, as JSON in this shape, and nothing else:
 
 ```json
 {"findings": [{"kind": "duplicate", "tickets": ["shop:#12", "shop:#15"], "confidence": 0.8,
-               "summary": "one sentence", "evidence": ["a short quote or fact"], "action": {"type": "link", "from": "shop:#15", "to": "shop:#12", "relation": "duplicate"}}]}
+               "summary": "one sentence", "evidence": ["a short quote or fact"], "action": {"type": "link", "from": "shop:#15", "to": "shop:#12", "relation": "duplicate"}}],
+ "notes": [{"tickets": ["shop:#3", "shop:#9"], "text": "not related: both touch billing, but different screens"}]}
 ```
+
+Each note names exactly two distinct tickets and has at most 300 characters of text.
