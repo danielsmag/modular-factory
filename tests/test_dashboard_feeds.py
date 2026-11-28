@@ -69,7 +69,7 @@ def test_the_routes_answer_with_json(world, base):
 
 
 def test_projects_carry_their_pipelines_and_each_jobs_step_states(world, base):
-    world.pipeline_file("hotfix.yaml", "pipelines:\n  hotfix:\n    description: Small fixes\n    extends: default\n"
+    world.pipeline_file("hotfix.yaml", "pipes:\n  hotfix:\n    description: Small fixes\n    extends: default\n"
                                        "    steps:\n      spec: { enabled: false, skip: DONE }\n")
     job = world.create(world.issue(title="Fix it"), "hotfix")
     world.play(job, until="build")
@@ -79,7 +79,7 @@ def test_projects_carry_their_pipelines_and_each_jobs_step_states(world, base):
     assert [p["name"] for p in pipes["pipelines"]] == ["default", "hotfix"]
     assert pipes["ask"] is True and pipes["default"] is None and pipes["problems"] == []
     hot = pipes["pipelines"][1]
-    assert hot["file"] == "pipelines/hotfix.yaml" and "extends: default" in hot["yaml"]
+    assert hot["file"] == "factory/pipes/hotfix.yaml" and "extends: default" in hot["yaml"]
     assert hot["graph"]["pipeline"] == "hotfix" and hot["graph"]["start"] == "intake"
     shown = project["jobs"][0]
     assert shown["pipeline"] == "hotfix" and shown["status"] == "running"
@@ -397,7 +397,7 @@ def test_two_projects_each_use_their_own_jira_variables(world, tmp_path, monkeyp
     jira = world.use_both(settings='email_env = "ALPHA_EMAIL"\ntoken_env = "ALPHA_TOKEN"')
     beta = tmp_path / "beta"
     shutil.copytree(world.repo, beta, symlinks=True)
-    toml = beta / "factory.toml"
+    toml = beta / "factory" / "factory.toml"
     toml.write_text(toml.read_text().replace("ALPHA_", "BETA_"))
     monkeypatch.setenv("ALPHA_EMAIL", os.environ["JIRA_EMAIL"])
     monkeypatch.setenv("ALPHA_TOKEN", os.environ["JIRA_API_TOKEN"])

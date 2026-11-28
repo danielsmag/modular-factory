@@ -180,15 +180,15 @@ def test_no_commands_means_nothing_passes(world):
 
 def test_a_job_cannot_change_the_factory_that_judges_it(world):
     paths = (
-        "factory.toml", ".factory/roles/build.md", ".claude/agents/mfactory-approve.md",
+        "factory/factory.toml", "factory.toml", ".factory/roles/build.md", ".claude/agents/mfactory-approve.md",
         ".cursor/agents/mfactory-build.md", ".codex/agents/mfactory-build.toml",
-        ".agents/skills/mfactory/SKILL.md", "pipelines/default.yaml",
+        ".agents/skills/mfactory/SKILL.md", "factory/pipes/default.yaml",
     )
     job = world.start(until="build")
     verdict, report = gate(world, job, {path: "mine now\n" for path in paths})
     assert verdict == "FAIL"
-    assert "- M factory.toml" in report
-    for path in paths[1:]:
+    assert "- M factory/factory.toml" in report
+    for path in paths[1:]:  # a factory.toml at the root is the old place of the file: also the factory's
         assert f"- A {path}" in report
 
 
@@ -212,7 +212,8 @@ def test_checks_get_the_main_checkout_path(world):
 
 def test_the_checks_use_factory_toml_from_the_main_checkout(world):
     job = world.start(until="build")
-    verdict, _ = gate(world, job, {"factory.toml": 'schema = 1\n[checks]\ncommands = ["true"]\n', "FAIL": "x\n"})
+    branch_config = 'schema = 1\n[checks]\ncommands = ["true"]\n'
+    verdict, _ = gate(world, job, {"factory/factory.toml": branch_config, "FAIL": "x\n"})
     assert verdict == "FAIL"                                # the branch's own, weaker checks were not used
 
 

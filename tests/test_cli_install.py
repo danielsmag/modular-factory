@@ -22,8 +22,8 @@ from modfactory.workspace.service import DashboardServer, one_handler
 @pytest.fixture
 def bare(world):
     """The project before the factory is installed: no factory.toml."""
-    (world.repo / "factory.toml").unlink()
-    git("commit", "-qam", "remove factory.toml", cwd=world.repo)
+    world.config_file.unlink()
+    git("commit", "-qam", "remove factory/factory.toml", cwd=world.repo)
     git("push", "-q", "origin", "main", cwd=world.repo)
     (world.repo / ".gitignore").write_text("node_modules/\n")
     return world
@@ -48,18 +48,19 @@ def test_init_installs_everything_a_project_needs(bare):
     assert not list((repo / ".factory").rglob("__pycache__"))
     assert installed(bare).stdout.strip() == (ROOT / "core/VERSION").read_text().strip()
 
-    toml = (repo / "factory.toml").read_text()
+    toml = (repo / "factory" / "factory.toml").read_text()
     assert 'enabled = ["claude", "codex"]' in toml and 'base_branch = "main"' in toml
     assert "pr_title_pattern" in toml
-    assert "[steps" not in toml and '# pipeline = "default"' in toml
-    for item in ("pipelines/default.yaml", "schema/pipeline.schema.json"):
+    assert "[steps" not in toml and '# pipe = "default"' in toml
+    for item in ("pipes/default.yaml", "schema/pipe.schema.json"):
         assert (repo / ".factory" / item).exists(), item
-    starter = (repo / "pipelines" / "default.yaml").read_text()
-    assert starter.startswith("# yaml-language-server: $schema=../.factory/schema/pipeline.schema.json")
+    starter = (repo / "factory" / "pipes" / "default.yaml").read_text()
+    assert starter.startswith("# yaml-language-server: $schema=../../.factory/schema/pipe.schema.json")
+    assert not (repo / "factory.toml").exists() and not (repo / "pipelines").exists()
     cfg = config.load(repo)
-    assert cfg.pipelines["default"].file == "pipelines/default.yaml"
+    assert cfg.pipelines["default"].file == "factory/pipes/default.yaml"
     shipped = pipelines.parse(pipelines.BUILTIN_FILE.read_text(), "built-in")
-    builtin = pipelines.normalise_edges(shipped["pipelines"]["default"]["steps"])
+    builtin = pipelines.normalise_edges(shipped["pipes"]["default"]["steps"])
     assert cfg.steps == builtin  # the starter is the built-in pipeline, spelled out
     assert (repo / ".gitignore").read_text() == (
         "node_modules/\n\n# software factory runtime state\n/.factory/jobs/\n/.worktrees/\n")
@@ -84,12 +85,12 @@ def test_install_leaves_existing_labels_alone(bare):
 
 def test_init_again_keeps_factory_toml_and_changes_nothing_else(bare):
     bare.cli("init")
-    (bare.repo / "factory.toml").write_text('schema = 1\n[run]\nconcurrency = 7\n')
+    bare.config_file.write_text('schema = 1\n[run]\nconcurrency = 7\n')
     before = (bare.repo / ".gitignore").read_text()
     res = bare.cli("init", "--tool", "cursor")
     assert res.returncode == 0
     assert "factory.toml exists and was left as it is" in res.stdout
-    assert (bare.repo / "factory.toml").read_text() == 'schema = 1\n[run]\nconcurrency = 7\n'
+    assert bare.config_file.read_text() == 'schema = 1\n[run]\nconcurrency = 7\n'
     assert (bare.repo / ".gitignore").read_text() == before
 
 
@@ -99,16 +100,15 @@ def test_personal_install_leaves_the_factory_untracked(bare):
     assert res.returncode == 0, res.stderr
     assert (bare.repo / ".gitignore").read_text() == before
     assert ".gitignore" not in res.stdout
-    assert "Leave factory.toml, pipelines/, .factory/ and the generated files untracked." in res.stdout
+    assert "Leave factory/, .factory/ and the generated files untracked." in res.stdout
     exclude = Path(git("rev-parse", "--git-path", "info/exclude", cwd=bare.repo))
     if not exclude.is_absolute():
         exclude = bare.repo / exclude
     text = exclude.read_text()
     block = "\n".join((
         "# software factory, this checkout only",
-        "/factory.toml",
+        "/factory/",
         "/.factory/",
-        "/pipelines/",
         "/.worktrees/",
         "/.claude/agents/mfactory-*",
         "/.claude/agents/factory-*",
@@ -121,7 +121,7 @@ def test_personal_install_leaves_the_factory_untracked(bare):
         "",
     ))
     assert block in text
-    for path in ("factory.toml", ".factory/jobs/x", ".claude/agents/mfactory-build.md"):
+    for path in ("factory/factory.toml", ".factory/jobs/x", ".claude/agents/mfactory-build.md"):
         ignored = subprocess.run(["git", "check-ignore", "-v", "--", path], cwd=bare.repo,
                                  capture_output=True, text=True)
         assert ignored.returncode == 0, path
@@ -136,11 +136,11 @@ def test_personal_install_leaves_the_factory_untracked(bare):
     assert (bare.repo / ".gitignore").read_text() == before
     assert "ok    .git/info/exclude already ignores the factory (personal install)" in again.stdout
 
-    (bare.repo / "factory.toml").write_text(
+    bare.config_file.write_text(
         'schema = 1\n[project]\nbase_branch = "main"\n[checks]\ncommands = ["true"]\n')
     checked = doctor(bare, "--skip-checks")
     assert "aren't on origin/main yet" not in checked.stdout
-    assert ("ok    factory.toml and .factory/ are ignored in this checkout (.git/info/exclude). "
+    assert ("ok    factory/factory.toml and .factory/ are ignored in this checkout (.git/info/exclude). "
             "Worktrees built from origin/main do not contain them. "
             "A check that needs those files must use the main checkout.") in checked.stdout
 
@@ -157,7 +157,7 @@ def test_install_sh_installs_from_a_local_copy(bare):
     res = subprocess.run(["bash", str(ROOT / "install.sh"), "--tool", "cursor,codex", "--source", str(ROOT)],
                          cwd=bare.repo, capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
-    assert 'enabled = ["cursor", "codex"]' in (bare.repo / "factory.toml").read_text()
+    assert 'enabled = ["cursor", "codex"]' in bare.config_file.read_text()
     assert installed(bare).returncode == 0
 
 
@@ -267,8 +267,8 @@ def test_doctor_passes_on_a_ready_project(world):
     res = doctor(world)
     assert res.returncode == 0, res.stdout
     for line in ("ok    gh is signed in",
-                 "ok    factory.toml is valid",
-                 'ok    pipeline "default" (pipelines/default.yaml) is valid: 9 steps on, '
+                 "ok    factory/factory.toml is valid",
+                 'ok    pipe "default" (factory/pipes/default.yaml) is valid: 9 steps on, '
                  "off: spec-approval, debug, merge, ready-to-verify, verify",
                  "ok    generated agent and skill files match factory.toml", "ok    origin/main can be fetched",
                  "ok    .factory/jobs/ is ignored by git", "ok    GitHub labels exist",
@@ -313,12 +313,12 @@ def test_doctor_reports_config_problems_first(world):
     res = doctor(world)
     assert res.returncode == 1
     assert 'FAIL  [steps.gate].on.PASS points at unknown step "nowhere".' in res.stdout
-    assert "Fix factory.toml first" in res.stdout
+    assert "Fix factory/factory.toml and the pipes first" in res.stdout
 
 
 def test_doctor_warns_when_an_edge_skips_a_disabled_merge(bare):
     bare.cli("init")
-    (bare.repo / "factory.toml").write_text(
+    bare.config_file.write_text(
         'schema = 1\n[project]\nbase_branch = "main"\n[checks]\ncommands = ["true"]\n'
         '[steps.approve]\non = { APPROVE = "merge" }\n'
         '[steps.ready-to-merge]\nenabled = false\nskip = "REJECT"\n')
@@ -356,10 +356,10 @@ def test_doctor_warns_when_a_listed_rule_is_not_installed(world, monkeypatch):
 
 def test_doctor_warns_when_the_factory_is_not_on_the_base_branch(bare):
     bare.cli("init")
-    (bare.repo / "factory.toml").write_text(
+    bare.config_file.write_text(
         'schema = 1\n[project]\nbase_branch = "main"\n[checks]\ncommands = ["true"]\n')
     res = doctor(bare)
-    assert "warn  factory.toml and .factory/ aren't on origin/main yet." in res.stdout
+    assert "warn  factory/factory.toml and .factory/ aren't on origin/main yet." in res.stdout
 
 
 # ---- dashboard server ------------------------------------------------------
@@ -663,7 +663,7 @@ def test_upgrade_skips_a_project_whose_schema_differs(world):
     assert added.returncode == 0, added.stderr
     for repo in (world.repo, other):
         (repo / ".factory" / "VERSION").write_text("0.0.0\n")
-    config_path: Path = other / "factory.toml"
+    config_path: Path = other / "factory" / "factory.toml"
     config_path.write_text(config_path.read_text().replace("schema = 1", "schema = 99", 1))
     expected: str = (ROOT / "core" / "VERSION").read_text()
     _global_home(expected)
@@ -738,7 +738,7 @@ def test_changelog_note_is_one_version(tmp_path: Path) -> None:
 def test_install_is_another_name_for_init(bare):
     res = bare.cli("install", "--tool", "cursor")
     assert res.returncode == 0, res.stderr
-    assert 'enabled = ["cursor"]' in (bare.repo / "factory.toml").read_text()
+    assert 'enabled = ["cursor"]' in bare.config_file.read_text()
     assert (bare.repo / ".factory/bin/mfactory").is_file()
 
 
@@ -748,12 +748,12 @@ def test_uninstall_keeps_factory_toml_unless_asked(world):
     assert removed.returncode == 0, removed.stderr
     assert "remove  .factory/" in removed.stdout
     assert not (world.repo / ".factory").exists()
-    assert (world.repo / "factory.toml").is_file()
+    assert world.config_file.is_file()
     assert "removed from" in removed.stdout
     world.cli("init")
     labelled = world.cli("uninstall", "--config", "--labels")
     assert labelled.returncode == 0, labelled.stderr
-    assert not (world.repo / "factory.toml").exists()
+    assert not world.config_file.exists()
     assert world.gh["labels"] == []
 
 
@@ -789,4 +789,4 @@ def test_install_sh_global_links_a_command_that_can_install(bare, tmp_path):
     installed = subprocess.run([sys.executable, str(data / "core/bin/mfactory"), "install", "--tool", "cursor"],
                                cwd=bare.repo, capture_output=True, text=True)
     assert installed.returncode == 0, installed.stderr
-    assert 'enabled = ["cursor"]' in (bare.repo / "factory.toml").read_text()
+    assert 'enabled = ["cursor"]' in bare.config_file.read_text()

@@ -10,7 +10,7 @@
 
 The factory adds nothing to your project's dependencies. It is a folder of
 Python files that need one package besides the standard library: PyYAML, to
-read the pipelines in `pipelines/*.yaml`. `install.sh` installs it with
+read the pipelines in `factory/pipes/*.yaml`. `install.sh` installs it with
 `pip install --user pyyaml` when it is missing, and `mfactory doctor` checks it
 is there. Your OS package (`python3-yaml`) works as well.
 
@@ -43,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/danielsmag/modular-factory/master/i
 | Option | Meaning |
 | --- | --- |
 | `--tool claude\|cursor\|codex` | The tool to generate agents for. Repeat it or separate names with commas for several. Default: `claude`. |
-| `--personal` | Keep `factory.toml`, `.factory/` and the generated files untracked in this checkout. Writes `.git/info/exclude` and does not touch `.gitignore`. |
+| `--personal` | Keep `factory/factory.toml`, `.factory/` and the generated files untracked in this checkout. Writes `.git/info/exclude` and does not touch `.gitignore`. |
 | `--version v0.1.0` | Install that release. Default: the latest release, or the `master` branch before the first release. |
 | `--source DIR` | Install from a local copy of this repository instead of downloading. |
 
@@ -59,7 +59,7 @@ It does five things and prints each:
 
 ```text
 ok    .factory/ installed (version 0.1.0)
-ok    factory.toml written
+ok    factory/factory.toml written
 ok    .gitignore gained /.factory/jobs/, /.worktrees/
 ok    generated files for claude: 10 written
 ok    GitHub labels created: factory, factory:needs-info, factory:needs-human
@@ -67,14 +67,15 @@ ok    GitHub labels created: factory, factory:needs-info, factory:needs-human
 
 | Path | What it is | Commit it? |
 | --- | --- | --- |
-| `factory.toml` | Your configuration. The only file you edit. | Yes |
+| `factory/factory.toml` | Your configuration. | Yes |
+| `factory/pipes/*.yaml` | Your pipes: the pipelines, as YAML files. `install` writes `default.yaml`. | Yes |
 | `.factory/` | The mfactory: its CLI, prompts and defaults. | Yes |
 | `.factory/jobs/` | The state and files of each job. | No (ignored) |
 | `.worktrees/` | One git worktree per running job. | No (ignored) |
-| `.claude/agents/mfactory-*.md`, `.cursor/agents/mfactory-*.md`, `.codex/agents/mfactory-*.toml` | One small agent file per step, generated from `factory.toml`. | Yes |
+| `.claude/agents/mfactory-*.md`, `.cursor/agents/mfactory-*.md`, `.codex/agents/mfactory-*.toml` | One small agent file per step, generated from `factory/factory.toml`. | Yes |
 | `.claude/skills/mfactory/` or `.agents/skills/mfactory/` | The `/mfactory` skill. | Yes |
 
-Running the installer again is safe: it never overwrites `factory.toml`.
+Running the installer again is safe: it never overwrites `factory/factory.toml`.
 
 ### Personal install
 
@@ -95,7 +96,7 @@ make install PERSONAL=1 TOOL=claude
 
 ```gitignore
 # software factory, this checkout only
-/factory.toml
+/factory/
 /.factory/
 /.worktrees/
 /.claude/agents/mfactory-*
@@ -110,19 +111,20 @@ make install PERSONAL=1 TOOL=claude
 
 ```text
 ok    .factory/ installed (version 0.3.1)
-ok    factory.toml written
-ok    .git/info/exclude gained /factory.toml, /.factory/, /.worktrees/, /.claude/agents/mfactory-*, /.claude/agents/factory-*, /.claude/skills/mfactory/, /.cursor/agents/mfactory-*, /.cursor/agents/factory-*, /.agents/skills/mfactory/, /.codex/agents/mfactory-*, /.codex/agents/factory-*
+ok    factory/factory.toml written
+ok    factory/pipes/default.yaml written: the default pipe, ready to edit
+ok    .git/info/exclude gained /factory/, /.factory/, /.worktrees/, /.claude/agents/mfactory-*, /.claude/agents/factory-*, /.claude/skills/mfactory/, /.cursor/agents/mfactory-*, /.cursor/agents/factory-*, /.agents/skills/mfactory/, /.codex/agents/mfactory-*, /.codex/agents/factory-*
 ok    generated files for claude: 10 written
 ok    GitHub labels created: factory, factory:needs-info, factory:needs-human
 
 Next:
-  1. In your tool, run `/mfactory setup` to fill in factory.toml (or edit it yourself).
+  1. In your tool, run `/mfactory setup` to fill in factory/factory.toml (or edit it yourself).
   2. Run `.factory/bin/mfactory doctor`.
-  3. Leave factory.toml, .factory/ and the generated files untracked. This checkout ignores them.
+  3. Leave factory/, .factory/ and the generated files untracked. This checkout ignores them.
   4. Label an issue `factory` and run `/mfactory run`.
 ```
 
-`git status` does not list `factory.toml`, `.factory/` or `.claude/agents/mfactory-build.md`. `git check-ignore -v factory.toml` names `.git/info/exclude`.
+`git status` does not list `factory/factory.toml`, `.factory/` or `.claude/agents/mfactory-build.md`. `git check-ignore -v factory/factory.toml` names `.git/info/exclude`.
 
 Running `mfactory install` again in that checkout, without `--personal`, does not touch `.gitignore`:
 
@@ -133,10 +135,10 @@ ok    .git/info/exclude already ignores the factory (personal install)
 `doctor` then reports:
 
 ```text
-ok    factory.toml and .factory/ are ignored in this checkout (.git/info/exclude). Worktrees built from origin/main do not contain them. A check that needs those files must use the main checkout.
+ok    factory/factory.toml and .factory/ are ignored in this checkout (.git/info/exclude). Worktrees built from origin/main do not contain them. A check that needs those files must use the main checkout.
 ```
 
-Jobs build a worktree from `origin/<base>`. That worktree does not contain `factory.toml` or `.factory/`. A check command that needs those files has to reach the main checkout itself. Skip the commit step below.
+Jobs build a worktree from `origin/<base>`. That worktree does not contain `factory/factory.toml` or `.factory/`. A check command that needs those files has to reach the main checkout itself. A checkout set up before `factory/` keeps `factory.toml` at its root; `mfactory migrate layout` moves it. Skip the commit step below.
 
 To install for the team afterwards, delete that block from `.git/info/exclude`, then run `mfactory install`. That run appends `/.factory/jobs/` and `/.worktrees/` to `.gitignore` and tells you to commit.
 
@@ -144,7 +146,7 @@ To install for the team afterwards, delete that block from `.git/info/exclude`, 
 
 ```text
 1 upgraded, 0 current
-app  run `.factory/bin/mfactory doctor`. Leave factory.toml, .factory/ and the generated files untracked.
+app  run `.factory/bin/mfactory doctor`. Leave factory/, .factory/ and the generated files untracked.
 ```
 
 ## 2. Set up
@@ -159,7 +161,7 @@ In Codex, mention the skill with `$factory setup`, or ask in words: "set up the
 factory".
 
 The agent reads your README, package manifest and CI workflows, then edits
-`factory.toml`:
+`factory/factory.toml`:
 
 - `[project] description`: what the project is for. Intake judges issues
   against this.
@@ -172,10 +174,10 @@ the pull request and the factory does not. Ask whether a merge to the base
 branch publishes a release. Only when it does not, and the user wants the
 factory to merge, turn the merge step on, point `approve` at it, and switch
 `ready-to-merge` off. You can
-also edit `factory.toml` by hand; the [configuration reference](configuration.md)
+also edit `factory/factory.toml` by hand; the [configuration reference](configuration.md)
 lists every key.
 
-After any change to `factory.toml`:
+After any change to `factory/factory.toml`:
 
 ```bash
 .factory/bin/mfactory sync
@@ -194,9 +196,10 @@ ok    factory 0.1.0, Python 3.12.3
 ok    git: git version 2.43.0
 ok    gh: gh version 2.60.0
 ok    gh is signed in
-ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, merge, ready-to-verify, verify
+ok    factory/factory.toml is valid
+ok    pipe "default" (factory/pipes/default.yaml) is valid: 9 steps on, off: spec-approval, debug, merge, ready-to-verify, verify
 ok    Claude Code: claude 2.1.0
-ok    generated agent and skill files match factory.toml
+ok    generated agent and skill files match factory/factory.toml
 ok    origin/main can be fetched
 ok    .factory/jobs/ is ignored by git
 ok    GitHub labels exist
@@ -213,11 +216,11 @@ as your CI. Pass `--skip-checks` to leave that out.
 
 | It reports | What to do |
 | --- | --- |
-| A problem in `factory.toml`, naming the key | Fix that key. `mfactory graph` shows the pipeline in effect. |
+| A problem in `factory/factory.toml`, naming the key | Fix that key. `mfactory graph` shows the pipeline in effect. |
 | `[checks].commands is empty` | Run `/mfactory setup`, or list the commands yourself. |
-| Generated files differ from `factory.toml` | Run `.factory/bin/mfactory sync`. Edit `factory.toml`, never the generated files. |
-| `factory.toml and .factory/ aren't on origin/<base> yet` | Commit and push them. Jobs build from that branch. A personal install does not report this: those files are listed in `.git/info/exclude`. |
-| `factory.toml and .factory/ are ignored in this checkout` | Expected after `mfactory install --personal`. Worktrees from `origin/<base>` do not contain the factory. |
+| Generated files differ from `factory/factory.toml` | Run `.factory/bin/mfactory sync`. Edit `factory/factory.toml`, never the generated files. |
+| `factory/factory.toml and .factory/ aren't on origin/<base> yet` | Commit and push them. Jobs build from that branch. A personal install does not report this: those files are listed in `.git/info/exclude`. |
+| `factory/factory.toml and .factory/ are ignored in this checkout` | Expected after `mfactory install --personal`. Worktrees from `origin/<base>` do not contain the factory. |
 | The checks fail on the base branch | Fix the base branch first. Otherwise every job fails for a reason it did not cause. |
 | A label is missing | `mfactory init` creates them; it needs write access to the repository. |
 | `<tool> isn't on PATH` | A warning only. It is fine if you run the tool as an app. |
@@ -225,7 +228,7 @@ as your CI. Pass `--skip-checks` to leave that out.
 ## 4. Commit and run
 
 ```bash
-git add factory.toml .factory .gitignore .claude .cursor .codex .agents 2>/dev/null
+git add factory .factory .gitignore .claude .cursor .codex .agents 2>/dev/null
 git commit -m "Add the software factory"
 git push
 ```
@@ -263,7 +266,7 @@ mfactory workspace queue
 mfactory workspace remove
 ```
 
-`add` and `remove` take a path when you are not standing in the repository. `remove` also takes the project's folder name. `mfactory dashboard` outside a repository, or in a checkout with no `factory.toml`, uses this same list. `mfactory status` outside a repository does too. `mfactory upgrade` upgrades the global CLI and every project in the workspace, then prints the next step for each one. A project that fails does not stop the others, and each repository still needs its own commit.
+`add` and `remove` take a path when you are not standing in the repository. `remove` also takes the project's folder name. `mfactory dashboard` outside a repository, or in a checkout with no `factory/factory.toml`, uses this same list. `mfactory status` outside a repository does too. `mfactory upgrade` upgrades the global CLI and every project in the workspace, then prints the next step for each one. A project that fails does not stop the others, and each repository still needs its own commit.
 
 A `workspace.toml` in the current directory or a parent still wins, and so does `FACTORY_WORKSPACE`. `mfactory workspace init` writes that local file. `workspace add` accepts a checkout only after the factory is installed there. An older `~/.mfactory/fleet.toml` is renamed to `workspace.toml` the first time it is read.
 
@@ -271,7 +274,7 @@ A `workspace.toml` in the current directory or a parent still wins, and so does 
 
 The global dashboard reads job files that each project's own factory wrote. When a project's files come from an older factory, the page says to run `mfactory upgrade` there, and still shows its jobs. When they come from a newer factory than the global one, the page says to run `mfactory upgrade --self` and hides that project's jobs until then.
 
-Each project caps its own jobs with `[run].concurrency` (default 3). The workspace has a second cap, `[workspace].concurrency` in `defaults.toml` (also 3): that many `new` and `resume` rows across every project. `concurrency` in `workspace.toml`, or `mfactory workspace queue --concurrency N`, overrides that cap. Later rows print as `hold`. Projects earlier in the file get the slots. `wait`, `skip` and `hold` do not take a slot. A project's `factory.toml` cannot set the cap across projects.
+Each project caps its own jobs with `[run].concurrency` (default 3). The workspace has a second cap, `[workspace].concurrency` in `defaults.toml` (also 3): that many `new` and `resume` rows across every project. `concurrency` in `workspace.toml`, or `mfactory workspace queue --concurrency N`, overrides that cap. Later rows print as `hold`. Projects earlier in the file get the slots. `wait`, `skip` and `hold` do not take a slot. A project's `factory/factory.toml` cannot set the cap across projects.
 
 Building stays in the project. Open that project and run `/mfactory run`, or `/mfactory run 12` for one issue. Inside a project in the workspace, `mfactory dashboard` opens the page with that project selected. A project that is not listed still opens only its own page.
 
@@ -313,7 +316,7 @@ mfactory upgrade --all                        # workspace projects only
 `mfactory upgrade` downloads one release and updates the CLI from `install.sh --global`
 and every project in the workspace. Standing in an installed checkout that is not listed
 updates that checkout too. It prints a plan first, then replaces `.factory/` (not
-`.factory/jobs/`), runs `sync`, and leaves `factory.toml` alone. A checkout already on
+`.factory/jobs/`), runs `sync`, and leaves `factory/factory.toml` alone. A checkout already on
 that version is left as it is, unless its `.factory/` is missing files (for example after an
 upgrade from an old CLI). The plan then shows `repair, missing: ...`, and upgrade copies
 `.factory/` again and runs `sync`. The copy takes its item list from the release it installs,
@@ -338,7 +341,7 @@ the latest release.
 ## Remove
 
 ```bash
-rm -rf .factory factory.toml .worktrees
+rm -rf .factory factory .worktrees
 rm -rf .claude/agents/mfactory-*.md .cursor/agents/mfactory-*.md .codex/agents/mfactory-*.toml
 rm -rf .claude/skills/mfactory .agents/skills/mfactory
 git worktree prune

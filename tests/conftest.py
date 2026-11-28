@@ -110,7 +110,8 @@ def repo_template(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]
     (repo / "README.md").write_text("# app\n")
     (repo / "AGENTS.md").write_text("# Agents\n")
     (repo / ".gitignore").write_text("/.factory/jobs/\n/.worktrees/\n")
-    (repo / "factory.toml").write_text(BASE_CONFIG + BASE_CHECKS)
+    (repo / "factory").mkdir()
+    (repo / "factory" / "factory.toml").write_text(BASE_CONFIG + BASE_CHECKS)
     _git(["add", "-A"], repo, env)
     _git(["commit", "-q", "-m", "init"], repo, env)
     _git(["remote", "add", "origin", str(origin)], repo, env)
@@ -220,7 +221,12 @@ class World:
     def configure(self, extra):
         """Replace what this test adds to the base factory.toml."""
         checks = "" if "[checks]" in extra else BASE_CHECKS
-        (self.repo / "factory.toml").write_text(BASE_CONFIG + checks + "\n" + extra)
+        self.config_file.write_text(BASE_CONFIG + checks + "\n" + extra)
+
+    @property
+    def config_file(self):
+        """factory/factory.toml in this project."""
+        return self.repo / "factory" / "factory.toml"
 
     def factory(self):
         if self._factory:
@@ -233,9 +239,9 @@ class World:
         return self.factory().create(issue, pipeline)["id"]
 
     def pipeline_file(self, name, text):
-        """Write `pipelines/<name>` in the project: one or more YAML pipelines."""
-        folder = self.repo / "pipelines"
-        folder.mkdir(exist_ok=True)
+        """Write `factory/pipes/<name>` in the project: one or more YAML pipes."""
+        folder = self.repo / "factory" / "pipes"
+        folder.mkdir(parents=True, exist_ok=True)
         (folder / name).write_text(text)
 
     def next(self, job):

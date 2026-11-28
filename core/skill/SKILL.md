@@ -8,9 +8,9 @@ description: Run this project's software factory on its queue of issues (GitHub 
 You are the factory's orchestrator. You work through the issues in the
 factory's queue, and you start every agent for every job. The queue is the
 GitHub issues that carry the factory's label, or, in a project whose
-`factory.toml` has `[tracker] kind = "jira"`, the cards in the queue column of
+`factory/factory.toml` has `[tracker] kind = "jira"`, the cards in the queue column of
 its Jira board. With `kind = ["github", "jira"]` it is both, taken in turn. The
-pipelines live in `pipelines/*.yaml` and are run by one script,
+pipelines, the pipes, live in `factory/pipes/*.yaml` and are run by one script,
 `.factory/bin/mfactory`. You never decide where a job goes next: you ask the
 script, do what it prints, and report back.
 
@@ -22,9 +22,9 @@ work around it.
 ```text
 /mfactory run                  work through the queue; also resumes unfinished jobs
 /mfactory run <n>              run one issue now
-/mfactory run <n> --pipeline P run one issue on pipeline P (pipelines/*.yaml)
+/mfactory run <n> --pipe P     run one issue on pipe P (factory/pipes/*.yaml)
 /mfactory approve <n>          answer a job that is waiting for a person (also: changes, feedback, answer, reject)
-/mfactory setup                fill in factory.toml for this project, once after installing
+/mfactory setup                fill in factory/factory.toml for this project, once after installing
 /mfactory <anything else>      ask about jobs, or describe a feature to file as an issue
 ```
 
@@ -99,7 +99,7 @@ refuses a second time, stop that job and tell the user what the script said.
 
 1. Run `.factory/bin/mfactory queue`. Each line is `action  issue  job  step  note`:
    - `new`: an issue with no job. Run `.factory/bin/mfactory create <issue>`,
-     which prints the job id, then start the loop for it. See "Which pipeline"
+     which prints the job id, then start the loop for it. See "Which pipe"
      below when the project has more than one.
    - `resume`: a job to pick up. Start the loop for it.
    - `hold`: no free slot yet. `wait`: needs a person. `skip`: nothing to do.
@@ -121,25 +121,25 @@ lists unfinished jobs as `resume`, and `next` says what each needs.
 The same for one issue. If `queue` shows a job for it, resume that job;
 otherwise `create <n>`, even if `[run].pick`, `authors` or `assignees` keeps
 the issue off `queue`. Finish by naming the job's step, from `queue` or from
-`.factory/jobs/<job>/job.json`. With `--pipeline P`, pass it on:
-`create <n> --pipeline P`.
+`.factory/jobs/<job>/job.json`. With `--pipe P`, pass it on:
+`create <n> --pipe P`.
 
-## Which pipeline
+## Which pipe
 
-The pipelines are YAML files in the project's `pipelines/` folder. A job keeps
-the pipeline it was created with. Before creating jobs, run
-`.factory/bin/mfactory pipelines list --json`:
+The pipes are the project's pipelines, YAML files in its `factory/pipes/` folder.
+A job keeps the pipe it was created with. Before creating jobs, run
+`.factory/bin/mfactory pipes list --json`:
 
-- `"ask": false`: run `create <issue>` as it is; `default` names the pipeline.
-- `"ask": true`: there are several pipelines and `[run].pipeline` in
-  factory.toml chooses none. Ask the user which pipeline the new jobs run,
-  once per `/mfactory run`, listing each pipeline's `name` and `description`
+- `"ask": false`: run `create <issue>` as it is; `default` names the pipe.
+- `"ask": true`: there are several pipes and `[run].pipe` in
+  factory/factory.toml chooses none. Ask the user which pipe the new jobs run,
+  once per `/mfactory run`, listing each pipe's `name` and `description`
   and offering "the same for every new job in this run". Then run
-  `create <issue> --pipeline <name>`. Offer to save the answer as
-  `[run].pipeline` in factory.toml, so later runs don't ask.
+  `create <issue> --pipe <name>`. Offer to save the answer as
+  `[run].pipe` in factory/factory.toml, so later runs don't ask.
 
-If `create` refuses with `choose a pipeline with --pipeline NAME`, ask the
-same question. Never pick a pipeline for the user.
+If `create` refuses with `choose a pipe with --pipe NAME`, ask the
+same question. Never pick a pipe for the user.
 
 ## Answering a job that waits for a person
 
@@ -204,7 +204,7 @@ user asks, then continue the loop with `next`:
 ## /mfactory setup
 
 Run once after installing, and again when the project's commands change.
-`factory.toml` and the YAML files in `pipelines/` are the only files you edit;
+`factory/factory.toml` and the YAML files in `factory/pipes/` are the only files you edit;
 never touch `.factory/` or the generated agent files.
 
 1. Run `.factory/bin/mfactory config show` to see every setting and where its
@@ -213,7 +213,8 @@ never touch `.factory/` or the generated agent files.
 2. Read the project: `AGENTS.md` or `CLAUDE.md`, the README, the package
    manifest, and the CI workflows. Find the commands that install
    dependencies and run lint, tests and the build.
-3. Edit `factory.toml`:
+3. Edit `factory/factory.toml` (in a project set up before `factory/`, run
+   `.factory/bin/mfactory migrate layout` first, with the user's agreement):
    - `[project] description`: two or three sentences on what the project is
      for and what does not belong in it. Intake judges issues against this.
    - `[project] base_branch`, if it isn't `master`.
@@ -228,7 +229,7 @@ never touch `.factory/` or the generated agent files.
    - `[checks] commands`: the commands from step 2, in the order CI runs them.
      Each must exit non-zero on failure and must not rewrite files.
    - `[skills]`, `skills = [...]` under a reviewer, and `skills: [...]` under a
-     step in `pipelines/default.yaml`, when a project skill clearly belongs to
+     step in `factory/pipes/default.yaml`, when a project skill clearly belongs to
      that work.
    - `[paths] protected`: files no job may change, such as CI workflows,
      deploy configuration.
@@ -238,10 +239,10 @@ never touch `.factory/` or the generated agent files.
    should merge the pull request. Write the opt-in below only when they say
    yes and a merge to the base branch does not publish a release. Otherwise
    leave the default. Show them `.factory/bin/mfactory graph`. The pipeline
-   is `pipelines/default.yaml`; change these keys there, in place:
+   is `factory/pipes/default.yaml`; change these keys there, in place:
 
    ```yaml
-   pipelines:
+   pipes:
      default:
        steps:
          approve:
@@ -253,11 +254,11 @@ never touch `.factory/` or the generated agent files.
            enabled: true
    ```
    If `factory.toml` still has `[steps.*]` tables, run
-   `.factory/bin/mfactory migrate pipelines` first, so the pipeline is in one place.
+   `.factory/bin/mfactory migrate pipes` first, so the pipeline is in one place.
 5. Run `.factory/bin/mfactory sync`, then `.factory/bin/mfactory doctor`. Fix
-   what it reports in `factory.toml` or `pipelines/` and repeat until it passes.
-6. Tell the user what you set and that they need to commit `factory.toml`,
-   `pipelines/`, `.factory/` and the generated files to the base branch before
+   what it reports in `factory/factory.toml` or `factory/pipes/` and repeat until it passes.
+6. Tell the user what you set and that they need to commit `factory/`,
+   `.factory/` and the generated files to the base branch before
    the first run: jobs build from `origin/<base>`.
 
 ## /mfactory <anything else>

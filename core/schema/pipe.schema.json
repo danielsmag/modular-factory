@@ -1,0 +1,462 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://danielsmag.github.io/modular-factory/schema/pipe.schema.json",
+  "title": "modular-factory pipes",
+  "description": "One or more pipes: the steps a job goes through and where each outcome leads. Files live in the project's factory/pipes/ folder.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pipes"
+  ],
+  "properties": {
+    "pipes": {
+      "description": "Pipes by name. A job runs the one chosen with --pipe, or [run].pipe in factory/factory.toml.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/name"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/pipeline"
+      }
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Lowercase letters, digits and hyphens."
+    },
+    "pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "What this pipe is for. Shown when the factory asks which pipe to use."
+        },
+        "extends": {
+          "type": "string",
+          "pattern": "^([a-z][a-z0-9-]*|factory:default)$",
+          "description": "Start from another pipe and override it step by step. factory:default is the built-in pipe."
+        },
+        "start": {
+          "$ref": "#/$defs/name",
+          "description": "The step a new job starts in."
+        },
+        "escalate_to": {
+          "$ref": "#/$defs/name",
+          "description": "The enabled human step a job goes to when an edge's max is reached."
+        },
+        "steps": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/name"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/step"
+          }
+        }
+      }
+    },
+    "edge": {
+      "description": "Where an outcome leads: a step name or end state, or { to, max }.",
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "to": {
+              "type": "string",
+              "minLength": 1
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "How many times in a row the step may send a job this way."
+            }
+          }
+        }
+      ]
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "toolList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_*-]*$"
+      }
+    },
+    "who": {
+      "anyOf": [
+        {
+          "enum": [
+            "author",
+            "maintainer",
+            "operator"
+          ]
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "enum": [
+                  "author",
+                  "maintainer",
+                  "operator"
+                ]
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "step": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "agent",
+            "checks",
+            "review",
+            "human",
+            "merge",
+            "verify"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "skip": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The outcome a switched-off step counts as."
+        },
+        "on": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Z][A-Z0-9-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/edge"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "agent"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/agentStep"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "human"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/humanStep"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "verify"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/verifyStep"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "checks",
+                  "review",
+                  "merge"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/plainStep"
+          }
+        },
+        {
+          "if": {
+            "not": {
+              "required": [
+                "type"
+              ]
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/anyStep"
+          }
+        }
+      ]
+    },
+    "plainStep": {
+      "propertyNames": {
+        "enum": [
+          "type",
+          "enabled",
+          "skip",
+          "on"
+        ]
+      }
+    },
+    "agentStep": {
+      "propertyNames": {
+        "enum": [
+          "type",
+          "enabled",
+          "skip",
+          "on",
+          "role",
+          "instructions",
+          "instructions_file",
+          "writes",
+          "skills",
+          "rules",
+          "tools",
+          "context",
+          "port"
+        ]
+      },
+      "properties": {
+        "role": {
+          "enum": [
+            "intake",
+            "spec",
+            "build",
+            "debug",
+            "post-debug",
+            "approve",
+            "custom"
+          ]
+        },
+        "instructions": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What a custom step's agent must do."
+        },
+        "instructions_file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "writes": {
+          "type": "string",
+          "minLength": 1
+        },
+        "skills": {
+          "$ref": "#/$defs/stringList"
+        },
+        "rules": {
+          "$ref": "#/$defs/stringList"
+        },
+        "tools": {
+          "$ref": "#/$defs/toolList"
+        },
+        "context": {
+          "type": "string"
+        },
+        "port": {
+          "type": "boolean"
+        }
+      }
+    },
+    "humanStep": {
+      "propertyNames": {
+        "enum": [
+          "type",
+          "enabled",
+          "skip",
+          "on",
+          "who",
+          "shows",
+          "ask",
+          "pr_ready",
+          "replies"
+        ]
+      },
+      "properties": {
+        "who": {
+          "$ref": "#/$defs/who"
+        },
+        "shows": {
+          "type": "string"
+        },
+        "ask": {
+          "type": "string"
+        },
+        "pr_ready": {
+          "type": "boolean"
+        },
+        "replies": {
+          "enum": [
+            "any",
+            "tool"
+          ]
+        }
+      }
+    },
+    "verifyStep": {
+      "propertyNames": {
+        "enum": [
+          "type",
+          "enabled",
+          "skip",
+          "on",
+          "after",
+          "commands",
+          "agent",
+          "retries",
+          "on_failure",
+          "wait",
+          "timeout_minutes",
+          "url",
+          "skills",
+          "rules",
+          "tools",
+          "context",
+          "port"
+        ]
+      },
+      "properties": {
+        "after": {
+          "enum": [
+            "merge",
+            "deploy"
+          ]
+        },
+        "commands": {
+          "$ref": "#/$defs/stringList"
+        },
+        "agent": {
+          "type": "boolean"
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "on_failure": {
+          "enum": [
+            "comment",
+            "issue",
+            "revert-pr"
+          ]
+        },
+        "wait": {
+          "type": "string"
+        },
+        "timeout_minutes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "url": {
+          "type": "string"
+        },
+        "skills": {
+          "$ref": "#/$defs/stringList"
+        },
+        "rules": {
+          "$ref": "#/$defs/stringList"
+        },
+        "tools": {
+          "$ref": "#/$defs/toolList"
+        },
+        "context": {
+          "type": "string"
+        },
+        "port": {
+          "type": "boolean"
+        }
+      }
+    },
+    "anyStep": {
+      "description": "A step without type overrides a step of the pipeline it extends; its keys are checked once merged.",
+      "propertyNames": {
+        "enum": [
+          "enabled",
+          "skip",
+          "on",
+          "role",
+          "instructions",
+          "instructions_file",
+          "writes",
+          "skills",
+          "rules",
+          "tools",
+          "context",
+          "port",
+          "who",
+          "shows",
+          "ask",
+          "pr_ready",
+          "replies",
+          "after",
+          "commands",
+          "agent",
+          "retries",
+          "on_failure",
+          "wait",
+          "timeout_minutes",
+          "url"
+        ]
+      }
+    }
+  }
+}

@@ -1,13 +1,13 @@
-# yaml-language-server: $schema=../schema/pipeline.schema.json
+# yaml-language-server: $schema=../schema/pipe.schema.json
 #
-# The factory's built-in pipeline. A project's pipelines/ folder holds its own
+# The factory's built-in pipe. A project's factory/pipes/ folder holds its own
 # copy, written by `mfactory install`; this one is used when that folder has no
 # `default`. Don't edit this copy: `mfactory upgrade` replaces it.
 #
 # Each step names its type and where each outcome leads. `max` on an edge is a
 # loop limit: when it is used up the job goes to `escalate_to` instead.
 
-pipelines:
+pipes:
   default:
     description: Intake, spec, build, checks, review and approval, then a person merges.
     start: intake             # the step a new job starts in

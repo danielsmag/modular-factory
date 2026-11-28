@@ -203,7 +203,7 @@ function dagView(graph, opts) {
   const root = svg("svg", {
     class: "dag" + (job ? " dag-job" : ""), viewBox: `0 0 ${layout.width} ${layout.height}`,
     width: layout.width, height: layout.height, role: "img",
-    "aria-label": opts.label || "Pipeline graph",
+    "aria-label": opts.label || "Pipe graph",
   });
   const defs = svg("defs", {});
   ["base", "hot", "taken", "back"].forEach((kind) => {

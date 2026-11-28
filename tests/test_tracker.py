@@ -18,7 +18,7 @@ def tracker(world):
 
 def link_with_closes(world):
     """Set `[project].issue_link = "closes"` in the test project's factory.toml."""
-    path = world.repo / "factory.toml"
+    path = world.config_file
     path.write_text(path.read_text().replace("[project]\n", '[project]\nissue_link = "closes"\n', 1))
 
 

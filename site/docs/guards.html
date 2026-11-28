@@ -20,7 +20,7 @@
   <h2 id="intake-has-no-shell">Limiting intake</h2>
   <p>Intake reads an issue nobody has reviewed. Each tool can limit what it may do.</p>
   <ul>
-    <li>In Claude Code, every agent, intake included, gets every tool by default (<code>[tools.claude] agent_tools = ["all"]</code>), so plugin and MCP tools work. To give intake only the read and write tools and no shell, set <code>tools: [default]</code> on the <code>intake</code> step in <code>pipelines/default.yaml</code>.</li>
+    <li>In Claude Code, every agent, intake included, gets every tool by default (<code>[tools.claude] agent_tools = ["all"]</code>), so plugin and MCP tools work. To give intake only the read and write tools and no shell, set <code>tools: [default]</code> on the <code>intake</code> step in <code>factory/pipes/default.yaml</code>.</li>
     <li>In Cursor, the only restriction an agent file offers is <code>readonly</code>, which also stops intake writing <code>intake.md</code>. Intake replies with the file's contents. The orchestrator passes the reply to <code>mfactory done &lt;job&gt; --reply</code>, which checks it and writes the file.</li>
     <li>In Codex, intake's file sets <code>shell_tool = false</code> and hands in its reply the same way. Whether a Codex agent without a shell can still read the project's files has not been tried. If it cannot, set <code>[tools.codex] intake_shell = true</code>. Intake then has a shell on Codex, which is a weaker guard.</li>
   </ul>

@@ -92,7 +92,7 @@ def test_an_unknown_tracker_setting_is_named(world):
 
 def test_jira_cannot_close_issues_from_a_pull_request(world):
     world.configure(JIRA + COLUMNS)
-    path = world.repo / "factory.toml"
+    path = world.config_file
     path.write_text(path.read_text().replace("[project]\n", '[project]\nissue_link = "closes"\n', 1))
     with pytest.raises(ConfigError, match=r'issue_link = "closes"'):
         config.load(world.repo)
@@ -158,7 +158,7 @@ def test_the_queue_is_never_a_steps_status(world):
 
 def test_a_branch_pattern_must_accept_a_branch_with_a_jira_key(world):
     world.configure(JIRA + COLUMNS)
-    path = world.repo / "factory.toml"
+    path = world.config_file
     path.write_text(path.read_text().replace(
         "[project]\n", '[project]\nbranch_pattern = "factory/[a-z0-9-]+"\n', 1))
     with pytest.raises(ConfigError) as caught:
@@ -169,7 +169,7 @@ def test_a_branch_pattern_must_accept_a_branch_with_a_jira_key(world):
 
 
 def test_a_branch_pattern_without_jira_is_checked_without_a_key(world):
-    path = world.repo / "factory.toml"
+    path = world.config_file
     path.write_text(path.read_text().replace(
         "[project]\n", '[project]\nbranch_pattern = "factory/[a-z0-9-]+"\n', 1))
     assert config.load(world.repo)["tracker"]["kind"] == "github"

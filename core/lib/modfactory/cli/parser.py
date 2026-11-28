@@ -67,21 +67,24 @@ def parser() -> argparse.ArgumentParser:
     show: argparse.ArgumentParser = sub.add_parser("config", help="show the merged configuration")
     show.add_argument("action", choices=["show"])
     show.add_argument("--json", action="store_true")
-    graph: argparse.ArgumentParser = sub.add_parser("graph", help="show a pipeline in effect")
+    graph: argparse.ArgumentParser = sub.add_parser("graph", help="show a pipe in effect")
     graph.add_argument("--json", action="store_true")
-    graph.add_argument("--pipeline", metavar="NAME", help="the pipeline to show; default: default")
-    pipes: argparse.ArgumentParser = sub.add_parser("pipelines", help="list, show or validate the YAML pipelines")
-    pipes_sub = pipes.add_subparsers(dest="pipelines_what", required=True)
-    pipes_list: argparse.ArgumentParser = pipes_sub.add_parser("list", help="every pipeline, its file and steps")
+    graph.add_argument("--pipe", "--pipeline", dest="pipe", metavar="NAME", help="the pipe to show; default: default")
+    # `pipelines` is the name this command had before it was released as `pipes`.
+    pipes: argparse.ArgumentParser = sub.add_parser("pipes", aliases=["pipelines"],
+                                                    help="list, show or validate the YAML pipes in factory/pipes/")
+    pipes_sub = pipes.add_subparsers(dest="pipes_what", required=True)
+    pipes_list: argparse.ArgumentParser = pipes_sub.add_parser("list", help="every pipe, its file and steps")
     pipes_list.add_argument("--json", action="store_true",
-                            help="one JSON object: the pipelines, [run].pipeline, and whether to ask which to use")
-    pipes_show: argparse.ArgumentParser = pipes_sub.add_parser("show", help="one pipeline after extends, as YAML")
+                            help="one JSON object: the pipes, [run].pipe, and whether to ask which to use")
+    pipes_show: argparse.ArgumentParser = pipes_sub.add_parser("show", help="one pipe after extends, as YAML")
     pipes_show.add_argument("name")
-    pipes_sub.add_parser("validate", help="check every pipeline file against the schema and the graph rules")
-    pipes_sub.add_parser("schema", help="print the JSON Schema of a pipeline file")
+    pipes_sub.add_parser("validate", help="check every pipe file against the schema and the graph rules")
+    pipes_sub.add_parser("schema", help="print the JSON Schema of a pipe file")
     migrate: argparse.ArgumentParser = sub.add_parser("migrate", help="move old settings to their new home")
-    migrate.add_argument("what", choices=["pipelines"],
-                         help="pipelines: [steps.*] in factory.toml to pipelines/default.yaml")
+    migrate.add_argument("what", choices=["layout", "pipes"],
+                         help="layout: factory.toml at the root into factory/; "
+                              "pipes: [steps.*] in factory.toml to factory/pipes/default.yaml")
     sub.add_parser("models", help="show the model and effort of each agent, per tool")
     sub.add_parser("skills", help="list skills and instruction files, and which agents read them")
 
@@ -90,8 +93,8 @@ def parser() -> argparse.ArgumentParser:
                            help="one JSON array, with each issue's title, URL, dates, author and labels")
     create: argparse.ArgumentParser = sub.add_parser("create", help="start a job for a labeled issue")
     create.add_argument("issue")
-    create.add_argument("--pipeline", metavar="NAME",
-                        help="the pipeline the job runs; default: [run].pipeline, or the only pipeline")
+    create.add_argument("--pipe", "--pipeline", dest="pipe", metavar="NAME",
+                        help="the pipe the job runs; default: [run].pipe, or the only pipe")
     file: argparse.ArgumentParser = sub.add_parser(
         "file", help="open an issue in the queue; its text is read from standard input")
     file.add_argument("--tracker", choices=config.TRACKER_KINDS,

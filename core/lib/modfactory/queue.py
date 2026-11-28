@@ -54,8 +54,8 @@ class NeedsPipeline(Refused):
             for name, pipe in base.pipelines.items()]
         listed: str = "; ".join(f"{c['name']}" + (f" ({c['description']})" if c["description"] else "")
                                 for c in self.choices)
-        super().__init__(f"choose a pipeline with --pipeline NAME, or set [run].pipeline in factory.toml. "
-                         f"Pipelines: {listed}")
+        super().__init__(f"choose a pipe with --pipe NAME, or set [run].pipe in factory/factory.toml. "
+                         f"Pipes: {listed}")
 
 
 class Queue:

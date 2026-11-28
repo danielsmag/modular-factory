@@ -11,7 +11,28 @@ from . import board, graph, pipelines
 from .util import CORE, ConfigError, Refused, adapters_dir
 
 SCHEMA = 1
-FILE = "factory.toml"
+FILE = "factory.toml"   # the file's name, and the label of its values in `config show`
+DIR = "factory"         # the folder at the repository root that holds factory.toml and the pipes
+
+
+def config_path(repo) -> Path:
+    """factory/factory.toml; the factory.toml at the root in a project set up before that folder; else where it goes."""
+    repo = Path(repo)
+    current: Path = repo / DIR / FILE
+    if current.is_file():
+        return current
+    legacy: Path = repo / FILE
+    return legacy if legacy.is_file() else current
+
+
+def config_rel(repo) -> str:
+    """config_path relative to the repository, as git and people name it."""
+    return config_path(repo).relative_to(Path(repo)).as_posix()
+
+
+def is_legacy_layout(repo) -> bool:
+    """True when the project still keeps factory.toml at its root, not in factory/."""
+    return config_path(repo) == Path(repo) / FILE
 NAME = re.compile(r"[a-z][a-z0-9-]*")
 RISKS = ("low", "medium", "high")
 RESERVED = graph.END_STATES | {"default"}
@@ -96,7 +117,7 @@ class Config:
         if name in base._views:
             return base._views[name]
         if name not in base.pipelines:
-            raise Refused(f'there is no pipeline "{name}". Pipelines: {", ".join(base.pipelines) or "none"}')
+            raise Refused(f'there is no pipe "{name}". Pipes: {", ".join(base.pipelines) or "none"}')
         pipe: pipelines.Pipeline = base.pipelines[name]
         data: dict[str, Any] = dict(base.data, steps=pipe.steps,
                                     run=dict(base.data["run"], start=pipe.start, escalate_to=pipe.escalate_to))
@@ -120,13 +141,13 @@ class Config:
         return self.base_config.pipelines[self.pipeline_name or pipelines.DEFAULT]
 
     def choose_pipeline(self, flag: str | None) -> str | None:
-        """The pipeline a new job runs: the flag, else [run].pipeline, else the only one. None means ask."""
+        """The pipe a new job runs: the flag, else [run].pipe, else the only one. None means ask."""
         base: Config = self.base_config
         if flag:
             if flag not in base.pipelines:
-                raise Refused(f'there is no pipeline "{flag}". Pipelines: {", ".join(base.pipelines)}')
+                raise Refused(f'there is no pipe "{flag}". Pipes: {", ".join(base.pipelines)}')
             return flag
-        chosen: str = str(base.data["run"].get("pipeline") or "")
+        chosen: str = str(base.data["run"].get("pipe") or "")
         if chosen:
             return chosen
         if len(base.pipelines) == 1:
@@ -287,6 +308,44 @@ class Config:
         return chosen
 
 
+def _pipes_setting(data: dict[str, Any], sources: dict[tuple[str, ...], str]) -> str | None:
+    """The pipes folder factory.toml names, or None for the default, which falls back to 0.32.0's pipelines/."""
+    paths: object = data.get("paths")
+    if not isinstance(paths, dict):
+        return None
+    for key in ("pipes", "pipelines"):
+        if sources.get(("paths", key)) == FILE and isinstance(paths.get(key), str) and paths[key].strip():
+            return paths[key]
+    return None
+
+
+def pipes_setting(cfg: "Config") -> str | None:
+    """The pipes folder the project names in factory.toml, or None for the default."""
+    base: Config = cfg.base_config
+    return _pipes_setting(base.data, base.sources)
+
+
+def pipes_folder(cfg: "Config") -> Path:
+    """The folder the project's pipes are read from."""
+    return pipelines.folder(cfg.repo, pipes_setting(cfg))
+
+
+def old_names(cfg: "Config") -> list[str]:
+    """What still uses 0.32.0's names or places, for doctor. `mfactory migrate layout` moves all of them."""
+    base: Config = cfg.base_config
+    found: list[str] = []
+    if is_legacy_layout(base.repo):
+        found.append(f"{FILE} is at the root of the repository, not in {DIR}/")
+    if pipes_setting(base) is None and pipelines.old_folder_in_use(base.repo):
+        found.append(f"the pipes are in {pipelines.OLD_FOLDER}/, not {pipelines.FOLDER}/")
+    found += [f"{report.path} declares `{pipelines.OLD_KEY}:`, not `{pipelines.KEY}:`"
+              for report in base.pipeline_files if report.old_key]
+    for key_path, name in ((("run", "pipeline"), "[run].pipeline"), (("paths", "pipelines"), "[paths].pipelines")):
+        if base.sources.get(key_path) == FILE:
+            found.append(f"{name} is now {name.replace('pipelines', 'pipes').replace('pipeline', 'pipe')}")
+    return found
+
+
 def all_steps(cfg: "Config") -> dict[str, Any]:
     """Every step name across the project's pipelines, the default pipeline's definition first.
 
@@ -316,14 +375,14 @@ def shown_agent(name):
 def load(repo, validate=True, text=None):
     """The effective config: defaults, then each adapter's model table, then factory.toml."""
     repo = Path(repo)
-    path = repo / FILE
+    path = config_path(repo)
     if text is None and not path.exists():
-        raise Refused(f"no {FILE} in {repo}. Run `mfactory install` there first.")
+        raise Refused(f"no {DIR}/{FILE} in {repo}. Run `mfactory install` there first.")
     adapters = load_adapters()
     layers = [("default", read_toml(CORE / "defaults.toml"))]
     for name, adapter in adapters.items():
         layers.append((f"adapter {name}", {"models": {name: adapter.get("models", {})}}))
-    project = read_toml(path, FILE) if text is None else _parse(text)
+    project = read_toml(path, config_rel(repo)) if text is None else _parse(text)
     layers.append((FILE, project))
 
     data, sources = {}, {}
@@ -342,9 +401,11 @@ def load(repo, validate=True, text=None):
     legacy_run: dict[str, Any] = {k: run_table.pop(k) for k in ("start", "escalate_to") if k in run_table}
     for old in [p for p in sources if p[:1] == ("steps",) or p in (("run", "start"), ("run", "escalate_to"))]:
         del sources[old]
-    paths_table: object = data.get("paths")
+    # 0.32.0's names for two settings: [run].pipeline and [paths].pipelines.
+    if isinstance(run_table.get("pipeline"), str) and sources.get(("run", "pipe")) != FILE:
+        run_table["pipe"] = run_table["pipeline"]
     pipes, files, pipe_problems = pipelines.load_all(
-        repo, paths_table.get("pipelines") if isinstance(paths_table, dict) else None,
+        repo, _pipes_setting(data, sources),
         legacy_steps if isinstance(legacy_steps, dict) else {}, legacy_run, FILE)
     default: pipelines.Pipeline | None = pipes.get(pipelines.DEFAULT)
     if default is not None:
@@ -689,13 +750,15 @@ TABLES = {
                 "merge_method": one_of("merge", "squash", "rebase"),
                 "pr_title": a_string, "pr_title_pattern": a_regex, "issue_link": one_of("refs", "closes"),
                 "branch_prefix": a_branch_prefix, "branch_pattern": a_regex},
-    "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string, "pipeline": a_string,
+    "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string, "pipe": a_string,
+            "pipeline": a_string,
             "pick": one_of("all", "mine"), "report_problems": a_bool,
             "authors": a_login_list, "assignees": a_login_list},
     "workspace": {"concurrency": an_int(1)},
     "checks": {"commands": a_string_list, "timeout_minutes": an_int(1)},
     "labels": {"queue": a_filled_string, "needs_info": a_filled_string, "needs_human": a_filled_string},
-    "paths": {"worktrees": a_filled_string, "protected": a_string_list, "pipelines": a_filled_string},
+    "paths": {"worktrees": a_filled_string, "protected": a_string_list, "pipes": a_filled_string,
+              "pipelines": a_filled_string},
     "ports": {"base": an_int(1024), "step": an_int(3)},
     "skills": {"all": a_string_list},
     "rules": {"all": a_string_list},
@@ -850,10 +913,10 @@ def check(cfg):
         found_graph: list[str] = graph.problems(pipe.graph_data() if pipe else d)
         graph_problems += found_graph
         out += _in_pipeline(pipe, found + found_graph)
-    run_pipeline: object = d.get("run", {}).get("pipeline") if isinstance(d.get("run"), dict) else None
+    run_pipeline: object = d.get("run", {}).get("pipe") if isinstance(d.get("run"), dict) else None
     if isinstance(run_pipeline, str) and run_pipeline and cfg.pipelines and run_pipeline not in cfg.pipelines:
-        out.append(f'[run].pipeline = "{run_pipeline}" is not a pipeline. '
-                   f"Pipelines: {', '.join(cfg.pipelines)}")
+        out.append(f'[run].pipe = "{run_pipeline}" is not a pipe. '
+                   f"Pipes: {', '.join(cfg.pipelines)}")
 
     # reviewers and surfaces
     for name, reviewer in d.get("reviewers", {}).items():
@@ -980,7 +1043,7 @@ def _in_pipeline(pipe, found):
     def relabel(message: str) -> str:
         message = re.sub(r"\[steps\.([^\]]+)\]", r"steps.\1", message)
         return message.replace("[run].start", "start").replace("[run].escalate_to", "escalate_to")
-    return [f'{pipe.file} (pipeline "{pipe.name}"): {relabel(m)}' for m in found]
+    return [f'{pipe.file} (pipe "{pipe.name}"): {relabel(m)}' for m in found]
 
 
 # ---- Showing ---------------------------------------------------------------
@@ -1027,7 +1090,7 @@ def pipelines_json(cfg):
     base = cfg.base_config
     texts: dict[str, str] = {report.path: report.text for report in base.pipeline_files}
     builtin_text: str = pipelines.BUILTIN_FILE.read_text()
-    chosen: str = str(base.data["run"].get("pipeline") or "")
+    chosen: str = str(base.data["run"].get("pipe") or "")
     rows = []
     for name, pipe in base.pipelines.items():
         try:
@@ -1043,7 +1106,7 @@ def pipelines_json(cfg):
     return {
         "default": chosen or (next(iter(base.pipelines)) if len(base.pipelines) == 1 else None),
         "ask": not chosen and len(base.pipelines) > 1,
-        "folder": str(base.data["paths"].get("pipelines") or "pipelines"),
+        "folder": pipes_folder(base).relative_to(base.repo).as_posix(),
         "legacy": bool(getattr(base, "legacy_pipeline", False)),
         "pipelines": rows,
         "files": [{"path": r.path, "names": r.names, "errors": r.errors, "yaml": r.text}

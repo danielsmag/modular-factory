@@ -262,10 +262,18 @@ def uninstall(repo: Path, remove_config: bool = False, labels: bool = False,
     if had_worktrees:
         removed.append(worktrees.strip("/") + "/")
     if remove_config:
-        config_path: Path = repo / config.FILE
+        config_path: Path = config.config_path(repo)
         if config_path.is_file():
+            removed.append(config.config_rel(repo))
             config_path.unlink()
-            removed.append(config.FILE)
+        pipes_dir: Path = config.pipes_folder(cfg) if cfg else repo / "factory" / "pipes"
+        if pipes_dir.is_dir() and pipes_dir.resolve().is_relative_to(repo.resolve()):
+            shutil.rmtree(pipes_dir)
+            removed.append(pipes_dir.relative_to(repo).as_posix() + "/")
+        own_dir: Path = repo / config.DIR
+        if own_dir.is_dir() and not any(own_dir.iterdir()):
+            own_dir.rmdir()
+            removed.append(config.DIR + "/")
     for rel in removed:
         say(f"remove  {rel}")
     if labels:
@@ -347,7 +355,7 @@ def _project_target(repo: Path, label: str, after: str, need: object, required: 
     if not version_file.is_file():
         return Target("project", label, repo, "", after, "fail", reason=f"{version_file} is missing")
     before: str = version_file.read_text().strip()
-    config_file: Path = repo / config.FILE
+    config_file: Path = config.config_path(repo)
     try:
         have: object = need if not config_file.is_file() else config.read_toml(config_file).get("schema")
     except FactoryError as error:
@@ -562,7 +570,7 @@ def _run_upgrade(targets: list[Target], root: Path, dry_run: bool, say: Callable
         say(_project_followup(target))
     noted: bool = False
     for target in schema_targets:
-        say(f"{target.label}  set schema = {target.need} in {config.FILE}, then `mfactory upgrade`")
+        say(f"{target.label}  set schema = {target.need} in {config.config_rel(target.path)}, then `mfactory upgrade`")
         if not noted:
             note: str = _changelog_note(root, target.after)
             if note:

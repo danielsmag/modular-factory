@@ -18,7 +18,7 @@ from .service import tracker as trackers
 from .store import Store
 from .util import CORE, SOURCE_REPO, ConfigError, FactoryError, Refused, run, tail, version
 
-ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "pipelines", "schema", "templates", "VERSION"]
+ITEMS = ["bin", "lib", "roles", "skill", "defaults.toml", "pipes", "schema", "templates", "VERSION"]
 TEMPLATE: Path = CORE / "templates" / "factory.toml"
 _BASE_TOKEN: str = "__BASE_BRANCH__"
 _TOOLS_TOKEN: str = "__TOOLS__"
@@ -138,8 +138,12 @@ def _pattern_present(have: set[str], pattern: str) -> bool:
 def personal_patterns(cfg: config.Config) -> list[str]:
     """Ignore lines for a personal install: the factory, its runtime dirs, and generated files."""
     worktrees: str = str(cfg["paths"]["worktrees"]).strip("/")
-    folder: str = str(cfg["paths"].get("pipelines") or "pipelines").strip("/")
-    patterns: list[str] = [f"/{config.FILE}", "/.factory/", f"/{folder}/", f"/{worktrees}/"]
+    folder: str = config.pipes_folder(cfg).relative_to(cfg.repo).as_posix().strip("/")
+    patterns: list[str] = [f"/{config.DIR}/", "/.factory/", f"/{worktrees}/"]
+    if config.is_legacy_layout(cfg.repo):
+        patterns.insert(0, f"/{config.FILE}")
+    if not folder.startswith(config.DIR + "/"):
+        patterns.insert(2, f"/{folder}/")
     seen: set[str] = set(patterns)
     names: list[str] = [name for name in _TOOL_ORDER if name in cfg.adapters]
     names.extend(sorted(name for name in cfg.adapters if name not in _TOOL_ORDER))
@@ -175,7 +179,7 @@ def excluded_by_info(repo: Path, path: str) -> bool:
 
 def is_personal(repo: Path) -> bool:
     """True when this checkout already hides factory.toml in `.git/info/exclude`."""
-    return excluded_by_info(Path(repo), config.FILE)
+    return excluded_by_info(Path(repo), config.config_rel(repo))
 
 
 def exclude_entries(repo: Path, patterns: list[str]) -> list[str]:
@@ -207,18 +211,23 @@ def init(repo: Path, tools: list[str] | None = None, say: Callable[[str], None] 
     copied = copy_core(CORE.parent if (CORE.parent / "core").is_dir() else CORE, repo)
     say(f"ok    .factory/ {'installed' if copied else 'already in place'} (version {version()})")
 
-    path = repo / config.FILE
+    path = config.config_path(repo)
+    rel: str = config.config_rel(repo)
     known = config.load_adapters()
     for tool in tools or []:
         if tool not in known:
             raise Refused(f'"{tool}" is not a tool. Known: {", ".join(known)}')
     if path.exists():
-        say(f"ok    {config.FILE} exists and was left as it is")
+        say(f"ok    {rel} exists and was left as it is")
         if tools:
-            say(f"      To change the tools, set [tools].enabled in {config.FILE}.")
+            say(f"      To change the tools, set [tools].enabled in {rel}.")
+        if config.is_legacy_layout(repo):
+            say(f"note  {config.FILE} is at the root. `.factory/bin/mfactory migrate layout` moves it into "
+                f"{config.DIR}/, with the pipes.")
     else:
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(render_starter(base_branch(repo), tools or ["claude"]))
-        say(f"ok    {config.FILE} written")
+        say(f"ok    {rel} written")
 
     write_pipelines(repo, say)
     cfg = config.load(repo)
@@ -248,32 +257,33 @@ def init(repo: Path, tools: list[str] | None = None, say: Callable[[str], None] 
     say(syncer.describe_skills(cfg).rstrip())
     say("")
     say("Next:")
-    say(f"  1. In your tool, run `/mfactory setup` to fill in {config.FILE} (or edit it yourself).")
+    say(f"  1. In your tool, run `/mfactory setup` to fill in {rel} (or edit it yourself).")
     say("  2. Run `.factory/bin/mfactory doctor`.")
     if personal:
-        say(f"  3. Leave {config.FILE}, pipelines/, .factory/ and the generated files untracked. "
+        say(f"  3. Leave {config.DIR}/, .factory/ and the generated files untracked. "
             "This checkout ignores them.")
     else:
-        say(f"  3. Commit {config.FILE}, pipelines/, .factory/ and the generated files to {cfg.base}, and push.")
+        say(f"  3. Commit {config.DIR}/, .factory/ and the generated files to {cfg.base}, and push.")
     say(f"  4. Label an issue `{cfg['labels']['queue']}` and run `/mfactory run`.")
 
 
 def write_pipelines(repo: Path, say: Callable[[str], None] = print) -> None:
-    """Create the pipelines/ folder at the repository root with default.yaml, unless it holds pipelines already."""
+    """Create factory/pipes/ with default.yaml, unless the folder holds pipes already."""
     setting: object = None
-    if (repo / config.FILE).is_file():
+    if config.config_path(repo).is_file():
         try:
-            setting = config.read_toml(repo / config.FILE).get("paths", {}).get("pipelines")
+            paths_table = config.read_toml(config.config_path(repo)).get("paths", {})
+            setting = paths_table.get("pipes") or paths_table.get("pipelines")
         except ConfigError:
             setting = None
     folder: Path = pipelines.folder(repo, setting)
     rel: str = folder.relative_to(repo).as_posix()
     if pipelines.project_files(repo, setting):
-        say(f"ok    {rel}/ has pipelines and was left as it is")
+        say(f"ok    {rel}/ has pipes and was left as it is")
         return
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "default.yaml").write_text(pipelines.starter_text())
-    say(f"ok    {rel}/default.yaml written: the default pipeline, ready to edit")
+    say(f"ok    {rel}/default.yaml written: the default pipe, ready to edit")
 
 
 # ---- upgrade ---------------------------------------------------------------
@@ -326,9 +336,10 @@ def upgrade(repo, ref="latest", source=None, say=print):
         core, _, _, _ = layout(root)
         after = (core / "VERSION").read_text().strip()
         new_schema = config.read_toml(core / "defaults.toml")["schema"]
-        have = config.read_toml(repo / config.FILE).get("schema") if (repo / config.FILE).exists() else new_schema
+        current: Path = config.config_path(repo)
+        have = config.read_toml(current).get("schema") if current.exists() else new_schema
         if new_schema != have:
-            raise Refused(f"version {after} reads schema {new_schema}, and {config.FILE} is schema {have}. "
+            raise Refused(f"version {after} reads schema {new_schema}, and {config.config_rel(repo)} is schema {have}. "
                           f"Follow the release notes for v{after}, set schema = {new_schema}, "
                           "then upgrade again.")
         copy_core(root, repo)
@@ -336,7 +347,7 @@ def upgrade(repo, ref="latest", source=None, say=print):
     # The new version's own code must do the sync, not the one still loaded here.
     res = subprocess.run([sys.executable, str(project_cli(repo)), "sync"], cwd=repo)
     if res.returncode != 0:
-        raise Refused(f"the new version could not sync. Fix {config.FILE} as it says, then run "
+        raise Refused(f"the new version could not sync. Fix {config.config_rel(repo)} as it says, then run "
                       "`.factory/bin/mfactory sync`.")
 
 
@@ -382,7 +393,7 @@ def doctor(repo, run_checks=True, say=print):
         yaml = pipelines.yaml_module()
         ok(f"PyYAML {yaml.__version__}")
     except FactoryError as e:
-        fail(f"{e}. The pipelines are YAML files.")
+        fail(f"{e}. The pipes are YAML files.")
         return failures
 
     # config and graph
@@ -391,34 +402,37 @@ def doctor(repo, run_checks=True, say=print):
     except ConfigError as e:
         for problem in e.problems:
             fail(problem)
-        say(f"\n{failures} problem(s). Fix {config.FILE} first; the other checks need a valid config.")
+        say(f"\n{failures} problem(s). Fix {config.config_rel(repo)} and the pipes first; "
+            "the other checks need a valid config.")
         return failures
     except FactoryError as e:
         fail(str(e))
         return failures
-    ok(f"{config.FILE} is valid")
-    folder_setting: object = cfg["paths"].get("pipelines")
+    ok(f"{config.config_rel(repo)} is valid")
+    for old in config.old_names(cfg):
+        warn(f"{old}. Run `.factory/bin/mfactory migrate layout` to move to factory/ and the new names.")
+    folder_setting: object = config.pipes_setting(cfg)
     folder: Path = pipelines.folder(repo, folder_setting)
     if not pipelines.project_files(repo, folder_setting):
-        warn(f"{folder.relative_to(repo).as_posix()}/ has no pipeline files, so jobs run the built-in pipeline. "
-             "Run `mfactory install` to write pipelines/default.yaml.")
+        warn(f"{folder.relative_to(repo).as_posix()}/ has no pipe files, so jobs run the built-in pipe. "
+             f"Run `mfactory install` to write {pipelines.FOLDER}/default.yaml.")
     if getattr(cfg, "legacy_pipeline", False):
-        warn(f"[steps.*] and [run].start/escalate_to in {config.FILE} are the old way to change the pipeline. "
-             "Run `.factory/bin/mfactory migrate pipelines` to move them to pipelines/default.yaml.")
+        warn(f"[steps.*] and [run].start/escalate_to in {config.config_rel(repo)} are the old way to change the "
+             f"pipeline. Run `.factory/bin/mfactory migrate pipes` to move them to {pipelines.FOLDER}/default.yaml.")
     for name, pipe in cfg.pipelines.items():
         view = cfg.view(name)
         off = [n for n, s in view.steps.items() if not graph.enabled(s)]
         where: str = pipe.file if pipe.file != "built-in" else "built-in"
-        ok(f'pipeline "{name}" ({where}) is valid: {len(view.steps) - len(off)} steps on'
+        ok(f'pipe "{name}" ({where}) is valid: {len(view.steps) - len(off)} steps on'
            + (f", off: {', '.join(off)}" if off else ""))
         gap: str | None = graph.hand_merge_warning(view.steps)
         if gap:
-            warn(gap if name == pipelines.DEFAULT else f'pipeline "{name}": {gap}')
+            warn(gap if name == pipelines.DEFAULT else f'pipe "{name}": {gap}')
         closed: str | None = graph.closed_issue_warning(view.steps, cfg["project"].get("issue_link", "refs"))
         if closed:
-            warn(closed if name == pipelines.DEFAULT else f'pipeline "{name}": {closed}')
-    if len(cfg.pipelines) > 1 and not cfg["run"].get("pipeline"):
-        ok(f"{len(cfg.pipelines)} pipelines and no [run].pipeline: `/mfactory run` asks which one each job runs")
+            warn(closed if name == pipelines.DEFAULT else f'pipe "{name}": {closed}')
+    if len(cfg.pipelines) > 1 and not cfg["run"].get("pipe"):
+        ok(f"{len(cfg.pipelines)} pipes and no [run].pipe: `/mfactory run` asks which one each job runs")
     dropped: list[str] = Store(cfg).reconcile_index()
     if dropped:
         ok(f"index.json rewritten; dropped {', '.join(dropped)}")
@@ -478,15 +492,16 @@ def doctor(repo, run_checks=True, say=print):
         fail(f'origin has no branch "{base}" ([project].base_branch), or it can\'t be fetched')
     else:
         ok(f"origin/{base} can be fetched")
-        tracked = set(run(["git", "ls-tree", "-r", "--name-only", f"origin/{base}", "--", config.FILE,
+        rel = config.config_rel(repo)
+        tracked = set(run(["git", "ls-tree", "-r", "--name-only", f"origin/{base}", "--", rel,
                            ".factory/bin/mfactory", ".factory/bin/factory"], cwd=repo, check=False).stdout.split())
-        if config.FILE not in tracked or not tracked & {".factory/bin/mfactory", ".factory/bin/factory"}:
-            if excluded_by_info(repo, config.FILE) and excluded_by_info(repo, ".factory"):
-                ok(f"{config.FILE} and .factory/ are ignored in this checkout (.git/info/exclude). "
+        if rel not in tracked or not tracked & {".factory/bin/mfactory", ".factory/bin/factory"}:
+            if excluded_by_info(repo, rel) and excluded_by_info(repo, ".factory"):
+                ok(f"{rel} and .factory/ are ignored in this checkout (.git/info/exclude). "
                    f"Worktrees built from origin/{base} do not contain them. "
                    "A check that needs those files must use the main checkout.")
             else:
-                warn(f"{config.FILE} and .factory/ aren't on origin/{base} yet. Commit and push them: "
+                warn(f"{rel} and .factory/ aren't on origin/{base} yet. Commit and push them: "
                      "jobs build from that branch.")
     ignored = run(["git", "check-ignore", "-q", ".factory/jobs/x"], cwd=repo, check=False).returncode == 0
     (ok if ignored else fail)(".factory/jobs/ is ignored by git" if ignored

@@ -11,7 +11,7 @@ changed from the project it is derived from.
 | The orchestrator, the `/mfactory` skill | A prompt your coding tool's main agent follows | Nothing. It asks the script what to do, starts the agents the script names, and reports back. |
 | The agents | One small generated file per step, pointing at a prompt in `.factory/roles/` | The content of their one step: a spec, a build, a review. |
 
-The pipeline is data in `factory.toml`, so no prompt describes it. Changing
+The pipeline is data, the pipes in `factory/pipes/*.yaml`, so no prompt describes it. Changing
 the pipeline changes no prompt, and the orchestrator works the same for any
 graph.
 
@@ -42,7 +42,7 @@ core/bin/mfactory          the CLI's entry point
 core/bin/factory          the old name, kept so an upgrade from 0.1.0 can sync
 core/lib/modfactory/      the factory's code
   cli/                    the command line: parser, install and status
-  config.py               factory.toml over the defaults; validation; `config show`
+  config.py               factory/factory.toml over the defaults; validation; `config show`
   graph.py                steps, edges, outcomes; validation of the graph
   board.py                which status each step's card sits in; what a moved card means
   engine.py               next and done: entering steps, following edges, limits
@@ -73,16 +73,16 @@ core/lib/modfactory/      the factory's code
       jira_acli.py        Jira through the Atlassian CLI, when REST has no credentials
       routing.py          GitHub and Jira together: each issue to its own tracker, the queues in turn
       adf.py              Jira's document format, to and from text
-  pipelines.py            the YAML pipelines: read, check against the schema, resolve extends
-  jsonschema_lite.py      the JSON Schema keywords the pipeline schema uses
+  pipelines.py            the pipes: read factory/pipes/*.yaml, check them against the schema, resolve extends
+  jsonschema_lite.py      the JSON Schema keywords the pipe schema uses
   runstate.py             each step's state in a job, for the dashboard's job graph
   store.py, cost.py, util.py
 core/roles/*.md           one prompt per agent step and reviewer
 core/skill/SKILL.md       the orchestrator
 core/defaults.toml        the default settings
-core/pipelines/default.yaml  the built-in pipeline
-core/schema/pipeline.schema.json  what a pipeline file may contain
-core/templates/factory.toml  the factory.toml written on first install
+core/pipes/default.yaml   the built-in pipe
+core/schema/pipe.schema.json  what a pipe file may contain
+core/templates/factory.toml  the factory/factory.toml written on first install
 web/dashboard.html        the dashboard shell: one project, or every project in the workspace with a filter
 web/dashboard.css         styles, inlined into the page when it is served
 web/dashboard.js          the page's script, inlined the same way
@@ -170,7 +170,8 @@ def follow(job, step, outcome):
   can be limited so it cannot run commands. In Claude Code this is opt-in. See below.
 - **The checks are a script.** No agent's opinion can pass a build whose checks
   fail.
-- **Protected paths.** The checks fail any branch that touches `factory.toml`,
+- **Protected paths.** The checks fail any branch that touches `factory/` (`factory.toml` and the pipes),
+  a `factory.toml` at the root,
   `.factory/`, a generated agent or skill file, or a path in
   `[paths].protected`. A job cannot change the pipeline, the checks or its own
   judges.

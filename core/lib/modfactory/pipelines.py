@@ -1,6 +1,6 @@
 """Pipelines as YAML: read the project's pipelines/ folder, check it against the schema, resolve `extends`.
 
-A pipeline file declares one or more pipelines under `pipelines:`. Each has a
+A pipe file declares one or more pipelines, "pipes", under `pipes:`. Each has a
 `start` step, an `escalate_to` step and its `steps`, each step with the outcomes
 it can end with (`on`). The built-in `default` pipeline ships in
 `core/pipelines/default.yaml` and is used when the project declares none of
@@ -18,8 +18,13 @@ from .util import CORE, FactoryError
 
 DEFAULT = "default"
 BUILTIN_REF = "factory:default"
-BUILTIN_FILE = CORE / "pipelines" / "default.yaml"
-SCHEMA_FILE = CORE / "schema" / "pipeline.schema.json"
+BUILTIN_FILE = CORE / "pipes" / "default.yaml"
+SCHEMA_FILE = CORE / "schema" / "pipe.schema.json"
+KEY = "pipes"               # the top-level key of a pipe file
+FOLDER = "factory/pipes"    # where a project's pipe files are, from the repository root
+# Where 0.32.0 kept them, and the key their files used. Both still load until `mfactory migrate layout`.
+OLD_KEY = "pipelines"
+OLD_FOLDER = "pipelines"
 BUILTIN_LABEL = "default"   # the source label of a value that comes from the built-in pipeline
 SUFFIXES = (".yaml", ".yml")
 
@@ -46,6 +51,7 @@ class PipelineFile:
     text: str
     names: list[str]
     errors: list[str]
+    old_key: bool = False        # declared under `pipelines:`, as 0.32.0 wrote it
 
 
 # ---- YAML ------------------------------------------------------------------
@@ -181,15 +187,27 @@ def _mark(sources: dict[tuple[str, ...], str], layer: dict[str, Any], label: str
 
 
 def folder(repo: Path, setting: object) -> Path:
-    name: str = setting if isinstance(setting, str) and setting.strip() else "pipelines"
-    return Path(repo) / name
+    """The folder the project's pipes are read from: the setting, factory/pipes, or 0.32.0's pipelines/."""
+    if isinstance(setting, str) and setting.strip():
+        return Path(repo) / setting
+    if old_folder_in_use(repo):
+        return Path(repo) / OLD_FOLDER
+    return Path(repo) / FOLDER
 
 
-def project_files(repo: Path, setting: object) -> list[Path]:
-    root: Path = folder(repo, setting)
+def _yaml_in(root: Path) -> list[Path]:
     if not root.is_dir():
         return []
     return sorted(p for p in root.iterdir() if p.is_file() and p.suffix in SUFFIXES)
+
+
+def old_folder_in_use(repo: Path) -> bool:
+    """True when the pipes are still in pipelines/ at the root, where 0.32.0 put them, and factory/pipes/ has none."""
+    return not _yaml_in(Path(repo) / FOLDER) and bool(_yaml_in(Path(repo) / OLD_FOLDER))
+
+
+def project_files(repo: Path, setting: object) -> list[Path]:
+    return _yaml_in(folder(repo, setting))
 
 
 def _read(path: Path, label: str) -> tuple[dict[str, Any], PipelineFile]:
@@ -199,14 +217,17 @@ def _read(path: Path, label: str) -> tuple[dict[str, Any], PipelineFile]:
     if isinstance(doc, _ParseError):
         return {}, PipelineFile(label, text, [], [doc.message])
     if doc is None:
-        return {}, PipelineFile(label, text, [], [f"{label}: the file is empty. It must declare `pipelines:`"])
+        return {}, PipelineFile(label, text, [], [f"{label}: the file is empty. It must declare `pipes:`"])
+    old: bool = isinstance(doc, dict) and OLD_KEY in doc and KEY not in doc
+    if old:  # a file from 0.32.0, under `pipelines:`
+        doc = {KEY if key == OLD_KEY else key: value for key, value in doc.items()}
     errors: list[str] = [f"{label}: {where or '(top)'} {message}"
                          for where, message in jsonschema_lite.validate(doc, schema())]
-    declared: dict[str, Any] = doc.get("pipelines") if isinstance(doc, dict) else None  # type: ignore[assignment]
+    declared: dict[str, Any] = doc.get(KEY) if isinstance(doc, dict) else None  # type: ignore[assignment]
     names: list[str] = list(declared) if isinstance(declared, dict) else []
     if errors:
-        return {}, PipelineFile(label, text, names, errors)
-    return dict(declared), PipelineFile(label, text, names, [])
+        return {}, PipelineFile(label, text, names, errors, old)
+    return dict(declared), PipelineFile(label, text, names, [], old)
 
 
 def load_all(repo: Path, setting: object = None, legacy_steps: dict[str, Any] | None = None,
@@ -233,7 +254,7 @@ def load_all(repo: Path, setting: object = None, legacy_steps: dict[str, Any] | 
         problems += report.errors
         for name, decl in found.items():
             if name in declared:
-                problems.append(f'{label}: pipeline "{name}" is also declared in {declared[name][1]}')
+                problems.append(f'{label}: pipe "{name}" is also declared in {declared[name][1]}')
                 continue
             declared[name] = (decl if isinstance(decl, dict) else {}, label)
 
@@ -258,7 +279,7 @@ def load_all(repo: Path, setting: object = None, legacy_steps: dict[str, Any] | 
         if name in resolved:
             return resolved[name]
         if name in chain:
-            problems.append(f"pipelines extend each other in a loop: {' -> '.join(chain + [name])}")
+            problems.append(f"pipes extend each other in a loop: {' -> '.join(chain + [name])}")
             return None
         if name not in declared:
             return builtin if name == DEFAULT else None
@@ -271,8 +292,8 @@ def load_all(repo: Path, setting: object = None, legacy_steps: dict[str, Any] | 
             base = resolve(parent, chain + [name])
             if base is None:
                 if parent not in declared and parent != DEFAULT:
-                    problems.append(f'{label}: pipeline "{name}" extends "{parent}", which is not a pipeline. '
-                                    f"Pipelines: {', '.join(sorted(set(declared) | {DEFAULT}))}")
+                    problems.append(f'{label}: pipe "{name}" extends "{parent}", which is not a pipe. '
+                                    f"Pipes: {', '.join(sorted(set(declared) | {DEFAULT}))}")
                 return None
         pipeline: Pipeline = build(name, decl, label, base)
         if name == DEFAULT:
@@ -285,12 +306,12 @@ def load_all(repo: Path, setting: object = None, legacy_steps: dict[str, Any] | 
     for name in [DEFAULT, *declared]:
         resolve(name, [])
     for name, pipeline in resolved.items():
-        where: str = pipeline.file if pipeline.file != "built-in" else "the built-in pipeline"
+        where: str = pipeline.file if pipeline.file != "built-in" else "the built-in pipe"
         if not pipeline.steps:
-            problems.append(f'{where}: pipeline "{name}" has no steps')
+            problems.append(f'{where}: pipe "{name}" has no steps')
         for key in ("start", "escalate_to"):
             if not getattr(pipeline, key):
-                problems.append(f'{where}: pipeline "{name}" needs {key}, or extends a pipeline that has it')
+                problems.append(f'{where}: pipe "{name}" needs {key}, or extends a pipe that has it')
     ordered: dict[str, Pipeline] = {DEFAULT: resolved[DEFAULT]} if DEFAULT in resolved else {}
     ordered.update({n: p for n, p in resolved.items() if n != DEFAULT})
     return ordered, files, problems
@@ -318,35 +339,35 @@ def builtin_step(name: str) -> dict[str, Any]:
     global _BUILTIN_STEPS
     if _BUILTIN_STEPS is None:
         doc: Any = parse(BUILTIN_FILE.read_text(), "built-in")
-        _BUILTIN_STEPS = normalise_edges(doc["pipelines"][DEFAULT]["steps"]) if isinstance(doc, dict) else {}
+        _BUILTIN_STEPS = normalise_edges(doc[KEY][DEFAULT]["steps"]) if isinstance(doc, dict) else {}
     found: object = _BUILTIN_STEPS.get(name)
     return found if isinstance(found, dict) else {}
 
 
 def starter_text() -> str:
-    """The pipelines/default.yaml that `mfactory install` writes: the built-in pipeline, spelled out."""
+    """The factory/pipes/default.yaml that `mfactory install` writes: the built-in pipe, spelled out."""
     text: str = BUILTIN_FILE.read_text()
-    _, _, body = text.partition("\npipelines:\n")
+    _, _, body = text.partition(f"\n{KEY}:\n")
     intro: str = (
-        "# yaml-language-server: $schema=../.factory/schema/pipeline.schema.json\n"
+        "# yaml-language-server: $schema=../../.factory/schema/pipe.schema.json\n"
         "#\n"
-        "# This project's pipelines. Each file in this folder declares one or more of them.\n"
-        "# A job runs the pipeline named by `--pipeline`, or by [run].pipeline in factory.toml.\n"
+        "# This project's pipes: its pipelines. Each file in this folder declares one or more.\n"
+        "# A job runs the pipe named by `--pipe`, or by [run].pipe in factory/factory.toml.\n"
         "# Reference: https://danielsmag.github.io/modular-factory/docs/pipeline.html\n"
         "#\n"
-        "#   .factory/bin/mfactory pipelines validate   check every file here against the schema\n"
-        "#   .factory/bin/mfactory graph --pipeline NAME  print one pipeline\n"
+        "#   .factory/bin/mfactory pipes validate      check every file here against the schema\n"
+        "#   .factory/bin/mfactory graph --pipe NAME   print one pipe\n"
         "#\n"
         "# Each step names its type and where each outcome leads. `max` on an edge is a\n"
         "# loop limit: when it is used up the job goes to `escalate_to` instead.\n"
         "#\n"
-        "# Add another pipeline in a new file, such as pipelines/hotfix.yaml:\n"
+        "# Add another pipe in a new file, such as factory/pipes/hotfix.yaml:\n"
         "#\n"
-        "#   pipelines:\n"
+        "#   pipes:\n"
         "#     hotfix:\n"
         "#       description: Small fixes, no spec\n"
         "#       extends: default\n"
         "#       steps:\n"
         "#         spec: { enabled: false, skip: DONE }\n"
     )
-    return intro + "\npipelines:\n" + body
+    return intro + f"\n{KEY}:\n" + body

@@ -45,7 +45,7 @@ $ .factory/bin/mfactory done 004-dark-mode
 .factory/templates/factory.toml  the factory.toml written on first install
 .factory/adapters/*.toml      per tool: folders, agent file format, default models
 .factory/web/                 the dashboard, inlined when it is served</code></pre>
-  <p>You edit <code>factory.toml</code> at the repository root. <code>mfactory sync</code> writes the agent files the tool actually loads. See <a href="tools.html#where-each-tool-writes">where each tool writes</a>.</p>
+  <p>You edit <code>factory/factory.toml</code> and the pipes in <code>factory/pipes/</code>. <code>mfactory sync</code> writes the agent files the tool actually loads. See <a href="tools.html#where-each-tool-writes">where each tool writes</a>.</p>
 
   <h2 id="a-jobs-folder">A job's folder</h2>
   <p>Each job has a folder, <code>.factory/jobs/&lt;id&gt;/</code>, in the main checkout. Git ignores it. The branch is <code>{branch_prefix}&lt;id&gt;</code> (default <code>factory/&lt;id&gt;</code>), in a worktree at <code>.worktrees/&lt;id&gt;</code>. A revert branch is <code>{branch_prefix}revert-&lt;id&gt;</code>.</p>
