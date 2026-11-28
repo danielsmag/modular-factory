@@ -12,7 +12,7 @@ from . import schedule
 from .ingest import KINDS, SEVERITIES
 from .priority import LEVELS
 
-SECTIONS: tuple[str, ...] = ("Needs attention", "Other findings", "Held", "Pipeline", "Last scan")
+SECTIONS: tuple[str, ...] = ("Needs attention", "Other findings", "Checked", "Held", "Pipeline", "Last scan")
 NO_SCAN = "No scan yet. Run /mfactory plan summary in your coding tool, or mfactory plan scan --force."
 WAITING_LABELS: frozenset[str] = frozenset({"factory:needs-info", "factory:needs-human"})
 URGENT: tuple[str, ...] = ("critical", "high")
@@ -110,6 +110,9 @@ def build(snapshot: dict[str, Any], findings: dict[str, Any], settings: dict[str
     held: list[dict[str, Any]] = [
         {"ref": t["ref"], "until": t.get("held_until"), "since": since.get(t["ref"])} for t in tickets
         if t.get("stage") == "held" and (project is None or t.get("project") == project)]
+    checked: list[dict[str, Any]] = [
+        n for n in findings.get("notes") or [] if isinstance(n, dict) and (
+            project is None or any(_project_of(str(r)) == project for r in n.get("tickets", [])))]
     labels: list[str] = [str(x) for x in snapshot.get("projects", [])]
     for t in tickets:
         if str(t.get("project")) not in labels:
@@ -117,7 +120,7 @@ def build(snapshot: dict[str, Any], findings: dict[str, Any], settings: dict[str
     projects: list[dict[str, Any]] = [
         _pipeline(label, [t for t in tickets if t.get("project") == label])
         for label in labels if project is None or label == project]
-    return {"attention": attention, "other": other, "held": held, "projects": projects,
+    return {"attention": attention, "other": other, "checked": checked, "held": held, "projects": projects,
             "scan": _scan(snapshot, findings, settings, at)}
 
 
@@ -133,7 +136,7 @@ def _line(finding: dict[str, Any]) -> list[str]:
 
 
 def render(report: dict[str, Any]) -> str:
-    """Plain text, five headed sections. An empty section says `none`."""
+    """Plain text, six headed sections. An empty section says `none`."""
     out: list[str] = []
     if not report["attention"] and not report["other"] and not report["held"]:
         out += ["Nothing to flag.", ""]
@@ -147,6 +150,11 @@ def render(report: dict[str, Any]) -> str:
         for f in group:
             out += _line(f)
     if not report["other"]:
+        out.append("  none")
+    out += ["", "Checked"]
+    for n in report.get("checked", []):
+        out.append(f"  {' ↔ '.join(str(r) for r in n.get('tickets', []))}  {n.get('text', '')}")
+    if not report.get("checked"):
         out.append("  none")
     out += ["", "Held"]
     for h in report["held"]:

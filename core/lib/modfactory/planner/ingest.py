@@ -24,6 +24,8 @@ MAX_STEP = 64
 MAX_EVIDENCE = 10
 MAX_EVIDENCE_TEXT = 1000
 MAX_TEXT = 4000
+MAX_NOTE = 300
+MAX_NOTES = 60
 
 
 def _raise(level: str) -> str:
@@ -138,6 +140,30 @@ def validate(draft: object, snapshot: dict[str, Any], max_extra: int) -> tuple[l
             "summary": entry.get("summary", ""), "evidence": list(entry.get("evidence", [])),
             "action": {"type": action["type"], **{f: action[f] for f in fields}}})
     return kept, dropped
+
+
+def notes(draft: object, snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    """The draft's notes worth keeping: one line on a pair of known tickets that the scan judged. Others are dropped."""
+    entries: object = draft.get("notes") if isinstance(draft, dict) else None
+    if not isinstance(entries, list):
+        return []
+    known: set[str] = {t["ref"] for t in snapshot.get("tickets", [])}
+    kept: list[dict[str, Any]] = []
+    pairs: set[frozenset[str]] = set()
+    for entry in entries:
+        if len(kept) >= MAX_NOTES:
+            break
+        refs: object = entry.get("tickets") if isinstance(entry, dict) else None
+        text: object = entry.get("text") if isinstance(entry, dict) else None
+        if not isinstance(refs, list) or len(refs) != 2 or not all(isinstance(r, str) and r in known for r in refs):
+            continue
+        if refs[0] == refs[1] or _pair_key(refs) in pairs:
+            continue
+        if not isinstance(text, str) or not text.strip() or len(text) > MAX_NOTE:
+            continue
+        pairs.add(_pair_key(refs))
+        kept.append({"tickets": list(refs), "text": text.strip()})
+    return kept
 
 
 def merge(old: dict[str, Any], kept: list[dict[str, Any]], snapshot: dict[str, Any], settings: dict[str, Any],

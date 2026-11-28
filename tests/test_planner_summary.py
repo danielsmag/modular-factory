@@ -33,7 +33,7 @@ def test_summary_sections_in_order():
     snapshot = snap(ticket("shop:#1", priority="high"), ticket("shop:#2"), held)
     report = summary.build(snapshot, findings_file(finding(1), finding(2, "overlap", "low")), SETTINGS, None, AT)
     text = summary.render(report)
-    heads = ["Needs attention", "Other findings", "Held", "Pipeline", "Last scan"]
+    heads = list(summary.SECTIONS)
     places = [text.index(h) for h in heads]
     assert places == sorted(places)
     assert "F-1 high duplicate  shop:#1 (high) ↔ shop:#2 (normal) — summary 1" in text
@@ -69,7 +69,7 @@ def test_summary_empty_and_no_scan(world):
     assert res.returncode == 0, res.stderr
     assert res.stdout.startswith("Nothing to flag.")
     assert "No scan yet. Run /mfactory plan summary in your coding tool, or mfactory plan scan --force." in res.stdout
-    for head in ("Needs attention", "Other findings", "Held", "Pipeline", "Last scan"):
+    for head in summary.SECTIONS:
         assert head in res.stdout
     assert "none" in res.stdout
 
@@ -94,7 +94,27 @@ def test_summary_project_filter_and_json(pair):  # noqa: F811
     assert [p["label"] for p in only["projects"]] == ["repo"]
     shown = [f["tickets"] for f in only["attention"]] + [f["tickets"] for v in only["other"].values() for f in v]
     assert shown == [["repo:#1", "beta:#1"]]
-    assert set(out) == {"attention", "other", "held", "projects", "scan"}
+    assert set(out) == {"attention", "other", "checked", "held", "projects", "scan"}
+
+
+def test_scan_notes_are_kept_and_shown_as_checked(world):
+    world.issue("Add the VAT field to invoices")
+    world.issue("Rework the login page")
+    launcher(world.repo)
+    assert world.cli("plan", "scan", "--force").returncode == 0
+    notes = [{"tickets": ["repo:#1", "repo:#2"], "text": "not related: different screens"},
+             {"tickets": ["repo:#1", "repo:#999"], "text": "unknown ticket"},
+             {"tickets": ["repo:#2", "repo:#2"], "text": "same ticket"},
+             {"tickets": ["repo:#2", "repo:#1"], "text": "x" * 301}]
+    res = world.cli("plan", "ingest", "--reply", input=json.dumps({"findings": [], "notes": notes}))
+    assert res.returncode == 0, res.stderr
+    assert state_of(world).read_findings()["notes"] == [notes[0]]
+    text = world.cli("plan", "summary").stdout
+    assert text.startswith("Nothing to flag.")
+    assert "Checked\n  repo:#1 ↔ repo:#2  not related: different screens\n" in text
+    new = {"findings": [entry("repo:#1", "repo:#2", kind="overlap")]}
+    assert world.cli("plan", "suggest", input=json.dumps(new)).returncode == 0
+    assert state_of(world).read_findings()["notes"] == [notes[0]]
 
 
 def test_summary_fresh_prints_scan_lines_only_when_changed(world):
