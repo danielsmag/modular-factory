@@ -17,6 +17,12 @@ run jobs (the orchestrator skill uses these)
   close issue <job> | close job <job> [--merged <pr>] | move <job> <step> [note]
   delete <job> [--worktree] [--branch] [--remote] [--pr] [--force]
   tracker show [--json] | tracker sync | tracker suggest [--json]
+manage your own issues (no job is started)
+  issue list [--tracker T] [--mine] [--json]
+  issue show <issue> [--json]
+  issue create <title> [--tracker T] [--queue]   its text is read from standard input
+  issue comment <issue>     the comment is read from standard input
+  issue move <issue> <status> | issue close <issue> [--not-planned]
 plan the queue across jobs
   plan snapshot [--json] [--label NAME]
   plan collect [--json]
@@ -144,6 +150,38 @@ def parser() -> argparse.ArgumentParser:
     delete.add_argument("--pr", action="store_true", help="close the job's open pull request")
     delete.add_argument("--force", action="store_true",
                         help="worktree, local branch, remote branch, and the open pull request")
+
+    issue: argparse.ArgumentParser = sub.add_parser(
+        "issue", help="list, show, create, comment on, move or close issues; never starts a job")
+    issue_sub: argparse._SubParsersAction[argparse.ArgumentParser] = issue.add_subparsers(
+        dest="issue_what", required=True, metavar="<list|show|create|comment|move|close>")
+    issue_list: argparse.ArgumentParser = issue_sub.add_parser(
+        "list", help="open issues, and a Jira board's cards that are not done, in or out of the queue")
+    issue_list.add_argument("--tracker", choices=config.TRACKER_KINDS, help="only this tracker")
+    issue_list.add_argument("--mine", action="store_true", help="only the issues assigned to you")
+    issue_list.add_argument("--json", action="store_true", help="the list as one JSON object")
+    issue_show: argparse.ArgumentParser = issue_sub.add_parser(
+        "show", help="one issue: its text, comments, job, and the statuses it can move to")
+    issue_show.add_argument("issue", help="a number such as 12, or a Jira key such as PROJ-7")
+    issue_show.add_argument("--json", action="store_true", help="the issue as one JSON object")
+    issue_create: argparse.ArgumentParser = issue_sub.add_parser(
+        "create", help="open an issue; its text is read from standard input. Not queued unless --queue")
+    issue_create.add_argument("--tracker", choices=config.TRACKER_KINDS,
+                              help="with two trackers, where to open it; the first in [tracker].kind otherwise")
+    issue_create.add_argument("--queue", action="store_true", help="also put it in the factory's queue, as `file` does")
+    issue_create.add_argument("title", nargs="+")
+    issue_comment: argparse.ArgumentParser = issue_sub.add_parser(
+        "comment", help="post your comment on an issue; its text is read from standard input")
+    issue_comment.add_argument("issue")
+    issue_comment.add_argument("text", nargs="*", help="your words; or pass them on standard input")
+    issue_move: argparse.ArgumentParser = issue_sub.add_parser(
+        "move", help="move a Jira card with no running job to a status; `move <job> <step>` moves a job")
+    issue_move.add_argument("issue")
+    issue_move.add_argument("status", nargs="+", help="the status as the board names it, such as In Progress")
+    issue_close: argparse.ArgumentParser = issue_sub.add_parser(
+        "close", help="close an issue; one with a job is closed through the job")
+    issue_close.add_argument("issue")
+    issue_close.add_argument("--not-planned", action="store_true", help="close as not planned, not completed")
 
     tracker: argparse.ArgumentParser = sub.add_parser(
         "tracker", help="the steps against the tracker's board, and cards put back in place")

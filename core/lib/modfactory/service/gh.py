@@ -38,9 +38,11 @@ class GitHub:
     def json(self, *args, timeout=None):
         return json.loads(self.call(*args, timeout=timeout).stdout)
 
-    def open_issues(self, limit: int = 200, timeout: float | None = None) -> list[dict[str, Any]]:
-        """The repository's open issues, most recently updated first, at most `limit`."""
-        found: object = self.json("issue", "list", "--state", "open", "--limit", limit, "--search",
+    def open_issues(self, limit: int = 200, timeout: float | None = None,
+                    assignee: str | None = None) -> list[dict[str, Any]]:
+        """The repository's open issues, most recently updated first, at most `limit`. `assignee` such as `@me`."""
+        mine: list[str] = ["--assignee", assignee] if assignee else []
+        found: object = self.json("issue", "list", "--state", "open", "--limit", limit, *mine, "--search",
                                   "sort:updated-desc", "--json", ISSUE_FIELDS, timeout=timeout)
         return [row for row in found if isinstance(row, dict)] if isinstance(found, list) else []
 

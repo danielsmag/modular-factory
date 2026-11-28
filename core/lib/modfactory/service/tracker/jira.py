@@ -295,6 +295,28 @@ class JiraTracker(OneTracker):
                 raise Refused(f"{key} was created, but its card is not in the queue: {error}") from None
         return self._url(key)
 
+    def open_issues(self, mine: bool = False) -> list[dict[str, Any]]:
+        """The board's cards that are not done, in any column."""
+        return self._board_issues("statusCategory != Done" + (" AND assignee = currentUser()" if mine else ""))
+
+    def transitions(self, key: Key) -> list[str] | None:
+        found: object = self.api.get(f"/rest/api/3/issue/{key}/transitions")
+        rows: object = found.get("transitions") if isinstance(found, dict) else None
+        names: list[str] = []
+        for row in rows if isinstance(rows, list) else []:
+            name: object = (row.get("to") or {}).get("name") if isinstance(row, dict) else None
+            if isinstance(name, str) and name and name not in names:
+                names.append(name)
+        return names
+
+    def set_status(self, key: Key, status: str) -> bool:
+        try:
+            return self._to_status(key, status, "issue move")
+        except Refused:
+            names: list[str] | None = self.transitions(key)
+            can: str = f"; it can move to: {', '.join(names)}" if names else ""
+            raise Refused(f"Jira has no transition for {key} to `{status}`{can}") from None
+
     def close_issue(self, key: Key, reason: str = "completed") -> bool:
         """Move the card to the status of `done`, or of `rejected` for `not planned`. False when it is there."""
         state: str = "rejected" if reason == "not planned" else "done"

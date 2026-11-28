@@ -118,6 +118,21 @@ class Tracker(Protocol):
         """Close the issue. False when it was already closed."""
         ...
 
+    def open_issues(self, mine: bool = False) -> list[dict[str, Any]]:
+        """Every open issue, in or out of the queue. With `mine`, only those assigned to the operator."""
+        ...
+
+    def transitions(self, key: Key) -> list[str] | None:
+        """The statuses the issue can be moved to now. None when the tracker cannot say."""
+        ...
+
+    def set_status(self, key: Key, status: str) -> bool:
+        """Move the issue to a status by name, for a person. False when it is there.
+
+        Refuses on a tracker without statuses.
+        """
+        ...
+
     # -- comments
 
     def comments(self, key: Key) -> list[dict[str, Any]]: ...

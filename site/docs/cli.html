@@ -107,6 +107,30 @@
     <p>End the job as <code>done</code> from any step, and remove its worktree. The issue and any open pull request stay as they are.</p>
   </div>
   <div class="def">
+    <div class="def-h"><code>issue list</code> <span class="chip">--tracker</span> <span class="chip">--mine</span> <span class="chip">--json</span></div>
+    <p>Your open issues, and a Jira board's cards that are not done, in or out of the queue, with their status and job. <code>--mine</code> keeps those assigned to you.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>issue show &lt;issue&gt;</code> <span class="chip">--json</span></div>
+    <p>One issue: its text, comments, URL, job, and the statuses a Jira card can move to.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>issue create &lt;title&gt;</code> <span class="chip">--tracker</span> <span class="chip">--queue</span></div>
+    <p>Open an issue; its text comes on standard input. It stays out of the factory's queue unless <code>--queue</code>, so a test issue starts no job.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>issue comment &lt;issue&gt; [text...]</code></div>
+    <p>Post your own comment, from the words given or standard input.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>issue move &lt;issue&gt; &lt;status&gt;</code></div>
+    <p>Move a Jira card to a status by name. Refused for a card with a running job: <code>move &lt;job&gt; &lt;step&gt;</code> moves the job and its card. GitHub issues have no status.</p>
+  </div>
+  <div class="def">
+    <div class="def-h"><code>issue close &lt;issue&gt;</code> <span class="chip">--not-planned</span></div>
+    <p>Close any issue. One with a job is closed as <code>close issue &lt;job&gt;</code> does.</p>
+  </div>
+  <div class="def">
     <div class="def-h"><code>route &lt;job&gt;</code></div>
     <p>Which agents a job uses.</p>
   </div>

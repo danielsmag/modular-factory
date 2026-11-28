@@ -250,6 +250,9 @@ class AcliJiraTracker(JiraTracker):
                 "why": "This project reaches Jira through acli, and acli cannot tell who moved a card, "
                        "so a move is not an answer."}
 
+    def transitions(self, key: Key) -> list[str] | None:
+        return None  # acli does not list them; `set_status` tries the move and says what Jira answered
+
     def _to_status(self, key: Key, status: str, setting: str) -> bool:
         current: str = _status_name((self._view(key, "status").get("fields") or {}).get("status"))
         if _same(current, status):
