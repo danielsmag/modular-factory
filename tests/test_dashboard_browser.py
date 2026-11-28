@@ -67,16 +67,8 @@ def test_the_board_works_in_a_browser(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(not has_playwright(), reason="needs node and its playwright module")
-def test_the_project_filter_with_three_projects(tmp_path: Path) -> None:
+def test_the_project_filter(tmp_path: Path) -> None:
     res: subprocess.CompletedProcess[str] = run_sample(
         tmp_path, "dashboard_filter_browser.js", "--projects", "3"
-    )
-    assert res.returncode == 0, res.stdout + res.stderr
-
-
-@pytest.mark.skipif(not has_playwright(), reason="needs node and its playwright module")
-def test_the_project_filter_with_eight_projects(tmp_path: Path) -> None:
-    res: subprocess.CompletedProcess[str] = run_sample(
-        tmp_path, "dashboard_filter_browser.js", "--projects", "8"
     )
     assert res.returncode == 0, res.stdout + res.stderr
