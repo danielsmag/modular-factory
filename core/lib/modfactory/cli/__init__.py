@@ -16,6 +16,7 @@ from .. import board, checks, config, graph, install, pipelines, plan_usage
 from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
+from ..planner import snapshot as snapshot_mod
 from ..queue import queue_json
 from ..service.tracker import Tracker
 from ..store import Store
@@ -448,6 +449,10 @@ def run(args: argparse.Namespace) -> int:
             if not rows:
                 print(f"nothing to do: {factory.tracker.empty_note()} and no job is unfinished")
             _problem_lines(factory)
+        elif command == "plan" and args.plan_what == "snapshot":
+            name: str = args.label or cfg.repo.name
+            found, problems = snapshot_mod.project_tickets(factory, name)
+            print(json.dumps({"label": name, "tickets": found, "errors": problems}, indent=None if args.json else 2))
         elif command == "create":
             job = factory.create(args.issue, args.pipe)
             chose: str = f" (pipe {job['pipeline']})" if len(cfg.pipelines) > 1 else ""

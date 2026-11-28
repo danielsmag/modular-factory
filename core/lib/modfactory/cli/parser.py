@@ -17,6 +17,8 @@ run jobs (the orchestrator skill uses these)
   close issue <job> | close job <job> [--merged <pr>] | move <job> <step> [note]
   delete <job> [--worktree] [--branch] [--remote] [--pr] [--force]
   tracker show [--json] | tracker sync | tracker suggest [--json]
+plan the queue across jobs
+  plan snapshot [--json] [--label NAME]
 other
   checks | dashboard | start dashboard | stop | version
 several projects
@@ -150,6 +152,15 @@ def parser() -> argparse.ArgumentParser:
     tracker_suggest: argparse.ArgumentParser = tracker_sub.add_parser(
         "suggest", help="the Jira board that works well for this pipeline, and its [tracker.jira.columns]")
     tracker_suggest.add_argument("--json", action="store_true", help="the suggestion as one JSON object")
+
+    plan: argparse.ArgumentParser = sub.add_parser(
+        "plan", help="the planner: duplicates, dependencies and priority across the queue")
+    plan_sub: argparse._SubParsersAction[argparse.ArgumentParser] = plan.add_subparsers(
+        dest="plan_what", required=True, metavar="<snapshot>")
+    plan_snapshot: argparse.ArgumentParser = plan_sub.add_parser(
+        "snapshot", help="every queued issue and job of this project, as tickets")
+    plan_snapshot.add_argument("--json", action="store_true", help="the snapshot as one JSON object")
+    plan_snapshot.add_argument("--label", help="the project's name in refs; the repository's folder by default")
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
     sub.add_parser("hook")  # no help text: argparse then leaves it out of the list
