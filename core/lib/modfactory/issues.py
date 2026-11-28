@@ -8,14 +8,17 @@ has a job is moved with `mfactory move`, by step, so the job and its card stay t
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from . import sync
 from .graph import END_STATES
 from .planner.holds import job_of
 from .service.tracker import Key
 from .util import Refused
 
 if TYPE_CHECKING:
+    from .config import Config
     from .engine import Factory
 
 CLI = "mfactory"
@@ -161,4 +164,77 @@ def close_issue(factory: Factory, ref: str, not_planned: bool) -> int:
         print(f"closed {shown} ({reason})")
     else:
         print(f"{shown} was already closed")
+    return 0
+
+
+# ---- The person's own ways of working ---------------------------------------------------
+
+
+def _description(path: Path | None) -> str:
+    try:
+        return _clean(sync._skill_description(path), 300) if path and path.is_file() else ""
+    except OSError:
+        return ""
+
+
+def _home_path(shown: str, home: Path) -> Path:
+    return home / shown.removeprefix("~/") if shown.startswith("~/") else Path(shown)
+
+
+def guide_entries(cfg: Config, home: Path | None = None) -> dict[str, Any]:
+    """The skills and instruction files to follow when managing issues: `[skills].issues` and `[rules].issues`.
+
+    `[skills].all` and `[rules].all` come first, as for every agent. A plugin skill is listed once, with the
+    file of the first enabled tool that has it.
+    """
+    home = home or sync.skill_home()
+    problems: list[str] = []
+    index: sync.SkillIndex = sync.SkillIndex(home)
+    skills: list[dict[str, Any]] = []
+    for ref in sync._skills(cfg, list(cfg["skills"].get("issues", [])), "[skills].issues", problems, home):
+        path: Path | None = None
+        shown: str | None = ref.path
+        if ref.kind == "project" and ref.path:
+            path = cfg.repo / ref.path
+        elif ref.kind == "user" and ref.path:
+            path = _home_path(ref.path, home)
+        elif ref.kind == "plugin":
+            tools: list[str] = [tool for tool in cfg.tools if index.plugin_path(tool, ref.name)]
+            if tools:
+                path = index.plugin_path(tools[0], ref.name)
+                shown = index.plugin_display(tools[0], ref.name)
+            elif ref.via_all:
+                continue  # `all` only offers what a tool here has installed
+        skills.append({"skill": ref.listed, "kind": ref.kind, "path": shown, "description": _description(path)})
+    rules: list[dict[str, Any]] = [
+        {"rule": ref.listed, "kind": ref.kind, "path": ref.path}
+        for ref in sync._rules(cfg, list(cfg["rules"].get("issues", [])), "[rules].issues", problems, home)
+        if ref.path]
+    said: list[str] = [problem.replace(".issues.skills:", ".issues:").replace(".issues.rules:", ".issues:")
+                       for problem in problems]
+    return {"skills": skills, "rules": rules, "problems": said}
+
+
+def guide(cfg: Config, as_json: bool) -> int:
+    """`issue guide`: what to read before creating, commenting on, moving or closing an issue."""
+    found: dict[str, Any] = guide_entries(cfg)
+    if as_json:
+        print(json.dumps(found))
+        return 0
+    if found["rules"]:
+        print("Instruction files (read each, and follow what it says about issues, tickets and comments):")
+        for rule in found["rules"]:
+            print(f"  {rule['path']}")
+    if found["skills"]:
+        if found["rules"]:
+            print("")
+        print("Skills (use each one whose description fits the request; plugin skills by name):")
+        for skill in found["skills"]:
+            where: str = f"  {skill['path']}" if skill["path"] and skill["kind"] != "plugin" else ""
+            about: str = f"  - {skill['description']}" if skill["description"] else ""
+            print(f"  {skill['skill']} ({skill['kind']}){where}{about}")
+    if not found["rules"] and not found["skills"]:
+        print("no skills or instruction files for issues: [skills].issues and [rules].issues find none")
+    for problem in found["problems"]:
+        print(f"note: {problem}")
     return 0

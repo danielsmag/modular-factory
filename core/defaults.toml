@@ -89,9 +89,11 @@ step = 10
 
 [skills]
 all = []                  # skills every agent reads; "all" means every skill on this machine
+issues = ["all"]          # skills the orchestrator follows when it creates, comments on, moves or closes issues
 
 [rules]
 all = ["all"]             # every AGENTS.md, CLAUDE.md, and rule file found in the repo and at home
+issues = ["all"]          # instruction files the orchestrator follows when it manages issues
 
 # ---- The pipeline ----------------------------------------------------------
 # Pipelines are YAML files, "pipes", in the project's factory/pipes/ folder ([paths].pipes).

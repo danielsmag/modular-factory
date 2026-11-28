@@ -23,6 +23,7 @@ manage your own issues (no job is started)
   issue create <title> [--tracker T] [--queue]   its text is read from standard input
   issue comment <issue>     the comment is read from standard input
   issue move <issue> <status> | issue close <issue> [--not-planned]
+  issue guide [--json]      the skills and rules to follow when managing issues
 plan the queue across jobs
   plan snapshot [--json] [--label NAME]
   plan collect [--json]
@@ -154,7 +155,7 @@ def parser() -> argparse.ArgumentParser:
     issue: argparse.ArgumentParser = sub.add_parser(
         "issue", help="list, show, create, comment on, move or close issues; never starts a job")
     issue_sub: argparse._SubParsersAction[argparse.ArgumentParser] = issue.add_subparsers(
-        dest="issue_what", required=True, metavar="<list|show|create|comment|move|close>")
+        dest="issue_what", required=True, metavar="<list|show|create|comment|move|close|guide>")
     issue_list: argparse.ArgumentParser = issue_sub.add_parser(
         "list", help="open issues, and a Jira board's cards that are not done, in or out of the queue")
     issue_list.add_argument("--tracker", choices=config.TRACKER_KINDS, help="only this tracker")
@@ -182,6 +183,9 @@ def parser() -> argparse.ArgumentParser:
         "close", help="close an issue; one with a job is closed through the job")
     issue_close.add_argument("issue")
     issue_close.add_argument("--not-planned", action="store_true", help="close as not planned, not completed")
+    issue_guide: argparse.ArgumentParser = issue_sub.add_parser(
+        "guide", help="the skills and instruction files to follow when managing issues: [skills|rules].issues")
+    issue_guide.add_argument("--json", action="store_true", help="the list as one JSON object")
 
     tracker: argparse.ArgumentParser = sub.add_parser(
         "tracker", help="the steps against the tracker's board, and cards put back in place")

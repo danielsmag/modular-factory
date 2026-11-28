@@ -199,3 +199,58 @@ def test_close_an_issue_with_a_job_goes_through_the_job(world):
     out = ok(world.cli("issue", "close", number))
     assert world.gh["issues"][str(number)]["state"] == "CLOSED"
     assert job in out  # the note that the job is still running
+
+
+# ---- guide: the person's own skills and rules ---------------------------------------------
+
+
+def _skill(root, name, description):
+    path = root / name / "SKILL.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(f"---\nname: {name}\ndescription: {description}\n---\n# {name}\n")
+
+
+def _home(world):
+    return world.tmp / "skill-home"
+
+
+def test_guide_lists_every_project_user_and_plugin_skill_and_every_rule_by_default(world):
+    home = _home(world)
+    _skill(world.repo / ".claude" / "skills", "jira-tickets", "How we write Jira tickets.")
+    _skill(home / ".claude" / "skills", "bug-reports", "My bug report template.")
+    _skill(home / ".claude/plugins/cache/market/atlassian/1.0.0/skills", "triage", "Triage Jira issues.")
+    (world.repo / "AGENTS.md").write_text("Always link the epic.\n")
+    (home / ".claude" / "rules").mkdir(parents=True)
+    (home / ".claude" / "rules" / "tickets.md").write_text("Use our labels.\n")
+    found = json.loads(ok(world.cli("issue", "guide", "--json")))
+    skills = {s["skill"]: s for s in found["skills"]}
+    assert skills["jira-tickets"]["description"] == "How we write Jira tickets."
+    assert skills["user:bug-reports"]["path"] == "~/.claude/skills/bug-reports/SKILL.md"
+    assert skills["atlassian:triage"]["kind"] == "plugin"
+    assert skills["atlassian:triage"]["description"] == "Triage Jira issues."
+    rules = {r["path"] for r in found["rules"]}
+    assert {"AGENTS.md", "~/.claude/rules/tickets.md"} <= rules
+    text = ok(world.cli("issue", "guide"))
+    assert "atlassian:triage (plugin)  - Triage Jira issues." in text
+    assert "~/.claude/rules/tickets.md" in text
+
+
+def test_guide_follows_the_narrowed_lists(world):
+    home = _home(world)
+    _skill(world.repo / ".claude" / "skills", "jira-tickets", "Tickets.")
+    _skill(world.repo / ".claude" / "skills", "testing", "Tests.")
+    _skill(home / ".claude" / "skills", "bug-reports", "Bugs.")
+    (world.repo / "AGENTS.md").write_text("x\n")
+    (world.repo / ".claude" / "rules").mkdir(parents=True)
+    (world.repo / ".claude" / "rules" / "jira.md").write_text("y\n")
+    world.configure('[skills]\nissues = ["jira-tickets", "user:bug-reports"]\n\n'
+                    '[rules]\nall = []\nissues = [".claude/rules/jira.md"]\n')
+    found = json.loads(ok(world.cli("issue", "guide", "--json")))
+    assert [s["skill"] for s in found["skills"]] == ["jira-tickets", "user:bug-reports"]
+    assert [r["path"] for r in found["rules"]] == [".claude/rules/jira.md"]
+
+
+def test_guide_notes_a_skill_that_is_not_there(world):
+    world.configure('[skills]\nissues = ["missing"]\n')
+    out = ok(world.cli("issue", "guide"))
+    assert 'note: [skills].issues: skill "missing" not found' in out

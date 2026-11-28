@@ -99,6 +99,12 @@ commands = []
 # [skills]
 # all = ["code-style"]
 #
+# When you ask the orchestrator to create, comment on, move or close an issue or a Jira card
+# (`mfactory issue ...`), it follows `[skills].issues` and `[rules].issues`: every skill and
+# instruction file on this machine by default, so your own ticket-writing skills and team rules apply.
+# Narrow them to the ones about issues, for example:
+# issues = ["jira-tickets", "user:bug-reports", "atlassian:triage"]
+#
 # A step's own skills go on the step, in factory/pipes/default.yaml:
 #   build:
 #     skills: [testing, "user:python-best-practices", "superpowers:test-driven-development"]

@@ -73,7 +73,10 @@ GitHub and Jira without starting a job: "create a test issue", "show my open
 Jira cards", "move PROJ-12 to In Progress", "comment on #34". These run
 `mfactory issue list | show | create | comment | move | close`. A new issue
 stays out of the factory's queue unless you ask for `--queue`, and a card with
-a running job is moved by step with `mfactory move`.
+a running job is moved by step with `mfactory move`. Before changing an issue,
+the orchestrator runs `mfactory issue guide` and follows your own skills,
+plugin skills and rules for tickets (`[skills].issues` and `[rules].issues`,
+every one on the machine by default).
 
 A job that needs a person stops and says so on the issue or the pull request.
 You answer there with a comment, such as `/mfactory changes Use the existing
