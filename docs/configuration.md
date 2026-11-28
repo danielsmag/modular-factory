@@ -71,6 +71,7 @@ mfactory: the configuration has 3 problem(s):
 - [Models and effort](#models-and-effort)
 - [Project skills](#project-skills)
 - [Tracker: a Jira board](#tracker-a-jira-board)
+- [Planner](#planner)
 - [Labels, paths and ports](#labels-paths-and-ports)
 
 ## Project, tools and run
@@ -1259,6 +1260,58 @@ pipes:
 - A job keeps the tracker it came from, so adding a second tracker leaves jobs in flight running. A job whose
   tracker is taken out of `kind` gets a `skip` row until the tracker is back.
 - `mfactory doctor` checks both. `mfactory tracker show` and `tracker sync` work on the Jira board.
+
+## Planner
+
+The planner reads the queue of every project in the workspace and suggests
+duplicates, dependencies, overlap, conflicts and priority inversions. It only
+suggests: `mfactory plan approve` and `plan release` are the only things that
+change a tracker or a job. A project without a `[planner]` table uses these
+defaults.
+
+```toml
+[planner]
+enabled = true
+frequency = "medium"
+alert_at = "high"
+max_pairs = 40
+max_extra = 10
+priority = { labels = { urgent = "critical" }, jira = { Showstopper = "critical" } }
+# priority = { github_project = { owner = "acme", number = 3, field = "Priority" } }
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `[planner] enabled` | `true` | Scan open tickets across projects. `false` turns the `plan` commands that read or change findings off. |
+| `[planner] frequency` | `"medium"` | How often a scan is due: `high`, `medium`, `low` or `manual`. See below. |
+| `[planner] alert_at` | `"high"` | Findings at this severity or above count on the dashboard badge and under `Needs attention`: `low`, `medium` or `high`. |
+| `[planner] max_pairs` | `40` | Ticket pairs a scan may look at. |
+| `[planner] max_extra` | `10` | Extra pairs the scan agent may add beyond those it was given. The rest of its draft is dropped. |
+| `[planner] priority` | `{ labels = {}, jira = {}, github_project = {} }` | Extra names for priority levels, and a GitHub Projects field to read. See below. |
+
+**Frequencies.** `high` is every 5 minutes, `medium` every 30, `low` every 240.
+A scan is due when the tickets changed since the last one and the interval has
+passed; unchanged tickets are never rescanned. `manual` never scans by itself:
+run `mfactory plan scan --force`, or `/mfactory plan summary`, which scans when
+the tickets changed.
+
+**Priority.** A ticket's priority is one of `critical`, `high`, `normal` or `low`.
+Matching ignores case, and your entries win over these defaults:
+
+| Source | Mapped to `critical` | `high` | `low` |
+| --- | --- | --- | --- |
+| Labels (`priority.labels`) | `p0`, `priority:critical`, `priority/critical`, `critical` | `p1`, `priority:high`, `priority/high`, `high` | `p3`, `priority:low`, `priority/low`, `low` |
+| Jira priority (`priority.jira`) | `Blocker`, `Highest`, `Critical` | `High` | `Low`, `Lowest`, `Minor`, `Trivial` |
+
+Jira's `Medium` is `normal`, and so is anything nobody mapped. A Jira ticket uses
+its priority field; a GitHub issue uses its labels, and the highest level wins.
+`priority.github_project = { owner, number, field }` reads that field of a GitHub
+Projects board for each issue and runs the value through the label map first;
+when `gh` cannot read the board, labels are used.
+
+Severity is the kind's base level (`conflict` high, `duplicate`, `dependency` and
+`priority-inversion` medium, `overlap` low), one higher when a ticket is
+`critical` or `high`, and one more when every ticket already has a running job.
 
 ## Labels, paths and ports
 
