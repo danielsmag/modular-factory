@@ -148,3 +148,5 @@ it contradicts itself, it needs a decision only a person can make, or something
 in the environment fails. Explain exactly what blocks you under a `## Blocked`
 heading; the factory shows that section to a maintainer. Don't paper over a
 failure to reach READY.
+
+If the prompt names `context-*.md` files, read them before you start: they are context added to this job.

@@ -72,3 +72,5 @@ should show, or a page to open. The verifier checks this list after the merge.
 - Never require a change to `factory.toml`, `.factory/`, or a file matching
   `[paths].protected` in `factory.toml`: the checks fail any branch that
   modifies one.
+
+If the prompt names `context-*.md` files, read them before you start: they are context added to this job.

@@ -394,6 +394,9 @@ class Factory(Humans, Cards, Scripted, Queue):
             parts.append(f"Port: {self.port(job)}.")
         parts.append(f"Write: {out}.")
         parts += job["handoff"]
+        if job.get("context_files"):
+            parts.append(f"Context added to this job: read {', '.join(job['context_files'])} before you start; "
+                         "it comes after the issue and before the spec where they disagree.")
         note: str | None = self._progress_note(job, role)
         if note:
             parts.append(note)
