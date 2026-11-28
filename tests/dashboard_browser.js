@@ -197,6 +197,13 @@ async function main() {
   await jobsPage.click("table.files-table tbody tr:has-text('build')");
   await jobsPage.waitForSelector(".file-open .fileview", { timeout: 5000 });
   check("a file opens under the files table", /READY|Implemented/.test(await jobsPage.textContent(".file-open")));
+  await jobsPage.click('[data-focus="jobtab:logs"]');
+  await jobsPage.waitForSelector("table.logs-table", { timeout: 5000 });
+  const logText = await jobsPage.textContent(".jobtabs ~ .panel, .jobtabs ~ div");
+  check("logs tab is telemetry only", /job\.created/.test(await jobsPage.textContent("table.logs-table")) && !(await jobsPage.$(".d-body, .d-activity")), String(logText).slice(0, 160));
+  await jobsPage.click('[data-focus="jobtab:activity"]');
+  await jobsPage.waitForSelector(".d-activity, .d-body", { timeout: 5000 });
+  check("activity tab is agent runs, not telemetry", !(await jobsPage.$("table.logs-table")));
 
   // ---- Config: every pipeline, its graph and its YAML
   await jobsPage.goto(base + "#/config");

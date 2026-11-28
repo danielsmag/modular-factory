@@ -2356,7 +2356,7 @@ function enqueueNodes() {
 // ---- jobs: a table of every job, and a page per job with its pipeline drawn ----
 const STATUS_ORDER = ["running", "waiting", "queued", "done", "failed", "rejected"];
 const STATUS_LABEL = { running: "Running", waiting: "Waiting", queued: "Queued", done: "Done", failed: "Failed", rejected: "Rejected" };
-const JOB_TABS = [["graph", "Graph"], ["gantt", "Timeline"], ["details", "Details"], ["files", "Files"], ["logs", "Logs"]];
+const JOB_TABS = [["graph", "Graph"], ["gantt", "Timeline"], ["details", "Details"], ["files", "Files"], ["logs", "Logs"], ["activity", "Activity"]];
 const BACK = /^(FAIL|FAILED|REJECT|CHANGES|BLOCKED|ESCALATE|UNKNOWN|NEEDS-INFO|FEEDBACK)$/;
 function statusOf(job) {
   if (job.status && STATUS_LABEL[job.status]) return job.status;
@@ -2568,7 +2568,7 @@ function nodePanel(job, name) {
     }, el("i", { class: "dot " + (tone(f.first_line) || "") }), el("span", { class: "mono", text: f.path }), el("span", { class: "dim", text: f.first_line || "" })))) : el("p", { class: "dim", text: "No files from this step." }),
     el("h3", { text: "Agent runs" }),
     runs.length ? el("div", { class: "nruns" }, runs.map((r) => el("button", {
-      type: "button", class: "nrun", onclick: () => { state.jobTab = "logs"; state.drawer.run = state.drawer.activity.runs.indexOf(r); state.drawer.runPicked = true; render(); },
+      type: "button", class: "nrun", onclick: () => { state.jobTab = "activity"; prefs.set("mfactory.job.tab", "activity"); state.drawer.run = state.drawer.activity.runs.indexOf(r); state.drawer.runPicked = true; render(); },
     }, el("span", { class: "who", text: r.agent || "agent" }), el("span", { class: "dim", text: runMeta(r) })))) : el("p", { class: "dim", text: state.drawer && state.drawer.activity ? "No agent runs recorded for this step." : "Loading agent runs..." }),
   );
 }
@@ -2702,11 +2702,10 @@ function jobFilesTab(job) {
 }
 function jobLogsTab(job) {
   ensureTelemetry(job);
-  return el("div", { class: "logpage" },
-    telemetryPanel(job),
-    el("div", { class: "panel logs" },
-      el("h2", { text: "Agent activity" }),
-      activityBody(job)));
+  return telemetryPanel(job);
+}
+function jobActivityTab(job) {
+  return el("div", { class: "panel logs" }, activityBody(job));
 }
 function telemetryUrl(job) {
   if (state.workspace && job.project) {
@@ -2844,7 +2843,7 @@ function jobPage(job) {
   ensureJobActivity(job);
   const times = jobTimes(job);
   const tab = state.jobTab || "graph";
-  const body = tab === "gantt" ? jobGanttTab(job) : tab === "details" ? jobDetailsTab(job) : tab === "files" ? jobFilesTab(job) : tab === "logs" ? jobLogsTab(job) : jobGraphTab(job);
+  const body = tab === "gantt" ? jobGanttTab(job) : tab === "details" ? jobDetailsTab(job) : tab === "files" ? jobFilesTab(job) : tab === "logs" ? jobLogsTab(job) : tab === "activity" ? jobActivityTab(job) : jobGraphTab(job);
   const many = state.workspace && state.selected === "all" && job.projectName;
   return [
     el("nav", { class: "crumbs", "aria-label": "Breadcrumb" }, el("a", { href: "#/jobs", text: "Jobs" }), el("span", { class: "dim", text: " / " }),
