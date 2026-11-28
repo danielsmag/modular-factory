@@ -31,3 +31,4 @@ reviewer-ux       = { effort = "medium" }
 reviewer-ui       = { effort = "low" }
 approve           = { effort = "high" }
 verify            = { effort = "medium" }
+planner-scan      = { effort = "low" }

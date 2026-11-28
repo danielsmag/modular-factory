@@ -20,6 +20,7 @@ run jobs (the orchestrator skill uses these)
 plan the queue across jobs
   plan snapshot [--json] [--label NAME]
   plan collect [--json]
+  plan scan [--force] | plan due | plan ingest [--reply]
 other
   checks | dashboard | start dashboard | stop | version
 several projects
@@ -157,7 +158,7 @@ def parser() -> argparse.ArgumentParser:
     plan: argparse.ArgumentParser = sub.add_parser(
         "plan", help="the planner: duplicates, dependencies and priority across the queue")
     plan_sub: argparse._SubParsersAction[argparse.ArgumentParser] = plan.add_subparsers(
-        dest="plan_what", required=True, metavar="<snapshot|collect>")
+        dest="plan_what", required=True, metavar="<snapshot|collect|scan|due|ingest>")
     plan_snapshot: argparse.ArgumentParser = plan_sub.add_parser(
         "snapshot", help="every queued issue and job of this project, as tickets")
     plan_snapshot.add_argument("--json", action="store_true", help="the snapshot as one JSON object")
@@ -165,6 +166,13 @@ def parser() -> argparse.ArgumentParser:
     plan_collect: argparse.ArgumentParser = plan_sub.add_parser(
         "collect", help="every project of the workspace as one snapshot, with candidate pairs")
     plan_collect.add_argument("--json", action="store_true", help="the snapshot as one JSON object")
+    plan_scan: argparse.ArgumentParser = plan_sub.add_parser(
+        "scan", help="collect, then say whether the scan agent should run")
+    plan_scan.add_argument("--force", action="store_true", help="scan even if nothing changed or it is not time")
+    plan_sub.add_parser("due", help="print scan or not due")
+    plan_ingest: argparse.ArgumentParser = plan_sub.add_parser(
+        "ingest", help="check the scan agent's draft and merge it into the findings")
+    plan_ingest.add_argument("--reply", action="store_true", help="read the draft from standard input")
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
     sub.add_parser("hook")  # no help text: argparse then leaves it out of the list

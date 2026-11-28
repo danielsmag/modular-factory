@@ -260,7 +260,11 @@ class Config:
         """
         keys = [key for key, _, _ in self.agent_steps(every)]
         reviewers = self.reviewers if every else self.live_reviewers
-        return keys + [f"reviewer-{name}" for name in reviewers]
+        keys += [f"reviewer-{name}" for name in reviewers]
+        planner: object = self.data.get("planner")
+        if every or not isinstance(planner, dict) or planner.get("enabled", True) is not False:
+            keys.append("planner-scan")
+        return keys
 
     def variants(self, key):
         """Risk levels for which any enabled tool gives this agent its own model or effort."""

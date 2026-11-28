@@ -33,9 +33,12 @@ DESCRIPTIONS: dict[str, str] = {
     "approve": "Decides whether the job's pull request merges or goes to a person.",
     "verify": "Checks the merged change against the spec's acceptance criteria.",
     "custom": "A step this project defines in factory.toml.",
+    "planner": ("Scans the queued tickets across projects for duplicates, dependencies and conflicts, "
+                "and writes a draft of findings. Never changes a ticket or a job."),
 }
 CLAUDE_TOOLS: dict[str, str] = {
     "intake": "Read, Grep, Glob, Write",
+    "planner": "Read, Grep, Glob, Write",
     "spec": "Read, Grep, Glob, Bash, Write, Skill",
     "build": "Read, Grep, Glob, Bash, Edit, Write, Skill",
     "custom": "Read, Grep, Glob, Bash, Edit, Write, Skill",
@@ -573,6 +576,14 @@ def agents(cfg: Config) -> list[Agent]:
     owners: dict[str, tuple[str, str]] = {key: (pipe, step) for key, pipe, step in cfg.agent_steps()}
     for key in cfg.agent_keys():
         prompt_file: str | None = None
+        if key == "planner-scan":
+            # Workspace-level: no job, so no common.md, no job sections and no project skills or rules.
+            for risk in [None] + cfg.variants(key):
+                note = f" For {risk}-risk jobs." if risk else ""
+                out.append(Agent(key, cfg.agent_name(key, risk), risk, "planner",
+                                 f"Factory planner. {DESCRIPTIONS['planner']}{note}", ["planner.md"], [], [], [],
+                                 None, ["default"]))
+            continue
         if key.startswith("reviewer-") and key.removeprefix("reviewer-") in cfg.reviewers:
             reviewer = key.removeprefix("reviewer-")
             settings = cfg.reviewers[reviewer]
@@ -703,6 +714,10 @@ def body(cfg: Config, tool: str, agent: Agent, index: SkillIndex | None = None) 
                 lines.append(f"- `{mention}`")
     for heading, text in agent.sections:
         lines += ["", f"## {heading}", "", text]
+    if agent.kind == "planner" and cfg.adapters[tool]["agents"]["intake"] == "reply":
+        lines += ["", "## Handing in your file", "",
+                  "You can't write files or run commands here. Instead of writing the draft file, reply with",
+                  "the draft's JSON and nothing else. The factory saves your reply as the draft."]
     if agent.kind == "intake" and cfg.adapters[tool]["agents"]["intake"] == "reply":
         lines += ["", "## Handing in your file", "",
                   "You can't write files or run commands here. Instead of writing `intake.md`, reply with",
@@ -753,7 +768,7 @@ def _cursor(cfg, agent, model, text):
     if model.get("effort") and name != "inherit":
         name += f"[effort={model['effort']}]"
     front = [f"name: {agent.name}", f"description: {json.dumps(agent.description)}", f"model: {name}"]
-    if agent.kind == "intake":
+    if agent.kind in ("intake", "planner"):
         front.append("readonly: true")
     return f"{agent.name}.md", "---\n" + "\n".join(front) + f"\n---\n<!-- {NOTE} -->\n\n{text}"
 
@@ -766,7 +781,7 @@ def _codex(cfg, agent, model, text):
     if model.get("effort"):
         lines.append(f"model_reasoning_effort = {json.dumps(model['effort'])}")
     lines.append(f'developer_instructions = """\n{escaped}"""')
-    if agent.kind == "intake" and not cfg["tools"].get("codex", {}).get("intake_shell"):
+    if agent.kind in ("intake", "planner") and not cfg["tools"].get("codex", {}).get("intake_shell"):
         lines += ["", "[features]", "shell_tool = false"]
     return f"{agent.name}.toml", "\n".join(lines) + "\n"
 
@@ -854,7 +869,7 @@ def plan(cfg: Config) -> tuple[dict[str, str], list[str]]:
             files[f"{adapter['paths']['agents']}/{name}"] = text
     notes.extend(skill_gap_notes(cfg, listed))
     others = [cfg.adapters[tool]["label"] for tool in cfg.tools if tool != "claude"]
-    if others and any(agent.tools != ["all"] for agent in listed):
+    if others and any(agent.tools != ["all"] for agent in listed if agent.kind != "planner"):
         notes.append(f"tools only limits Claude Code agents. {' and '.join(others)} agents have every tool.")
     dirs = skill_dirs(cfg)
     for folder in dirs:
@@ -943,7 +958,7 @@ def describe_skills(cfg: Config) -> str:
     """`mfactory skills`: project, user and plugin skills, and which agents read each."""
     home = skill_home()
     index = SkillIndex(home)
-    roster = [agent for agent in agents(cfg) if agent.risk is None]
+    roster = [agent for agent in agents(cfg) if agent.risk is None and agent.kind != "planner"]
     every = len(roster)
     readers: dict[str, list[str]] = {}
     listed_user: list[str] = []

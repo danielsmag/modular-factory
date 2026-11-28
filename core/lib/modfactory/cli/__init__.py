@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -16,6 +17,8 @@ from .. import board, checks, config, graph, install, pipelines, plan_usage
 from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
+from ..planner import ingest as ingest_mod
+from ..planner import schedule as schedule_mod
 from ..planner import snapshot as snapshot_mod
 from ..planner.state import PlannerState
 from ..queue import queue_json
@@ -28,6 +31,7 @@ from ..util import (
     find_repo,
     global_binary,
     has_dashboard_page,
+    now,
     user_dir,
     version,
 )
@@ -168,7 +172,7 @@ def _listed(repo: Path) -> tuple[workspace_mod.Workspace, str] | None:
     return None
 
 
-def plan_collect(repo: Path, cfg: config.Config, as_json: bool) -> int:
+def _plan_collected(repo: Path, cfg: config.Config) -> tuple[dict[str, Any], PlannerState]:
     """Snapshot every project of the workspace. A checkout the workspace does not list is collected on its own."""
     listed: tuple[workspace_mod.Workspace, str] | None = _listed(repo)
     group: workspace_mod.Workspace
@@ -176,7 +180,67 @@ def plan_collect(repo: Path, cfg: config.Config, as_json: bool) -> int:
         group = workspace_mod.Workspace(Path(), [workspace_mod.Project(repo.resolve())])
     else:
         group = listed[0]
-    found: dict[str, Any] = workspace_planner.collect(group, cfg["planner"], PlannerState(user_dir() / "planner"))
+    state: PlannerState = PlannerState(user_dir() / "planner")
+    return workspace_planner.collect(group, cfg["planner"], state), state
+
+
+def plan_scan(repo: Path, cfg: config.Config, force: bool, only_due: bool) -> int:
+    """Collect, then say whether the scan agent is due: `scan` / `not due`, or the lines that start it."""
+    snapshot, state = _plan_collected(repo, cfg)
+    findings: dict[str, Any] = state.read_findings()
+    due: bool = force or schedule_mod.is_due(
+        str(cfg["planner"]["frequency"]), findings, str(snapshot["hash"]), datetime.now(UTC))
+    if only_due:
+        print("scan" if due else "not due")
+    elif due:
+        print("start-agent mfactory-planner-scan")
+        print(f"prompt: Planner scan. Snapshot: {state.snapshot_path}. Write: {state.draft_path}.")
+        print("then: mfactory plan ingest")
+    else:
+        print(f"up to date: nothing changed since the scan at {findings.get('scanned_at')}")
+    return 0
+
+
+def _draft_json(text: str) -> object:
+    """The draft a scan agent handed in, tolerating a code fence around it. None when it is not JSON."""
+    body: str = text.strip()
+    if body.startswith("```"):
+        body = body.partition("\n")[2].rpartition("```")[0]
+    try:
+        return json.loads(body)
+    except ValueError:
+        return None
+
+
+def plan_ingest(cfg: config.Config, reply: bool) -> int:
+    """Check the draft, merge it into the findings and report what is open."""
+    state: PlannerState = PlannerState(user_dir() / "planner")
+    snapshot: dict[str, Any] | None = state.read_snapshot()
+    if snapshot is None:
+        raise Refused("there is no snapshot: run `mfactory plan scan` first")
+    if reply:
+        text: str = _stdin_text()
+    else:
+        try:
+            text = state.draft_path.read_text()
+        except OSError:
+            raise Refused(f"there is no draft at {state.draft_path}") from None
+    settings: dict[str, Any] = cfg["planner"]
+    kept, dropped = ingest_mod.validate(_draft_json(text), snapshot, int(settings["max_extra"]))
+    merged: dict[str, Any] = ingest_mod.merge(state.read_findings(), kept, snapshot, settings, now())
+    state.write_findings(merged)
+    state.draft_path.unlink(missing_ok=True)
+    opened: list[dict[str, Any]] = [f for f in merged["findings"] if f.get("status") == "open"]
+    high: int = sum(1 for f in opened if f.get("severity") == "high")
+    print(f"{len(opened)} open findings ({high} high)")
+    for reason in dropped:
+        print(f"dropped: {reason}")
+    return 0
+
+
+def plan_collect(repo: Path, cfg: config.Config, as_json: bool) -> int:
+    """Snapshot every project of the workspace and print what was found."""
+    found: dict[str, Any] = _plan_collected(repo, cfg)[0]
     if as_json:
         print(json.dumps(found, indent=2))
         return 0
@@ -457,6 +521,10 @@ def run(args: argparse.Namespace) -> int:
         return checks.run_here(cfg)
     elif command == "plan" and args.plan_what == "collect":
         return plan_collect(repo, cfg, args.json)
+    elif command == "plan" and args.plan_what in ("scan", "due"):
+        return plan_scan(repo, cfg, args.plan_what == "scan" and args.force, args.plan_what == "due")
+    elif command == "plan" and args.plan_what == "ingest":
+        return plan_ingest(cfg, args.reply)
     elif command == "dashboard":
         listed: tuple[workspace_mod.Workspace, str] | None = _listed(repo)
         if listed is None:
