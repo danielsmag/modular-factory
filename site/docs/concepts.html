@@ -22,7 +22,7 @@
       </tbody>
     </table>
   </div>
-  <p>The pipeline is data in <code>factory.toml</code>, so no prompt describes it. Changing the pipeline changes no prompt, and the orchestrator works the same for any graph.</p>
+  <p>The pipeline is data in <code>factory/pipes/*.yaml</code>, so no prompt describes it. Changing the pipeline changes no prompt, and the orchestrator works the same for any graph.</p>
 
   <h2 id="the-loop">The loop</h2>
   <pre data-lang="text"><code>$ .factory/bin/mfactory next 004
@@ -64,7 +64,7 @@ round-1/debug-1.md        the debugger's diagnosis</code></pre>
     <li>It does not deploy.</li>
     <li>It does not merge a revert. A failed validation can open a draft pull request that reverts the merge, for a person to merge.</li>
     <li>It does not merge at all unless the merge step is on. See <a href="pipeline.html#who-merges">who merges</a>.</li>
-    <li>It does not let a job edit <code>factory.toml</code>, <code>.factory/</code>, or a generated agent or skill file. See <a href="guards.html#protected-paths">protected paths</a>.</li>
+    <li>It does not let a job edit <code>factory/</code>, <code>.factory/</code>, or a generated agent or skill file. See <a href="guards.html#protected-paths">protected paths</a>.</li>
   </ul>
 </article>
 <script src="docs.js"></script>

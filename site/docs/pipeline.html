@@ -22,7 +22,7 @@ pipes:
     steps:
       spec: { enabled: false, skip: DONE }
       approve: { enabled: false, skip: APPROVE }</code></pre>
-  <p>A job keeps the pipeline it starts with: <code>/mfactory run 12 --pipe hotfix</code>. Without the flag it runs <code>[run].pipe</code> from <code>factory.toml</code>, or the only pipeline. With several and none named, <code>/mfactory run</code> asks which. <code>mfactory pipes list</code>, <code>pipelines validate</code> and <code>graph --pipe NAME</code> show them. <code>[steps.*]</code> left in <code>factory.toml</code> still override <code>default</code>; <code>mfactory migrate pipes</code> moves them to YAML. The examples below show only the keys that change: edit them in place in <code>factory/pipes/default.yaml</code>.</p>
+  <p>A job keeps the pipeline it starts with: <code>/mfactory run 12 --pipe hotfix</code>. Without the flag it runs <code>[run].pipe</code> from <code>factory/factory.toml</code>, or the only pipeline. With several and none named, <code>/mfactory run</code> asks which. <code>mfactory pipes list</code>, <code>mfactory pipes validate</code>, and <code>mfactory graph --pipe NAME</code> show them. <code>[steps.*]</code> left in <code>factory.toml</code> still override <code>default</code>; <code>mfactory migrate pipes</code> moves them to YAML. A <code>factory.toml</code> at the repository root still works; <code>mfactory migrate layout</code> moves it into <code>factory/</code>. The examples below show only the keys that change: edit them in place in <code>factory/pipes/default.yaml</code>.</p>
 
   <h2 id="the-default-graph">The default graph</h2>
   <pre data-lang="text"><code>intake           agent   ACCEPT -&gt; spec | NEEDS-INFO -&gt; ask-author (max 2) | REJECT -&gt; rejected

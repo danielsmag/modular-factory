@@ -3,6 +3,18 @@
 How the factory works, what guards it, what has not been tested, and what
 changed from the project it is derived from.
 
+## Contents
+
+- [Three parts](#three-parts)
+- [Where things live](#where-things-live)
+- [Edges and limits](#edges-and-limits)
+- [What guards it](#what-guards-it)
+- [Dashboard API](#dashboard-api)
+- [Differences between the tools](#differences-between-the-tools)
+- [Decisions the plan left open](#decisions-the-plan-left-open)
+- [What is untested](#what-is-untested)
+- [What changed from the reference](#what-changed-from-the-reference)
+
 ## Three parts
 
 | Part | What it is | What it decides |

@@ -10,11 +10,11 @@
 <article class="doc home" id="doc">
   <h1>factory</h1>
   <p class="lede">A software factory you install into any repository. You label a GitHub issue. Agents decide whether it is worth building, write a spec, build it on a branch, and review it. By default a maintainer merges the pull request.</p>
-  <p>It runs inside the coding tool you already use: Claude Code, Cursor, or Codex. Everything a project changes lives in one file, <code>factory.toml</code>.</p>
+  <p>It runs inside the coding tool you already use: Claude Code, Cursor, or Codex. Everything a project changes lives in <code>factory/</code>: pipelines as YAML in <code>factory/pipes/</code>, and the rest in <code>factory/factory.toml</code>.</p>
 
   <aside class="callout warn">
-    <p class="tag">Status · 0.2.1</p>
-    <p>The pipeline is covered by automated tests that play the orchestrator and the agents against a stand-in for GitHub. No job has yet run end to end inside Claude Code, Cursor, or Codex. Expect problems on the first real run. See <a href="guards.html#what-is-untested">what is untested</a>.</p>
+    <p class="tag">Status</p>
+    <p>Automated tests play the orchestrator and the agents against a stand-in for GitHub. No job has yet run end to end inside Claude Code, Cursor, or Codex. Expect problems on the first real run. See <a href="guards.html#what-is-untested">what is untested</a>.</p>
   </aside>
 
   <h2 id="install">Install</h2>
@@ -25,8 +25,8 @@ mfactory install --tool claude</code></pre>
 
   <h2 id="why-a-factory">Why a factory</h2>
   <div class="why">
-    <a href="configuration.html"><strong>One file</strong><span>Steps, checks, models, reviewers, and skills live in <code>factory.toml</code>. A mistake names the key.</span></a>
-    <a href="concepts.html"><strong>The pipeline is data</strong><span>No prompt describes the graph. Changing an edge changes no prompt.</span></a>
+    <a href="configuration.html"><strong>One folder</strong><span>Pipes in <code>factory/pipes/</code>. Checks, models, reviewers, and skills in <code>factory/factory.toml</code>. A mistake names the key.</span></a>
+    <a href="pipeline.html"><strong>The pipeline is data</strong><span>YAML you can read. No prompt describes the graph. Changing an edge changes no prompt.</span></a>
     <a href="concepts.html#three-parts"><strong>The script decides</strong><span>Step, edge, limit, checks, merge. Agents write one step.</span></a>
     <a href="tools.html"><strong>Three tools</strong><span>Claude Code, Cursor, and Codex. One set of prompts. <code>mfactory sync</code> writes each tool's files.</span></a>
     <a href="install.html#what-you-need"><strong>Nothing to pin</strong><span>Python with PyYAML, <code>git</code>, and the GitHub CLI. No package added to the project.</span></a>
@@ -67,7 +67,8 @@ escalated        human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pr
     <a href="install.html"><span class="k">Get started</span><strong>Install</strong><span>The command, the repository, setup, and doctor.</span></a>
     <a href="first-job.html"><span class="k">Get started</span><strong>First job</strong><span>Label an issue, run it, answer when it waits.</span></a>
     <a href="concepts.html"><span class="k">Concepts</span><strong>How it works</strong><span>Script, orchestrator, agents, and where files live.</span></a>
-    <a href="configuration.html"><span class="k">Reference</span><strong>factory.toml</strong><span>Every key, and which file set it.</span></a>
+    <a href="workspace.html#planner"><span class="k">Guides</span><strong>Planner</strong><span>Duplicates, order, and overlap. Nothing changes until you approve.</span></a>
+    <a href="configuration.html"><span class="k">Reference</span><strong>Configuration</strong><span>Every key in <code>factory/</code>, and which file set it.</span></a>
   </div>
 </article>
 <script src="docs.js"></script>

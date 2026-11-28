@@ -1,5 +1,21 @@
 # Install guide
 
+Install the `mfactory` command once, then put the factory in each repository.
+Setup fills in `factory/factory.toml`. `mfactory doctor` checks that a run can start.
+
+## Contents
+
+- [What you need](#what-you-need)
+- [1. Install](#1-install)
+- [2. Set up](#2-set-up)
+- [3. Check](#3-check)
+- [4. Commit and run](#4-commit-and-run)
+- [Several projects](#several-projects)
+- [Permissions your tool will ask for](#permissions-your-tool-will-ask-for)
+- [Using more than one tool](#using-more-than-one-tool)
+- [Upgrade](#upgrade)
+- [Remove](#remove)
+
 ## What you need
 
 - A git repository with a GitHub remote named `origin`.
@@ -58,9 +74,10 @@ bash install.sh --tool cursor
 It does five things and prints each:
 
 ```text
-ok    .factory/ installed (version 0.1.0)
+ok    .factory/ installed (version 0.36.1)
 ok    factory/factory.toml written
-ok    .gitignore gained /.factory/jobs/, /.worktrees/
+ok    factory/pipes/default.yaml written: the default pipe, ready to edit
+ok    .gitignore gained /.factory/jobs/, /.factory/telemetry/, /.worktrees/
 ok    generated files for claude: 10 written
 ok    GitHub labels created: factory, factory:needs-info, factory:needs-human
 ```
@@ -110,7 +127,7 @@ make install PERSONAL=1 TOOL=claude
 ```
 
 ```text
-ok    .factory/ installed (version 0.3.1)
+ok    .factory/ installed (version 0.36.1)
 ok    factory/factory.toml written
 ok    factory/pipes/default.yaml written: the default pipe, ready to edit
 ok    .git/info/exclude gained /factory/, /.factory/, /.worktrees/, /.claude/agents/mfactory-*, /.claude/agents/factory-*, /.claude/skills/mfactory/, /.cursor/agents/mfactory-*, /.cursor/agents/factory-*, /.agents/skills/mfactory/, /.codex/agents/mfactory-*, /.codex/agents/factory-*
@@ -192,7 +209,7 @@ This rewrites the generated agent files to match.
 ```
 
 ```text
-ok    factory 0.1.0, Python 3.12.3
+ok    factory 0.36.1, Python 3.12.3
 ok    git: git version 2.43.0
 ok    gh: gh version 2.60.0
 ok    gh is signed in
@@ -222,7 +239,7 @@ as your CI. Pass `--skip-checks` to leave that out.
 | `factory/factory.toml and .factory/ aren't on origin/<base> yet` | Commit and push them. Jobs build from that branch. A personal install does not report this: those files are listed in `.git/info/exclude`. |
 | `factory/factory.toml and .factory/ are ignored in this checkout` | Expected after `mfactory install --personal`. Worktrees from `origin/<base>` do not contain the factory. |
 | The checks fail on the base branch | Fix the base branch first. Otherwise every job fails for a reason it did not cause. |
-| A label is missing | `mfactory init` creates them; it needs write access to the repository. |
+| A label is missing | `mfactory install` creates them. It needs write access to the repository. |
 | `<tool> isn't on PATH` | A warning only. It is fine if you run the tool as an app. |
 
 ## 4. Commit and run

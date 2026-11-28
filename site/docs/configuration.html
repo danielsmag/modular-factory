@@ -378,7 +378,7 @@ token_file = ".secrets/jira"    # optional. One line, the token only</code></pre
   <ul>
     <li><code>queue</code> is required. It is the status new jobs are picked from, and it may be a list.</li>
     <li><code>watch</code> is optional: a status, or a list of them, whose cards the dashboard shows in a <strong>Watching</strong> lane before the queue, with the same link and drawer. They are never built: <code>queue</code>, <code>create</code> and <code>/mfactory run</code> skip them, and <code>/mfactory run &lt;KEY&gt;</code> on one says to move it to the queue first. The board's filter and <code>jql</code> scope them like the queue. A watched status cannot also be <code>queue</code>, a step's or an end state's status. <code>tracker show</code> and <code>doctor</code> check that each one is on the board. For example, <code>watch = ["Pending Design", "Pending US Approval"]</code>.</li>
-    <li>A key is a step's name in <code>factory.toml</code>, so a step you add, rename or switch off needs no other change. A key that is not a step fails <code>mfactory sync</code>, with the steps listed.</li>
+    <li>A key is a step's name in the pipe, so a step you add, rename, or switch off needs no other change. A key that is not a step fails <code>mfactory sync</code>, with the steps listed.</li>
     <li>Steps may share a status, for a smaller board.</li>
     <li>A step with no status leaves the card where it is.</li>
     <li>The status is looked up each time it is used and is not stored on the job. Change one line and the next command uses it.</li>
@@ -481,6 +481,48 @@ authors = { github = ["alice"], jira = ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e
     <li>A job keeps the tracker it came from, so adding a second tracker leaves jobs in flight running. A job whose tracker is taken out of <code>kind</code> gets a <code>skip</code> row until the tracker is back.</li>
     <li><code>mfactory doctor</code> checks both. <code>mfactory tracker show</code> and <code>tracker sync</code> work on the Jira board.</li>
   </ul>
+
+  <h2 id="planner">Planner</h2>
+  <p>The planner reads the queue of every project in the workspace and suggests duplicates, dependencies, overlap, conflicts, and priority inversions. It only suggests. <code>mfactory plan approve</code> and <code>plan release</code> are what change a tracker or a job. How to read the findings is on the <a href="workspace.html#planner">workspace page</a>.</p>
+  <pre data-lang="toml"><code>[planner]
+enabled = true
+frequency = "medium"
+alert_at = "high"
+max_pairs = 40
+max_extra = 10
+priority = { labels = { urgent = "critical" }, jira = { Showstopper = "critical" } }</code></pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[planner] enabled</td><td><code>true</code></td><td>Scan open tickets. <code>false</code> turns off the <code>plan</code> commands that read or change findings.</td></tr>
+        <tr><td class="mono">[planner] frequency</td><td><code>"medium"</code></td><td><code>high</code> every 5 minutes, <code>medium</code> every 30, <code>low</code> every 240. A scan runs when tickets changed and the interval has passed. <code>manual</code> never scans by itself.</td></tr>
+        <tr><td class="mono">[planner] alert_at</td><td><code>"high"</code></td><td>Findings at this severity or above count on the dashboard badge and under Needs attention: <code>low</code>, <code>medium</code>, or <code>high</code>.</td></tr>
+        <tr><td class="mono">[planner] max_pairs</td><td><code>40</code></td><td>Ticket pairs a scan may look at.</td></tr>
+        <tr><td class="mono">[planner] max_extra</td><td><code>10</code></td><td>Extra pairs the scan agent may add. The rest of its draft is dropped.</td></tr>
+        <tr><td class="mono">[planner] priority</td><td>empty maps</td><td>Extra names for <code>critical</code>, <code>high</code>, and <code>low</code>, plus an optional GitHub Projects field.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="telemetry">Telemetry</h2>
+  <p>Local execution records. Telemetry does not choose the next step, and a write failure does not fail the job. Nothing leaves the machine. Commands are on the <a href="cli.html#telemetry">CLI page</a>.</p>
+  <pre data-lang="toml"><code>[telemetry]
+enabled = true
+storage = "jsonl"
+retention_days = 90
+fail_open = true</code></pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">[telemetry] enabled</td><td><code>true</code></td><td><code>false</code> writes no telemetry files.</td></tr>
+        <tr><td class="mono">[telemetry] storage</td><td><code>"jsonl"</code></td><td>The only store in this version.</td></tr>
+        <tr><td class="mono">[telemetry] retention_days</td><td><code>90</code></td><td>Used by <code>mfactory telemetry prune</code>. Prune is explicit.</td></tr>
+        <tr><td class="mono">[telemetry] fail_open</td><td><code>true</code></td><td>A telemetry error is recorded and the job continues. <code>false</code> makes that error fail the command.</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h2 id="labels-paths-and-ports">Labels, paths and ports</h2>
   <pre data-lang="toml"><code>[tracker]

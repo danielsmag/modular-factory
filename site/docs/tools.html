@@ -30,7 +30,7 @@
   <p>Enable the tools you use:</p>
   <pre data-lang="toml"><code>[tools]
 enabled = ["claude", "cursor"]</code></pre>
-  <p><code>mfactory sync</code> rewrites the generated files. Edit <code>factory.toml</code>, never those files. <code>mfactory sync --check</code> exits 1 when anything is out of date and changes nothing.</p>
+  <p><code>mfactory sync</code> rewrites the generated files. Edit <code>factory/</code>, never those files. <code>mfactory sync --check</code> exits 1 when anything is out of date and changes nothing.</p>
   <p>The command is <code>mfactory</code>. Generated agents are <code>mfactory-*</code>. The skill command is <code>/mfactory</code>. A <code>/factory</code> comment on an issue or pull request still counts. <code>mfactory sync</code> removes generated files that still use the old names, so an upgrade from 0.1.0 can finish.</p>
 
   <h2 id="intake">Intake</h2>

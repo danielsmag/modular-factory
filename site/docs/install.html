@@ -9,7 +9,7 @@
 <body data-page="install">
 <article class="doc" id="doc">
   <h1>Install</h1>
-  <p class="lede">Install <code>mfactory</code> once for your user, then install the factory into each repository. Setup fills in <code>factory.toml</code>. Doctor checks that a run can start.</p>
+  <p class="lede">Install <code>mfactory</code> once for your user, then install the factory into each repository. Setup fills in <code>factory/factory.toml</code>. Doctor checks that a run can start.</p>
 
   <h2 id="what-you-need">What you need</h2>
   <ul>
@@ -48,32 +48,34 @@ bash install.sh --global</code></pre>
       <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
       <tbody>
         <tr><td><code>--tool claude|cursor|codex</code></td><td>The tool to generate agents for. Repeat it, or separate names with commas. Default: <code>claude</code>.</td></tr>
-        <tr><td><code>--personal</code></td><td>Keep <code>factory.toml</code>, <code>.factory/</code> and the generated files untracked in this checkout. Writes <code>.git/info/exclude</code> and does not touch <code>.gitignore</code>.</td></tr>
+        <tr><td><code>--personal</code></td><td>Keep <code>factory/</code>, <code>.factory/</code>, and the generated files untracked in this checkout. Writes <code>.git/info/exclude</code> and does not touch <code>.gitignore</code>.</td></tr>
         <tr><td><code>--version v0.2.0</code></td><td>Install that release.</td></tr>
         <tr><td><code>--source DIR</code></td><td>Install from a local copy instead of downloading.</td></tr>
       </tbody>
     </table>
   </div>
   <p>The installer prints each step. The version numbers below are an example:</p>
-  <pre data-lang="text"><code>ok    .factory/ installed (version 0.2.0)
-ok    factory.toml written
-ok    .gitignore gained /.factory/jobs/, /.worktrees/
+  <pre data-lang="text"><code>ok    .factory/ installed (version 0.36.1)
+ok    factory/factory.toml written
+ok    factory/pipes/default.yaml written: the default pipe, ready to edit
+ok    .gitignore gained /.factory/jobs/, /.factory/telemetry/, /.worktrees/
 ok    generated files for claude
 ok    GitHub labels: factory, factory:needs-info, factory:needs-human</code></pre>
   <div class="scroll">
     <table>
       <thead><tr><th>Path</th><th>What it is</th><th>Commit it?</th></tr></thead>
       <tbody>
-        <tr><td class="mono">factory.toml</td><td>Your configuration. The only file you edit.</td><td>Yes</td></tr>
+        <tr><td class="mono">factory/factory.toml</td><td>Project settings: checks, models, tracker, skills.</td><td>Yes</td></tr>
+        <tr><td class="mono">factory/pipes/*.yaml</td><td>The pipes. <code>install</code> writes <code>default.yaml</code>.</td><td>Yes</td></tr>
         <tr><td class="mono">.factory/</td><td>The factory: its CLI, prompts, and defaults.</td><td>Yes</td></tr>
         <tr><td class="mono">.factory/jobs/</td><td>The state and files of each job.</td><td>No, ignored</td></tr>
         <tr><td class="mono">.worktrees/</td><td>One git worktree per running job.</td><td>No, ignored</td></tr>
-        <tr><td class="mono">.claude/agents/mfactory-*.md</td><td>One small agent file per step, generated from <code>factory.toml</code>. Cursor and Codex use their own folders.</td><td>Yes</td></tr>
+        <tr><td class="mono">.claude/agents/mfactory-*.md</td><td>One small agent file per step, generated from <code>factory/factory.toml</code>. Cursor and Codex use their own folders.</td><td>Yes</td></tr>
         <tr><td class="mono">.claude/skills/mfactory/</td><td>The <code>/mfactory</code> skill. Codex uses <code>.agents/skills/mfactory/</code>.</td><td>Yes</td></tr>
       </tbody>
     </table>
   </div>
-  <p>Running the installer again is safe: it never overwrites <code>factory.toml</code>.</p>
+  <p>Running the installer again is safe: it never overwrites <code>factory/factory.toml</code> or a pipe file that is already there.</p>
 
   <h2 id="personal-install">Personal install</h2>
   <p>Use this when the factory is for you, not for everyone who clones the repository. <code>.gitignore</code> stays as it was.</p>
@@ -83,7 +85,7 @@ ok    GitHub labels: factory, factory:needs-info, factory:needs-human</code></pr
 make install PERSONAL=1 TOOL=claude</code></pre>
   <p>The installer appends this block to <code>.git/info/exclude</code>. The patterns cover every tool, so turning one on later does not show new files in <code>git status</code>:</p>
   <pre data-lang="gitignore"><code># software factory, this checkout only
-/factory.toml
+/factory/
 /.factory/
 /.worktrees/
 /.claude/agents/mfactory-*
@@ -94,51 +96,53 @@ make install PERSONAL=1 TOOL=claude</code></pre>
 /.agents/skills/mfactory/
 /.codex/agents/mfactory-*
 /.codex/agents/factory-*</code></pre>
-  <pre data-lang="text"><code>ok    .factory/ installed (version 0.3.1)
-ok    factory.toml written
-ok    .git/info/exclude gained /factory.toml, /.factory/, /.worktrees/, /.claude/agents/mfactory-*, /.claude/agents/factory-*, /.claude/skills/mfactory/, /.cursor/agents/mfactory-*, /.cursor/agents/factory-*, /.agents/skills/mfactory/, /.codex/agents/mfactory-*, /.codex/agents/factory-*
+  <pre data-lang="text"><code>ok    .factory/ installed (version 0.36.1)
+ok    factory/factory.toml written
+ok    factory/pipes/default.yaml written: the default pipe, ready to edit
+ok    .git/info/exclude gained /factory/, /.factory/, /.worktrees/, /.claude/agents/mfactory-*, /.claude/agents/factory-*, /.claude/skills/mfactory/, /.cursor/agents/mfactory-*, /.cursor/agents/factory-*, /.agents/skills/mfactory/, /.codex/agents/mfactory-*, /.codex/agents/factory-*
 ok    generated files for claude: 10 written
 ok    GitHub labels: factory, factory:needs-info, factory:needs-human
 
 Next:
-  1. In your tool, run `/mfactory setup` to fill in factory.toml (or edit it yourself).
+  1. In your tool, run `/mfactory setup` to fill in factory/factory.toml (or edit it yourself).
   2. Run `.factory/bin/mfactory doctor`.
-  3. Leave factory.toml, .factory/ and the generated files untracked. This checkout ignores them.
+  3. Leave factory/, .factory/ and the generated files untracked. This checkout ignores them.
   4. Label an issue `factory` and run `/mfactory run`.</code></pre>
-  <p><code>git status</code> does not list <code>factory.toml</code>, <code>.factory/</code>, or <code>.claude/agents/mfactory-build.md</code>. <code>git check-ignore -v factory.toml</code> names <code>.git/info/exclude</code>.</p>
+  <p><code>git status</code> does not list <code>factory/factory.toml</code>, <code>.factory/</code>, or <code>.claude/agents/mfactory-build.md</code>. <code>git check-ignore -v factory/factory.toml</code> names <code>.git/info/exclude</code>.</p>
   <p>Running <code>mfactory install</code> again in that checkout, without <code>--personal</code>, does not touch <code>.gitignore</code>:</p>
   <pre data-lang="text"><code>ok    .git/info/exclude already ignores the factory (personal install)</code></pre>
   <p><code>doctor</code> then reports:</p>
-  <pre data-lang="text"><code>ok    factory.toml and .factory/ are ignored in this checkout (.git/info/exclude). Worktrees built from origin/main do not contain them. A check that needs those files must use the main checkout.</code></pre>
-  <p>Jobs build a worktree from <code>origin/&lt;base&gt;</code>. That worktree does not contain <code>factory.toml</code> or <code>.factory/</code>. A check command that needs those files has to reach the main checkout itself. Skip the commit step below.</p>
+  <pre data-lang="text"><code>ok    factory/factory.toml and .factory/ are ignored in this checkout (.git/info/exclude). Worktrees built from origin/main do not contain them. A check that needs those files must use the main checkout.</code></pre>
+  <p>Jobs build a worktree from <code>origin/&lt;base&gt;</code>. That worktree does not contain <code>factory/</code> or <code>.factory/</code>. A check command that needs those files has to reach the main checkout itself. A checkout set up before <code>factory/</code> keeps <code>factory.toml</code> at its root; <code>mfactory migrate layout</code> moves it. Skip the commit step below.</p>
   <p>To install for the team afterwards, delete that block from <code>.git/info/exclude</code>, then run <code>mfactory install</code>. That run appends <code>/.factory/jobs/</code> and <code>/.worktrees/</code> to <code>.gitignore</code> and tells you to commit.</p>
   <p><code>mfactory upgrade</code> in a personal checkout ends with:</p>
-  <pre data-lang="text"><code>Next: run `.factory/bin/mfactory doctor`. Leave factory.toml, .factory/ and the generated files untracked.</code></pre>
+  <pre data-lang="text"><code>Next: run `.factory/bin/mfactory doctor`. Leave factory/, .factory/ and the generated files untracked.</code></pre>
 
   <h2 id="set-up">Set up</h2>
   <p>In your coding tool, in the repository:</p>
   <pre data-lang="text"><code>/mfactory setup</code></pre>
   <p>In Codex, mention the skill with <code>$factory setup</code>, or ask in words: "set up the factory".</p>
-  <p>The agent reads your README, package manifest, and CI workflows, then edits <code>factory.toml</code>:</p>
+  <p>The agent reads your README, package manifest, and CI workflows, then edits <code>factory/factory.toml</code>:</p>
   <ul>
     <li><code>[project] description</code>: what the project is for. Intake judges issues against this.</li>
     <li><code>[checks] commands</code>: the commands that install dependencies and run lint, tests, and the build. These decide whether a build may be reviewed.</li>
     <li><code>[skills]</code>: which of your project's skills agents read.</li>
   </ul>
-  <p>It asks before turning on any optional step. By default a maintainer merges the pull request and the factory does not. Ask whether a merge to the base branch publishes a release. Only when it does not, and you want the factory to merge, turn the merge step on. See <a href="pipeline.html#who-merges">who merges</a>. You can also edit <code>factory.toml</code> by hand. The <a href="configuration.html">reference</a> lists every key.</p>
-  <p>After any change to <code>factory.toml</code>:</p>
+  <p>It asks before turning on any optional step. By default a maintainer merges the pull request and the factory does not. Ask whether a merge to the base branch publishes a release. Only when it does not, and you want the factory to merge, turn the merge step on. See <a href="pipeline.html#who-merges">who merges</a>. You can also edit <code>factory/factory.toml</code> and the pipes by hand. The <a href="configuration.html">reference</a> lists every key.</p>
+  <p>After any change to <code>factory/factory.toml</code> or a pipe:</p>
   <pre data-lang="bash"><code>.factory/bin/mfactory sync</code></pre>
   <p>This rewrites the generated agent files to match.</p>
 
   <h2 id="check">Check</h2>
   <pre data-lang="bash"><code>.factory/bin/mfactory doctor</code></pre>
-  <pre data-lang="text"><code>ok    factory 0.2.0, Python 3.12.3
+  <pre data-lang="text"><code>ok    factory 0.36.1, Python 3.12.3
 ok    git: git version 2.43.0
 ok    gh: gh version 2.60.0
 ok    gh is signed in
-ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, merge, ready-to-verify, verify
+ok    factory/factory.toml is valid
+ok    pipe "default" (factory/pipes/default.yaml) is valid: 9 steps on, off: spec-approval, debug, merge, ready-to-verify, verify
 ok    Claude Code: claude 2.1.0
-ok    generated agent and skill files match factory.toml
+ok    generated agent and skill files match factory/factory.toml
 ok    origin/main can be fetched
 ok    .factory/jobs/ is ignored by git
 ok    GitHub labels exist
@@ -151,11 +155,11 @@ Everything a run needs is in place.</code></pre>
     <table>
       <thead><tr><th>It reports</th><th>What to do</th></tr></thead>
       <tbody>
-        <tr><td>A problem in <code>factory.toml</code>, naming the key</td><td>Fix that key. <code>mfactory graph</code> shows the pipeline in effect.</td></tr>
+        <tr><td>A problem in <code>factory/factory.toml</code> or a pipe, naming the key</td><td>Fix that key. <code>mfactory graph</code> shows the pipeline in effect. <code>mfactory pipes validate</code> checks every pipe.</td></tr>
         <tr><td><code>[checks].commands is empty</code></td><td>Run <code>/mfactory setup</code>, or list the commands yourself.</td></tr>
-        <tr><td>Generated files differ from <code>factory.toml</code></td><td>Run <code>.factory/bin/mfactory sync</code>. Edit <code>factory.toml</code>, never the generated files.</td></tr>
-        <tr><td><code>factory.toml</code> and <code>.factory/</code> are not on <code>origin/&lt;base&gt;</code> yet</td><td>Commit and push them. Jobs build from that branch. A personal install does not report this: those files are listed in <code>.git/info/exclude</code>.</td></tr>
-        <tr><td><code>factory.toml</code> and <code>.factory/</code> are ignored in this checkout</td><td>Expected after <code>mfactory install --personal</code>. Worktrees from <code>origin/&lt;base&gt;</code> do not contain the factory.</td></tr>
+        <tr><td>Generated files differ from <code>factory/factory.toml</code></td><td>Run <code>.factory/bin/mfactory sync</code>. Edit <code>factory/factory.toml</code> and the pipes, never the generated files.</td></tr>
+        <tr><td><code>factory/</code> and <code>.factory/</code> are not on <code>origin/&lt;base&gt;</code> yet</td><td>Commit and push them. Jobs build from that branch. A personal install does not report this: those files are listed in <code>.git/info/exclude</code>.</td></tr>
+        <tr><td><code>factory/</code> and <code>.factory/</code> are ignored in this checkout</td><td>Expected after <code>mfactory install --personal</code>. Worktrees from <code>origin/&lt;base&gt;</code> do not contain the factory.</td></tr>
         <tr><td>The checks fail on the base branch</td><td>Fix the base branch first. Otherwise every job fails for a reason it did not cause.</td></tr>
         <tr><td>A label is missing</td><td><code>mfactory install</code> creates them. It needs write access to the repository.</td></tr>
         <tr><td><code>&lt;tool&gt; isn't on PATH</code></td><td>A warning only. It is fine if you run the tool as an app.</td></tr>
@@ -164,7 +168,7 @@ Everything a run needs is in place.</code></pre>
   </div>
 
   <h2 id="commit">Commit</h2>
-  <pre data-lang="bash"><code>git add factory.toml .factory .gitignore .claude .cursor .codex .agents 2&gt;/dev/null
+  <pre data-lang="bash"><code>git add factory .factory .gitignore .claude .cursor .codex .agents 2&gt;/dev/null
 git commit -m "Add the software factory"
 git push</code></pre>
   <p>Then <a href="first-job.html">run a job</a>.</p>
@@ -180,14 +184,14 @@ enabled = ["claude", "cursor"]</code></pre>
 mfactory upgrade --version v0.2.0
 mfactory upgrade --self
 mfactory upgrade --all</code></pre>
-  <p><code>mfactory upgrade</code> updates the CLI from <code>install.sh --global</code> and every project in the workspace. Standing in an installed checkout that is not listed updates that checkout too. It replaces <code>.factory/</code> (not <code>.factory/jobs/</code>), runs <code>sync</code>, and leaves <code>factory.toml</code> alone. It refuses a release whose <code>schema</code> number differs from your <code>factory.toml</code>. The <a href="changelog.html">changelog</a> says what to change when that number moves. One project failing does not stop the others. Commit the result in each repository. A personal install stays untracked: upgrade tells you to leave <code>factory.toml</code>, <code>.factory/</code> and the generated files untracked.</p>
+  <p><code>mfactory upgrade</code> updates the CLI from <code>install.sh --global</code> and every project in the workspace. Standing in an installed checkout that is not listed updates that checkout too. It replaces <code>.factory/</code> (not <code>.factory/jobs/</code>), runs <code>sync</code>, and leaves <code>factory/</code> alone. It refuses a release whose <code>schema</code> number differs from your <code>factory/factory.toml</code>. The <a href="changelog.html">changelog</a> says what to change when that number moves. One project failing does not stop the others. Commit the result in each repository. A personal install stays untracked: upgrade tells you to leave <code>factory/</code>, <code>.factory/</code>, and the generated files untracked.</p>
   <p><code>--self</code> updates only the global CLI. <code>--all</code> upgrades only the projects in the workspace.</p>
 
   <h2 id="remove">Remove</h2>
   <pre data-lang="bash"><code>mfactory uninstall
 mfactory uninstall --config
 mfactory uninstall --labels</code></pre>
-  <p><code>uninstall</code> removes <code>.factory/</code>, the generated agent and skill files, the job worktrees, and the checkout from the workspace. <code>factory.toml</code> stays unless you pass <code>--config</code>. <code>--labels</code> deletes the three factory labels on GitHub. It needs <code>factory.toml</code> still readable, so pass <code>--labels</code> together with <code>--config</code> or before deleting the file yourself.</p>
+  <p><code>uninstall</code> removes <code>.factory/</code>, the generated agent and skill files, the job worktrees, and the checkout from the workspace. <code>factory/</code> stays unless you pass <code>--config</code>. <code>--labels</code> deletes the three factory labels on GitHub. It needs <code>factory/factory.toml</code> still readable, so pass <code>--labels</code> together with <code>--config</code> or before deleting the folder yourself.</p>
 </article>
 <script src="docs.js"></script>
 </body>

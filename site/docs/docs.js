@@ -1,7 +1,7 @@
 "use strict";
 
 const SVG = "http://www.w3.org/2000/svg";
-const VERSION = "0.2.1";
+const VERSION = "0.36.1";
 const GITHUB = "https://github.com/danielsmag/modular-factory";
 
 const PAGES = [
@@ -19,7 +19,7 @@ const PAGES = [
     heads: [["Three parts", "three-parts"], ["The loop", "the-loop"], ["Where the factory lives", "where-the-factory-lives"], ["A job's folder", "a-jobs-folder"], ["What the script will not do", "what-the-script-will-not-do"]] },
   { id: "pipeline", group: "Concepts", file: "pipeline.html", title: "Pipeline",
     blurb: "Steps, edges, loop limits, who merges, and steps you add.",
-    heads: [["The default graph", "the-default-graph"], ["Steps and edges", "steps-and-edges"], ["Loop limits", "loop-limits"], ["Who merges", "who-merges"], ["Optional steps", "optional-steps"], ["Adding a step", "adding-a-step"], ["Human steps", "human-steps"], ["Validation after merge", "validation-after-merge"]] },
+    heads: [["Pipelines are YAML files", "yaml-files"], ["The default graph", "the-default-graph"], ["Steps and edges", "steps-and-edges"], ["Loop limits", "loop-limits"], ["Who merges", "who-merges"], ["Optional steps", "optional-steps"], ["Adding a step", "adding-a-step"], ["Human steps", "human-steps"], ["Validation after merge", "validation-after-merge"]] },
   { id: "guards", group: "Concepts", file: "guards.html", title: "Guards",
     blurb: "The label, quoted issue text, checks, protected paths, and what is untested.",
     heads: [["The label", "the-label"], ["Issue text is data", "issue-text-is-data"], ["Limiting intake", "intake-has-no-shell"], ["Checks are a script", "checks-are-a-script"], ["Protected paths", "protected-paths"], ["Merge and replies", "merge-and-replies"], ["The dashboard", "the-dashboard"], ["What is untested", "what-is-untested"]] },
@@ -28,15 +28,15 @@ const PAGES = [
     heads: [["Where each tool writes", "where-each-tool-writes"], ["Intake", "intake"], ["Models and effort", "models-and-effort"], ["One skill, or two", "one-skill-or-two"]] },
   { id: "workspace", group: "Guides", file: "workspace.html", title: "Workspace and dashboard",
     blurb: "One read-only board for several projects, and the cap on how many jobs start.",
-    heads: [["Dashboard", "dashboard"], ["Add a project", "add-a-project"], ["One board", "one-board"], ["Concurrency", "concurrency"]] },
+    heads: [["Dashboard", "dashboard"], ["Planner", "planner"], ["Add a project", "add-a-project"], ["One board", "one-board"], ["Concurrency", "concurrency"]] },
   { id: "configuration", group: "Reference", file: "configuration.html", title: "Configuration",
-    blurb: "Every key in factory.toml and in a pipeline file, including checks, reviewers, models, skills, and protected paths.",
-    heads: [["How values merge", "how-values-merge"], ["Project, tools and run", "project-tools-and-run"], ["Checks", "checks"], ["Steps", "steps"], ["Loop limits", "loop-limits"], ["Who merges", "who-merges"], ["Optional steps", "optional-steps"], ["Adding a step", "adding-a-step"], ["Human steps", "human-steps"], ["Validation", "validation"], ["Reviewers and surfaces", "reviewers-and-surfaces"], ["Models and effort", "models-and-effort"], ["Project skills", "project-skills"], ["Tracker: a Jira board", "tracker-a-jira-board"], ["GitHub issues and a Jira board together", "tracker-both"], ["Labels, paths and ports", "labels-paths-and-ports"]] },
+    blurb: "Every key in factory/factory.toml and in a pipe file, including checks, reviewers, models, skills, the planner, and telemetry.",
+    heads: [["How values merge", "how-values-merge"], ["Project, tools and run", "project-tools-and-run"], ["Checks", "checks"], ["Steps", "steps"], ["Loop limits", "loop-limits"], ["Who merges", "who-merges"], ["Optional steps", "optional-steps"], ["Adding a step", "adding-a-step"], ["Human steps", "human-steps"], ["Validation", "validation"], ["Reviewers and surfaces", "reviewers-and-surfaces"], ["Models and effort", "models-and-effort"], ["Project skills", "project-skills"], ["Tracker: a Jira board", "tracker-a-jira-board"], ["GitHub issues and a Jira board together", "tracker-both"], ["Planner", "planner"], ["Telemetry", "telemetry"], ["Labels, paths and ports", "labels-paths-and-ports"]] },
   { id: "cli", group: "Reference", file: "cli.html", title: "CLI",
     blurb: "mfactory commands for install, configuration, jobs, the dashboard, and the workspace.",
-    heads: [["Install and maintain", "install-and-maintain"], ["See the configuration", "see-the-configuration"], ["Run jobs", "run-jobs"], ["Telemetry", "telemetry"], ["Dashboard", "dashboard"], ["Workspace", "workspace"]] },
+    heads: [["Install and maintain", "install-and-maintain"], ["See the configuration", "see-the-configuration"], ["Pipes", "pipes"], ["Run jobs", "run-jobs"], ["Planner", "plan"], ["Telemetry", "telemetry"], ["Dashboard", "dashboard"], ["Workspace", "workspace"]] },
   { id: "changelog", group: "Reference", file: "changelog.html", title: "Changelog",
-    blurb: "What changed in 0.2.1, 0.2.0, and 0.1.0.",
+    blurb: "What changed in 0.2.1, 0.2.0, and 0.1.0. Later releases are on GitHub.",
     heads: [["0.2.1", "v0-2-1"], ["0.2.0", "v0-2-0"], ["0.1.0", "v0-1-0"], ["Known limits", "known-limits"]] },
 ];
 

@@ -30,7 +30,7 @@
   <p>A command must not rewrite files. Use <code>prettier --check</code>, not <code>prettier --write</code>.</p>
 
   <h2 id="protected-paths">Protected paths</h2>
-  <p>The checks fail any branch that touches <code>factory.toml</code>, <code>.factory/</code>, a generated agent or skill file, or a path in <code>[paths].protected</code>. A job cannot change the pipeline, the checks, or its own judges. This holds whatever the check commands say, and whatever <code>protected</code> lists.</p>
+  <p>The checks fail any branch that touches <code>factory/</code> (or a root <code>factory.toml</code> from an older install), <code>.factory/</code>, a generated agent or skill file, or a path in <code>[paths].protected</code>. A job cannot change the pipeline, the checks, or its own judges. This holds whatever the check commands say, and whatever <code>protected</code> lists.</p>
   <p><code>*</code> in a pattern also matches <code>/</code>. A job may add new files that match a protected pattern. It may not change or delete one that already exists.</p>
 
   <h2 id="merge-and-replies">Merge and replies</h2>
