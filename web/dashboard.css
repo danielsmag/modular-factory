@@ -663,3 +663,18 @@ table.files-table td .dot { display: inline-block; vertical-align: 1px; }
   .fold svg { transition: transform .12s; }
   .pulse, .kchip.wait { animation: pulse 1.6s ease-in-out infinite; }
 }
+
+/* planner */
+.planner-badge { display: inline-flex; align-items: center; gap: 6px; font: var(--fs-floor) var(--mono); padding: 2px 8px; border: 1px solid var(--line-2); border-radius: 999px; color: var(--text); text-decoration: none; }
+.planner-badge[hidden] { display: none; }
+.findings { display: flex; flex-direction: column; gap: 10px; max-width: 980px; }
+.finding { border: 1px solid var(--line-2); border-radius: 4px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.finding-top, .finding-tickets, .finding-command { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.finding-ticket { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.finding-summary, .finding-action { margin: 0; overflow-wrap: anywhere; }
+.finding-evidence { margin: 0; padding-left: 18px; color: var(--text-2); }
+.finding-command code { font-family: var(--mono); color: var(--code); }
+.finding .chip.hot { border-color: rgba(255, 90, 79, .5); color: var(--bad); }
+.copy { font: var(--fs-floor) var(--mono); background: none; border: 1px solid var(--line-2); border-radius: 3px; color: var(--text-2); padding: 1px 7px; cursor: pointer; }
+.notify-toggle { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 12px; color: var(--text-2); }
+.planner-flag { margin-left: 4px; }

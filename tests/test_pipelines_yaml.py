@@ -146,7 +146,7 @@ pipes:
     assert list(cfg.steps) == ["build", "gate", "stuck"]
     assert cfg.pipelines["default"].file == "factory/pipes/default.yaml"
     assert cfg.sources[("steps", "gate", "type")] == "factory/pipes/default.yaml"
-    assert cfg.agent_keys() == ["build", "reviewer-code", "reviewer-security"]
+    assert cfg.agent_keys() == ["build", "reviewer-code", "reviewer-security", "planner-scan"]
 
 
 def test_factory_default_extends_the_built_in_pipeline(tmp_path):

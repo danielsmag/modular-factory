@@ -13,7 +13,7 @@ from ... import board
 from ...config import all_steps
 from ...util import Refused
 from . import adf
-from .base import JIRA_KEY, Key, OneTracker, Who
+from .base import JIRA_KEY, RELATION_TEXT, Key, OneTracker, Who
 from .jira_api import Client
 
 KEY = JIRA_KEY
@@ -21,8 +21,8 @@ KEY = JIRA_KEY
 # so this is what tells its comments from ones the operator typed. It is plain text, so it survives
 # whichever way Jira is reached.
 SIGNATURE = "— mfactory"
-FIELDS = "summary,description,status,reporter,assignee,labels,created,updated"
-LIST_FIELDS = "summary,status,reporter,assignee,labels,created,updated"
+FIELDS = "summary,description,status,reporter,assignee,labels,priority,created,updated"
+LIST_FIELDS = "summary,status,reporter,assignee,labels,priority,created,updated"
 # Issue keys in one JQL `key in (...)`.
 KEYS_PER_CALL = 50
 # Cards read from the board to find one in each status, for checking the workflow's transitions.
@@ -110,8 +110,14 @@ def _status_name(value: object) -> str:
     return value if isinstance(value, str) else ""
 
 
+# Jira's link type for each relation, and whether the issue it is made for is the outward one.
+LINK_TYPES = {"duplicate": ("Duplicate", True), "blocks": ("Blocks", True), "blocked-by": ("Blocks", False),
+              "relates": ("Relates", True)}
+
+
 class JiraTracker(OneTracker):
     kind = "jira"
+    links_both_ways = True
     label = "Jira"
     has_board = True
     # How Jira is reached: its REST API here, the Atlassian CLI in `jira_acli.py`.
@@ -182,6 +188,7 @@ class JiraTracker(OneTracker):
         status: object = fields.get("status")
         category: object = (status.get("statusCategory") or {}).get("key") if isinstance(status, dict) else None
         assignee: object = fields.get("assignee")
+        rank: object = fields.get("priority")
         return {
             "number": raw["key"], "title": fields.get("summary") or "", "url": self._url(raw["key"]),
             "body": _text(fields.get("description")), "state": "CLOSED" if category == "done" else "OPEN",
@@ -189,6 +196,7 @@ class JiraTracker(OneTracker):
             "assignees": [self._person(assignee)] if assignee else [],
             "labels": [{"name": str(name)} for name in fields.get("labels") or []],
             "createdAt": fields.get("created"), "updatedAt": fields.get("updated"),
+            "priority": rank.get("name") if isinstance(rank, dict) else None,
         }
 
     # -- issues and the queue
@@ -331,6 +339,16 @@ class JiraTracker(OneTracker):
 
     def comment(self, key: Key, body: str, factory: bool = True) -> None:
         self.api.post(f"/rest/api/3/issue/{key}/comment", {"body": self._document(body, factory)})
+
+    def link(self, key: Key, other: str, relation: str) -> None:
+        """An issue link when `other` is a key on this site (it then shows on both issues), else a comment."""
+        if not JIRA_KEY.fullmatch(other):
+            self.comment(key, f"{RELATION_TEXT[relation]} {other}")
+            return
+        name, outward = LINK_TYPES[relation]
+        mine, theirs = {"key": str(key)}, {"key": other}
+        self.api.post("/rest/api/3/issueLink", {"type": {"name": name}, "outwardIssue": mine if outward else theirs,
+                                                "inwardIssue": theirs if outward else mine})
 
     # -- people
 

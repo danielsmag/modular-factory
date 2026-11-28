@@ -433,3 +433,55 @@ def test_a_token_file_that_cannot_be_read_says_so(world, base):
     status, body, _ = get(f"{base}/projects/{world.repo.name}/jira/boards/7")
     note = json.loads(body)["note"]
     assert status == 200 and "[tracker.jira].token_file" in note and "no-such-token" in note
+
+
+# ---- The planner's findings ------------------------------------------------------
+
+
+def planner_state():
+    from modfactory.planner.state import PlannerState
+    return PlannerState(__import__("pathlib").Path(os.environ["FACTORY_HOME"]) / "planner")
+
+
+def test_planner_route_shape_and_redaction(world, base):
+    state = planner_state()
+    state.write_snapshot({"schema": 1, "hash": "h", "tickets": [
+        {"ref": "repo:#1", "title": "Export invoices", "url": "http://evil.example/1", "priority": "high",
+         "stage": "build", "project": "repo"},
+        {"ref": "repo:#2", "title": "CSV export", "url": "https://github.com/acme/repo/issues/2",
+         "priority": "normal", "stage": "queued", "project": "repo"}], "errors": []})
+    token = "ghp_" + "a" * 36
+    state.write_findings({"schema": 1, "scanned_at": "2026-11-28T10:00:00Z", "snapshot_hash": "h",
+                          "frequency": "medium", "alert_at": "high", "next_id": 3, "findings": [
+                              {"id": "F-1", "kind": "duplicate", "tickets": ["repo:#1", "repo:#2"],
+                               "severity": "high", "summary": f"same change {token}", "evidence": ["same title"],
+                               "action": {"type": "link", "from": "repo:#2", "to": "repo:#1",
+                                          "relation": "duplicate"}, "status": "open"},
+                              {"id": "F-2", "kind": "overlap", "tickets": ["repo:#1", "repo:#2"],
+                               "severity": "low", "summary": "x", "evidence": [], "action": {},
+                               "status": "dismissed"}]})
+    status, body, _ = get(base + "/planner.json")
+    assert status == 200
+    answer = json.loads(body)
+    assert token not in body
+    assert answer["counts"] == {"open": 1, "low": 0, "medium": 0, "high": 1}
+    assert [f["id"] for f in answer["findings"]] == ["F-1"]
+    first, second = answer["findings"][0]["tickets"]
+    assert first["url"] is None and second["url"] == "https://github.com/acme/repo/issues/2"
+    assert first["priority"] == "high" and second["stage"] == "queued"
+    assert answer["scanned_at"] == "2026-11-28T10:00:00Z" and answer["next_due"] == "2026-11-28T10:30:00Z"
+    assert answer["alert_at"] == "high" and answer["findings"][0]["action"]
+
+
+def test_planner_route_without_scan(world, base):
+    state = planner_state()
+    state.findings_path.parent.mkdir(parents=True, exist_ok=True)
+    state.findings_path.write_text("{")
+    status, body, _ = get(base + "/planner.json")
+    answer = json.loads(body)
+    assert status == 200 and answer["scanned_at"] is None and answer["findings"] == []
+    assert answer["counts"]["open"] == 0
+
+
+def test_planner_route_host_check(world, base):
+    assert get(base + "/planner.json", host="evil.com")[0] == 403

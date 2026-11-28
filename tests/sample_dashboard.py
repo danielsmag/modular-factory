@@ -418,6 +418,35 @@ def publish(repo: Path, jobs_dir: Path, queue: list[dict[str, object]]) -> None:
     binary.chmod(0o755)
 
 
+def sample_planner(root: Path, label: str, now: datetime) -> None:
+    """Planner findings for the badge and the Planner view: one high, one medium."""
+    root.mkdir(parents=True, exist_ok=True)
+
+    def ticket(number: int, title: str, priority: str, stage: str) -> dict[str, object]:
+        return {"ref": f"{label}:#{number}", "project": label, "key": number, "tracker": "github", "title": title,
+                "priority": priority, "url": f"https://github.com/acme/{label}/issues/{number}", "stage": stage,
+                "hash": f"h{number}"}
+
+    tickets = [ticket(45, "Export invoices as CSV", "high", "build"),
+               ticket(46, "Add a CSV export of invoices", "normal", "review"),
+               ticket(47, "Let admins resend an invoice", "critical", "spec-approval"),
+               ticket(9, "Validate IBAN on the payment form", "normal", "queued")]
+    (root / "snapshot.json").write_text(json.dumps({"schema": 1, "generated_at": stamp(now), "hash": "sample",
+                                                    "tickets": tickets, "candidates": [], "errors": []}))
+    findings = [
+        {"id": "F-1", "key": "duplicate|a", "kind": "duplicate", "tickets": [f"{label}:#45", f"{label}:#46"],
+         "severity": "high", "confidence": 0.9, "summary": "Both ask for a CSV export of the invoice list.",
+         "evidence": ["similar titles", "same files: app/invoices/export.py"],
+         "action": {"type": "close-duplicate", "close": f"{label}:#46", "keep": f"{label}:#45"}, "status": "open"},
+        {"id": "F-2", "key": "dependency|b", "kind": "dependency", "tickets": [f"{label}:#9", f"{label}:#47"],
+         "severity": "medium", "confidence": 0.7, "summary": "IBAN checks reuse the payment form that #47 changes.",
+         "evidence": ["mentions #47"], "action": {"type": "hold", "job": f"{label}:#9", "until": f"{label}:#47"},
+         "status": "open"}]
+    (root / "findings.json").write_text(json.dumps({"schema": 1, "scanned_at": stamp(now), "snapshot_hash": "sample",
+                                                    "frequency": "medium", "alert_at": "high", "next_id": 3,
+                                                    "findings": findings}))
+
+
 def build_sample_repo(tmp: Path, name: str, empty: bool, rng: random.Random, jira: stub_jira.FakeJira,
                       building: str, queue: list[dict[str, object]]) -> Path:
     repo: Path = tmp / name
@@ -472,6 +501,8 @@ def main() -> None:
         queue, issues = sample_queue(datetime.now(UTC))
         stub_github(tmp_root, issues | more_issues(datetime.now(UTC)))
         seed_name: str = "clinic-invoices"
+        label: str = seed_name if args.projects == 1 else SAMPLE_PROJECT_IDS[0]
+        sample_planner(tmp_root / "home" / "planner", label, datetime.now(UTC))
         repo: Path = build_sample_repo(tmp_root, seed_name, args.empty, rng, jira, building,
                                        [] if args.empty else queue)
         if args.projects == 1:

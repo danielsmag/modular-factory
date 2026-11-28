@@ -79,6 +79,32 @@ column, and people reply in Jira comments or by moving the card. With
 on its own tracker. See
 [Tracker: a Jira board](docs/configuration.md#tracker-a-jira-board).
 
+## The planner
+
+Once several issues are open, the planner reads the whole queue, across every
+project in your workspace, and tells you what a single job cannot see: two
+issues that are the same, one that must wait for another, two that touch the
+same files, a low-priority job running ahead of a critical one. It only
+suggests. Nothing changes in a tracker or a job until you approve a finding.
+
+```text
+/mfactory plan summary         what needs attention, what is held, the pipeline, the last scan
+/mfactory plan                 talk through the findings, and propose or act on them
+```
+
+`/mfactory plan summary` runs a scan if the tickets changed since the last one,
+then reports plainly, `Needs attention` first. In `/mfactory plan` you can ask
+about any finding; the orchestrator runs `plan approve F-3`, `plan dismiss F-3`
+or `plan release` only when you say so, and shows what it will do first. Between
+queue passes, `/mfactory run` checks whether a scan is due and runs it without
+holding up any job. The same commands work from a terminal:
+`mfactory plan summary`, `plan show`, `plan approve F-3`.
+
+The dashboard shows the result: a badge in the header counts open findings at
+or above `alert_at`, the Planner view (`#/planner`) lists them with the action
+each one proposes, and browser notifications for new alerts are opt-in. The
+settings are in [Planner](docs/configuration.md#planner).
+
 ## The pipeline is a graph you can read and change
 
 A pipeline is a pipe, declared in YAML in the spirit of declarative data pipelines:

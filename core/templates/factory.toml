@@ -194,3 +194,24 @@ all = ["all"]
 # escalated = "Escalated"
 # done = "Done"
 # rejected = "Rejected"
+
+# ---- The planner -----------------------------------------------------------
+# Scans open tickets for duplicates, dependencies and conflicts, and proposes fixes you approve.
+#
+# [planner]
+# enabled = true
+# frequency = "medium"        # high (5 min), medium (30 min), low (240 min) or manual
+# alert_at = "high"           # flag findings at this severity or above: low, medium or high
+# max_pairs = 40
+# max_extra = 10
+#
+# [planner.priority.labels]   # extra label names for a level: critical, high, normal or low
+# urgent = "critical"
+#
+# [planner.priority.jira]     # extra Jira priority names for a level
+# Showstopper = "critical"
+#
+# [planner.priority.github_project]   # read priority from a GitHub Projects field
+# owner = "acme"
+# number = 3
+# field = "Priority"

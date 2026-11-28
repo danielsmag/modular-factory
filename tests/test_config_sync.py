@@ -143,8 +143,8 @@ reviewer-code = { low = { speed = "fast" } }
         '[surfaces.api].reviewers has "contract", but there is no [reviewers.contract]',
         '[models.claude].build.effort = "extreme" is not an effort level claude documents. '
         "Known: low, medium, high, xhigh, max",
-        "[models.claude].deploy names no agent. Agents: approve, build, debug, default, intake, reviewer-code, "
-        "reviewer-perf, reviewer-security, reviewer-ui, reviewer-ux, spec, verify",
+        "[models.claude].deploy names no agent. Agents: approve, build, debug, default, intake, planner-scan, "
+        "reviewer-code, reviewer-perf, reviewer-security, reviewer-ui, reviewer-ux, spec, verify",
         "[models.cursor].reviewer-code.low.speed is not a setting. Known: model, effort",
     ]
 
@@ -277,6 +277,7 @@ def test_claude_agents_carry_model_effort_and_tools(world):
     files, _ = plan(world)
     assert sorted(files) == [
         ".claude/agents/mfactory-approve.md", ".claude/agents/mfactory-build.md", ".claude/agents/mfactory-intake.md",
+        ".claude/agents/mfactory-planner-scan.md",
         ".claude/agents/mfactory-reviewer-code-low.md", ".claude/agents/mfactory-reviewer-code.md",
         ".claude/agents/mfactory-reviewer-security.md", ".claude/agents/mfactory-spec.md",
         ".claude/skills/mfactory/SKILL.md"]
@@ -472,7 +473,7 @@ def test_sync_writes_reports_and_removes_what_is_stale(world):
     world.configure('[steps.debug]\nenabled = true\n')
     cfg = config.load(world.repo)
     actions, _ = sync.sync(cfg)
-    assert ("create", ".claude/agents/mfactory-debug.md") in actions and len(actions) == 10
+    assert ("create", ".claude/agents/mfactory-debug.md") in actions and len(actions) == 11
     assert ("status line", ".claude/settings.local.json") in actions
     assert sync.sync(cfg) == ([], ['rule "user:CLAUDE.md" is not installed on this machine'])
 

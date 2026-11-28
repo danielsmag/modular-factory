@@ -60,3 +60,5 @@ files to look at.
 
 The first line is `DECISION: APPROVE` or `DECISION: ESCALATE`. On ESCALATE the
 factory posts everything below it on the pull request.
+
+If the prompt names `context-*.md` files, read them before you start: they are context added to this job.

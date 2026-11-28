@@ -36,6 +36,17 @@ authors = []              # also pick issues these logins opened; "@me" is the o
 assignees = []            # also pick issues assigned to these logins; "@me" is the operator
 # With two trackers, name people per tracker: authors = { github = ["alice"], jira = ["712020:..."] }
 
+[planner]
+enabled = true            # the planner scans open tickets across projects for duplicates, dependencies and conflicts
+frequency = "medium"      # how often a scan runs: high (5 min), medium (30 min), low (240 min) or manual
+alert_at = "high"         # findings at this severity or above are flagged on the dashboard: low, medium or high
+max_pairs = 40            # ticket pairs a scan may look at
+max_extra = 10            # extra tickets a scan may read beyond those pairs
+# Extra names for priority levels (critical, high, normal, low); matching ignores case:
+# priority = { labels = { urgent = "critical" }, jira = { Showstopper = "critical" } }
+# A GitHub Projects field: priority = { github_project = { owner = "acme", number = 3, field = "Priority" } }
+priority = { labels = {}, jira = {}, github_project = {} }
+
 [workspace]
 concurrency = 3           # new and resume rows across every project; workspace.toml or --concurrency overrides
 

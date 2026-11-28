@@ -17,6 +17,12 @@ run jobs (the orchestrator skill uses these)
   close issue <job> | close job <job> [--merged <pr>] | move <job> <step> [note]
   delete <job> [--worktree] [--branch] [--remote] [--pr] [--force]
   tracker show [--json] | tracker sync | tracker suggest [--json]
+plan the queue across jobs
+  plan snapshot [--json] [--label NAME]
+  plan collect [--json]
+  plan scan [--force] | plan due | plan ingest [--reply]
+  plan release <ref>
+  plan approve <F-n> | plan dismiss <F-n> [reason]
 other
   checks | dashboard | start dashboard | stop | version
 several projects
@@ -150,6 +156,51 @@ def parser() -> argparse.ArgumentParser:
     tracker_suggest: argparse.ArgumentParser = tracker_sub.add_parser(
         "suggest", help="the Jira board that works well for this pipeline, and its [tracker.jira.columns]")
     tracker_suggest.add_argument("--json", action="store_true", help="the suggestion as one JSON object")
+
+    plan: argparse.ArgumentParser = sub.add_parser(
+        "plan", help="the planner: duplicates, dependencies and priority across the queue")
+    plan_sub: argparse._SubParsersAction[argparse.ArgumentParser] = plan.add_subparsers(
+        dest="plan_what", required=True,
+        metavar="<snapshot|collect|scan|due|summary|show|suggest|ingest|release|approve|dismiss|apply>")
+    plan_snapshot: argparse.ArgumentParser = plan_sub.add_parser(
+        "snapshot", help="every queued issue and job of this project, as tickets")
+    plan_snapshot.add_argument("--json", action="store_true", help="the snapshot as one JSON object")
+    plan_snapshot.add_argument("--label", help="the project's name in refs; the repository's folder by default")
+    plan_collect: argparse.ArgumentParser = plan_sub.add_parser(
+        "collect", help="every project of the workspace as one snapshot, with candidate pairs")
+    plan_collect.add_argument("--json", action="store_true", help="the snapshot as one JSON object")
+    plan_scan: argparse.ArgumentParser = plan_sub.add_parser(
+        "scan", help="collect, then say whether the scan agent should run")
+    plan_scan.add_argument("--force", action="store_true", help="scan even if nothing changed or it is not time")
+    plan_sub.add_parser("due", help="print scan or not due")
+    plan_summary: argparse.ArgumentParser = plan_sub.add_parser(
+        "summary", help="what needs attention, what is held, the pipeline and the last scan")
+    plan_summary.add_argument("--fresh", action="store_true",
+                              help="when tickets changed since the last scan, print the scan agent's start lines")
+    plan_summary.add_argument("--project", help="only this project, as named in refs")
+    plan_summary.add_argument("--json", action="store_true", help="the report as one JSON object")
+    plan_show: argparse.ArgumentParser = plan_sub.add_parser("show", help="the findings and their status")
+    plan_show.add_argument("--json", action="store_true", help="the findings file as one JSON object")
+    plan_sub.add_parser(
+        "suggest", help='add one finding from standard input: {"findings": [one entry]}, checked like ingest')
+    plan_ingest: argparse.ArgumentParser = plan_sub.add_parser(
+        "ingest", help="check the scan agent's draft and merge it into the findings")
+    plan_ingest.add_argument("--reply", action="store_true", help="read the draft from standard input")
+    plan_release: argparse.ArgumentParser = plan_sub.add_parser(
+        "release", help="run a held job or issue now, without waiting for the job it waits on")
+    plan_release.add_argument("ref", help="a job id, or an issue key such as 12, #12 or PROJ-7")
+    plan_approve: argparse.ArgumentParser = plan_sub.add_parser(
+        "approve", help="carry out the action of an open finding, in the project that owns its first ticket")
+    plan_approve.add_argument("finding", help="a finding's id, such as F-3")
+    plan_dismiss: argparse.ArgumentParser = plan_sub.add_parser(
+        "dismiss", help="drop a finding until one of its tickets changes")
+    plan_dismiss.add_argument("finding", help="a finding's id, such as F-3")
+    plan_dismiss.add_argument("reason", nargs="*", help="why, for the record")
+    plan_apply: argparse.ArgumentParser = plan_sub.add_parser(
+        "apply", help="carry out one planner action in this project (`plan approve` runs this)")
+    plan_apply.add_argument("--action", required=True, help="the action, as a JSON object")
+    plan_apply.add_argument(
+        "--refs", required=True, help='{"<ref>": {"project": <path>, "key": <key>, "url": <url>}} per ref it names')
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
     sub.add_parser("hook")  # no help text: argparse then leaves it out of the list

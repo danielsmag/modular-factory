@@ -33,10 +33,12 @@ def _seconds(start: object, end: object) -> float | None:
 
 
 def job_status(job: dict[str, Any], steps: dict[str, Any]) -> str:
-    """One word for the job: running, waiting, queued, done, failed or rejected."""
+    """One word for the job: running, waiting, held, queued, done, failed or rejected."""
     current: object = job.get("step")
     if current in graph.END_STATES:
         return str(current)
+    if job.get("held_by"):
+        return "held"
     step: object = steps.get(current) if isinstance(current, str) else None
     if isinstance(step, dict) and step.get("type") == "human":
         return "waiting"

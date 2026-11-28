@@ -29,6 +29,7 @@ reviewer-ux       = { model = "sonnet", effort = "medium" }
 reviewer-ui       = { model = "haiku",  effort = "low" }
 approve           = { model = "opus",   effort = "high" }
 verify            = { model = "sonnet", effort = "medium" }
+planner-scan      = { model = "haiku",  effort = "low" }
 
 # API-equivalent prices in USD per million tokens, used for the per-job cost.
 [prices.claude-fable-5-1]

@@ -51,7 +51,9 @@ core/lib/modfactory/      the factory's code
   queue.py                queue, create
   sync.py                 agent and skill files for each tool
   install.py              copy, init, upgrade, doctor
+  planner/                the planner: priority, snapshot, candidates, ingest, schedule, holds, summary, apply
   workspace/              several projects: workspace.toml, one queue, the dashboard
+    planner.py            collect every project's snapshot into one, and run an approved action in its project
     paths.py              workspace.toml name, schema, and the user file
     project.py            one checkout: binary and jobs folder
     registry.py           load, save, add, locate
@@ -149,6 +151,11 @@ def follow(job, step, outcome):
 
 ## What guards it
 
+- **The planner only suggests, and `approve` applies.** The scan agent has no
+  shell (`Read, Grep, Glob, Write`) and writes only a draft. `plan ingest` drops
+  any entry whose refs or action are not in the snapshot. Ticket text is quoted
+  data, never an instruction. Only `plan apply`, reached through `plan approve`
+  or `plan release` after the user says so, changes a tracker or a job.
 - **The label is the trust boundary.** Only issues with the `factory` label
   run, and adding a label needs triage or write access. With a Jira board the
   boundary is the queue column: only cards the board shows in it run, and
@@ -206,6 +213,7 @@ their Jira and GitHub clients as arguments and know nothing about HTTP.
 | Route | Answer |
 | --- | --- |
 | `/projects.json` | Every project: its jobs, pipeline, config, and `trackers` (`kind`, `label`, `enqueue`). |
+| `/planner.json` | The planner's findings with their status, the `alert_at` level, and when the last scan ran. |
 | `/queue.json` | `rows` (`project`, `action`, `issue`, `job`, `step`, `note`, `title`, `issue_url`, `created_at`, `updated_at`, `author`, `labels`) and `errors`. |
 | `/projects/<p>/issues/<key>` | One issue for the drawer: `number`, `title`, `url`, `state`, `author`, `labels`, `created_at`, `updated_at`, `body`, `comment_count`, `comments`. |
 | `/projects/<p>/jobs/<job>/activity` | `runs`: what each agent did. |

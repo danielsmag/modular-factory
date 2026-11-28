@@ -394,6 +394,9 @@ class Factory(Humans, Cards, Scripted, Queue):
             parts.append(f"Port: {self.port(job)}.")
         parts.append(f"Write: {out}.")
         parts += job["handoff"]
+        if job.get("context_files"):
+            parts.append(f"Context added to this job: read {', '.join(job['context_files'])} before you start; "
+                         "it comes after the issue and before the spec where they disagree.")
         note: str | None = self._progress_note(job, role)
         if note:
             parts.append(note)
@@ -457,6 +460,10 @@ class Factory(Humans, Cards, Scripted, Queue):
         job = self.store.open(ref)
         while True:
             name = job["step"]
+            if job.get("held_by") and name not in graph.END_STATES:
+                self.say(f"held {self.tag(job)}: until {job['held_by'].get('until')} is done. "
+                         f"{CLI} plan release {job['id']} runs it now")
+                return
             if name in graph.END_STATES:
                 self.say(f"finished {self.tag(job)}: {name}" + self._finished_note(job))
                 return

@@ -260,7 +260,11 @@ class Config:
         """
         keys = [key for key, _, _ in self.agent_steps(every)]
         reviewers = self.reviewers if every else self.live_reviewers
-        return keys + [f"reviewer-{name}" for name in reviewers]
+        keys += [f"reviewer-{name}" for name in reviewers]
+        planner: object = self.data.get("planner")
+        if every or not isinstance(planner, dict) or planner.get("enabled", True) is not False:
+            keys.append("planner-scan")
+        return keys
 
     def variants(self, key):
         """Risk levels for which any enabled tool gives this agent its own model or effort."""
@@ -786,7 +790,7 @@ REVIEWER_KEYS = {"enabled": a_bool, "focus": a_filled_string, "prompt": a_filled
                  "skills": a_string_list, "rules": a_string_list, "tools": a_tool_list, "port": a_bool}
 SURFACE_KEYS = {"enabled": a_bool, "when": a_filled_string, "reviewers": a_string_list}
 BUILTIN_REVIEWERS = ("code", "security", "ux", "ui")
-TOP = set(TABLES) | {"schema", "tools", "steps", "reviewers", "surfaces", "models", "tracker"}
+TOP = set(TABLES) | {"schema", "tools", "steps", "reviewers", "surfaces", "models", "tracker", "planner"}
 
 
 def _path_inside(path: Path, root: Path) -> bool:
@@ -808,6 +812,44 @@ def prompt_path_problem(repo: Path, raw: str) -> str | None:
     if not _path_inside(path, repo) or not path.is_file():
         return f'"{raw}" not found in the repository'
     return None
+
+
+PLANNER_FREQUENCIES = ("high", "medium", "low", "manual")
+PLANNER_KEYS = {"enabled": a_bool, "frequency": one_of(*PLANNER_FREQUENCIES),
+                "alert_at": one_of("low", "medium", "high"), "max_pairs": an_int(1),
+                "max_extra": an_int(1), "priority": lambda value: None}
+PLANNER_LEVELS = ("critical", "high", "normal", "low")
+
+
+def _planner_priority_problems(value: object) -> list[str]:
+    """Problems in [planner.priority]: label and Jira maps to a level, and the Projects field."""
+    if not isinstance(value, dict):
+        return ["[planner].priority must be a table"]
+    out: list[str] = []
+    for name, entry in value.items():
+        if name in ("labels", "jira"):
+            if not isinstance(entry, dict):
+                out.append(f"[planner.priority].{name} must be a table of name = level")
+                continue
+            for key, level in entry.items():
+                if level not in PLANNER_LEVELS:
+                    out.append(f"[planner.priority.{name}].{key} must be one of "
+                               f"{', '.join(PLANNER_LEVELS)} (got {json.dumps(level)})")
+        elif name == "github_project":
+            if not isinstance(entry, dict):
+                out.append("[planner.priority].github_project must be a table")
+                continue
+            spec: dict[str, Callable[[object], str | None]] = {
+                "owner": a_filled_string, "number": an_int(1), "field": a_filled_string}
+            for key, item in entry.items():
+                if key not in spec:
+                    out.append(f"[planner.priority.github_project].{key} is not a setting. "
+                               f"Known: {', '.join(sorted(spec))}")
+                elif (problem := spec[key](item)):
+                    out.append(f"[planner.priority.github_project].{key} {problem} (got {json.dumps(item)})")
+        else:
+            out.append(f"[planner.priority].{name} is not a setting. Known: github_project, jira, labels")
+    return out
 
 
 def check(cfg):
@@ -885,6 +927,12 @@ def check(cfg):
             if not both and isinstance(d.get("project"), dict) and d["project"].get("issue_link") == "closes":
                 out.append('[project].issue_link = "closes" needs GitHub issues: a pull request cannot '
                            'close a Jira issue. Use issue_link = "refs".')
+
+    # the planner
+    planner = d.get("planner", {})
+    test_table("planner", planner, PLANNER_KEYS)
+    if isinstance(planner, dict) and "priority" in planner:
+        out.extend(_planner_priority_problems(planner["priority"]))
 
     # tools
     tools = d.get("tools", {})
