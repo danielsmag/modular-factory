@@ -4,6 +4,10 @@
 const SVG = "http://www.w3.org/2000/svg";
 const REFRESH_MS = 5000;
 const QUEUE_MS = 15000;
+const PLANNER_MS = 15000;
+const PLANNER_SEEN_KEY = "mfactory.planner.seen";
+const PLANNER_NOTIFY_KEY = "mfactory.planner.notify";
+const SEVERITY_RANK = { low: 0, medium: 1, high: 2 };
 // The Board's Jira and GitHub blocks: how old an answer may get, and how often to look for old ones.
 const FEED_MS = 60000;
 const FEED_TICK_MS = 15000;
@@ -96,6 +100,7 @@ const state = {
   jobFilter: prefs.get("mfactory.jobs.filter", "all"), jobPipe: "all", jobTab: prefs.get("mfactory.job.tab", "graph"),
   jobNode: null, dagZoom: {}, pipeView: prefs.get("mfactory.pipeView", "default"),
   cfgPipe: prefs.get("mfactory.cfgPipe", "default"), cfgTab: "dag",
+  planner: null, plannerNotify: prefs.get(PLANNER_NOTIFY_KEY, false) === true,
 };
 if (queryProject()) writeChoice(state.selected);
 
@@ -546,7 +551,8 @@ function jobCard(job) {
     el("div", { class: "card-top" },
       cardClass(job).includes("live") ? el("span", { class: "pulse", "aria-hidden": "true" }) : null,
       el("span", { class: "num", text: cardNum(job) }),
-      flag ? el("span", { class: "flag", text: flag }) : null),
+      flag ? el("span", { class: "flag", text: flag }) : null,
+      plannerFlag(job.project || job.projectName, job.issue)),
     el("p", { class: "feature", text: job.title || job.id }),
     el("div", { class: "links" },
       link(job.issue_url, "issue " + issueRef(job.issue)),
@@ -2877,7 +2883,7 @@ function configView() {
 // ---- shell ----
 function route() {
   const parts = location.hash.replace(/^#\/?/, "").split("/").filter((part) => part.length);
-  const view = ["board", "pipeline", "jobs", "overview", "config"].includes(parts[0]) ? parts[0] : "board";
+  const view = ["board", "pipeline", "jobs", "overview", "config", "planner"].includes(parts[0]) ? parts[0] : "board";
   if (view === "jobs" && state.workspace && parts.length >= 3) {
     return { view, project: decodeURIComponent(parts[1]), id: decodeURIComponent(parts[2]) };
   }
@@ -2913,6 +2919,107 @@ function connectionLabel() {
   if (state.workspace) return state.projects.length ? "live" : "connecting";
   if (!state.index) return "connecting";
   return "live";
+}
+// ---- planner ----
+function plannerSeen() {
+  const found = prefs.get(PLANNER_SEEN_KEY, null);
+  return Array.isArray(found) ? found.filter((id) => typeof id === "string") : null;
+}
+function alerting(finding, alertAt) {
+  return (SEVERITY_RANK[finding.severity] || 0) >= (SEVERITY_RANK[alertAt] ?? 2);
+}
+// One notification per new finding at or above alert_at. The first load after the toggle is turned on only
+// marks what is there as seen, so turning it on never floods the screen.
+function notifyNew(body) {
+  if (!state.plannerNotify || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  const findings = (body && body.findings) || [];
+  const seen = plannerSeen();
+  if (seen === null) {
+    prefs.set(PLANNER_SEEN_KEY, findings.map((f) => f.id));
+    return;
+  }
+  const known = new Set(seen);
+  for (const finding of findings) {
+    if (known.has(finding.id) || !alerting(finding, body.alert_at)) continue;
+    try { new Notification("mfactory: " + finding.kind, { body: finding.summary, tag: finding.id }); } catch (error) {}
+    known.add(finding.id);
+  }
+  prefs.set(PLANNER_SEEN_KEY, [...known]);
+}
+function paintPlannerBadge() {
+  const badge = document.getElementById("planner-badge");
+  if (!badge) return;
+  const body = state.planner;
+  const open = body && body.counts ? body.counts.open || 0 : 0;
+  badge.hidden = open === 0;
+  document.getElementById("planner-count").textContent = String(open);
+  const findings = (body && body.findings) || [];
+  const level = findings.some((f) => alerting(f, body.alert_at)) ? "stop" : findings.some((f) => f.severity === "medium") ? "warn" : "good";
+  document.getElementById("planner-dot").className = "dot " + level;
+  badge.setAttribute("aria-label", open + " planner finding" + (open === 1 ? "" : "s"));
+}
+async function refreshPlanner() {
+  try {
+    const body = await load("/planner.json");
+    const changed = JSON.stringify(body) !== JSON.stringify(state.planner);
+    state.planner = body;
+    paintPlannerBadge();
+    notifyNew(body);
+    if (changed && (route().view === "planner" || route().view === "board")) render();
+  } catch (error) {}
+}
+function plannerFlag(project, issue) {
+  const findings = (state.planner && state.planner.findings) || [];
+  const ref = project + ":" + issueRef(issue);
+  const hits = findings.filter((f) => (f.tickets || []).some((t) => t.ref === ref));
+  return hits.length ? el("span", { class: "chip wait planner-flag", title: hits.map((f) => f.id + " " + f.kind).join(", "), text: hits.map((f) => f.id).join(" ") }) : null;
+}
+function copyButton(command) {
+  return el("button", { class: "copy", type: "button", onclick: () => {
+    try { navigator.clipboard.writeText(command); } catch (error) {}
+  }, text: "copy" });
+}
+function toggleNotify(event) {
+  state.plannerNotify = event.target.checked;
+  prefs.set(PLANNER_NOTIFY_KEY, state.plannerNotify);
+  prefs.set(PLANNER_SEEN_KEY, null);
+  if (state.plannerNotify && typeof Notification !== "undefined" && Notification.permission !== "granted") {
+    try { Notification.requestPermission().then(() => notifyNew(state.planner)); } catch (error) {}
+  } else notifyNew(state.planner);
+}
+function findingRow(finding) {
+  const severity = finding.severity === "high" ? "bad" : finding.severity === "medium" ? "wait" : "off";
+  const command = "mfactory plan approve " + finding.id;
+  return el("article", { class: "finding", "data-focus": "finding:" + finding.id },
+    el("div", { class: "finding-top" },
+      el("span", { class: "chip " + severity, text: finding.severity }),
+      el("strong", { text: finding.kind }),
+      el("span", { class: "mono dim", text: finding.id })),
+    el("div", { class: "finding-tickets" }, (finding.tickets || []).map((t) =>
+      el("span", { class: "finding-ticket" }, link(t.url, t.ref),
+        el("span", { class: "dim", text: t.title ? " " + t.title + " " : " " }),
+        el("span", { class: "chip " + priorityClass(t.priority), text: t.priority }),
+        t.stage ? el("span", { class: "chip run", text: t.stage }) : null))),
+    finding.summary ? el("p", { class: "finding-summary", text: finding.summary }) : null,
+    (finding.evidence || []).length ? el("ul", { class: "finding-evidence" }, finding.evidence.map((e) => el("li", { text: e }))) : null,
+    finding.action ? el("p", { class: "finding-action" }, el("span", { class: "dim", text: "suggest: " }), finding.action) : null,
+    el("div", { class: "finding-command" }, el("code", { text: command }), copyButton(command)));
+}
+function plannerView() {
+  const body = state.planner;
+  const head = [el("h1", { text: "Planner" }),
+    el("label", { class: "notify-toggle" },
+      el("input", { type: "checkbox", checked: state.plannerNotify, onchange: toggleNotify }),
+      " Notify me on this computer")];
+  if (!body) return head.concat(el("div", { class: "notice", text: "Loading..." }));
+  const intro = body.scanned_at
+    ? el("p", { class: "dim", text: "Last scan " + body.scanned_at + (body.next_due ? " · next due " + body.next_due : "") + " · alerts at " + body.alert_at })
+    : el("div", { class: "notice" }, "No scan yet. Run ", el("code", { text: "/mfactory plan summary" }), " in your coding tool, or ", el("code", { text: "mfactory plan scan --force" }), ".");
+  const errors = (body.errors || []).map((e) => el("p", { class: "error", text: e }));
+  const findings = body.findings || [];
+  const list = findings.length ? el("div", { class: "findings" }, findings.map(findingRow))
+    : body.scanned_at ? el("div", { class: "notice", text: "Nothing to flag." }) : null;
+  return head.concat(intro, errors, list || []);
 }
 function paintLive() {
   paintAges();
@@ -2985,7 +3092,7 @@ function render() {
       : FOOT_NOTE;
     document.getElementById("foot-right").textContent = workspaceFoot();
     document.title = "factory · " + workspaceTitle();
-    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id, project) : view === "overview" ? overview() : view === "config" ? configView() : board();
+    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id, project) : view === "overview" ? overview() : view === "config" ? configView() : view === "planner" ? plannerView() : board();
   } else {
     const totals = boardTotals(jobs());
     document.getElementById("foot-left").textContent = view === "board" || view === "overview"
@@ -2993,7 +3100,7 @@ function render() {
       : FOOT_NOTE;
     document.getElementById("foot-right").textContent = `factory ${state.index.version} · ${state.index.tools.join(", ")}`;
     document.title = `factory · ${state.index.repo}`;
-    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id, project) : view === "overview" ? overview() : view === "config" ? configView() : board();
+    content = view === "pipeline" ? pipeline() : view === "jobs" ? jobsView(id, project) : view === "overview" ? overview() : view === "config" ? configView() : view === "planner" ? plannerView() : board();
   }
   target.replaceChildren(...content);
   [...target.querySelectorAll(scrollers)].forEach((n, i) => { if (scroll[i]) n.scrollTop = scroll[i]; });
@@ -3100,6 +3207,7 @@ async function fetchActivity(job) {
 }
 let probed = false;
 let queueTimer = null;
+let plannerTimer = null;
 let feedTimer = null;
 async function refreshQueue() {
   if (!state.workspace) return;
@@ -3185,6 +3293,8 @@ async function refresh() {
         refreshNow();
         refreshFeeds(false);
         if (!queueTimer) queueTimer = setInterval(refreshQueue, QUEUE_MS);
+        refreshPlanner();
+        if (!plannerTimer) plannerTimer = setInterval(refreshPlanner, PLANNER_MS);
         if (!feedTimer) feedTimer = setInterval(() => refreshFeeds(false), FEED_TICK_MS);
         return;
       }

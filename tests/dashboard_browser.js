@@ -207,6 +207,50 @@ async function main() {
   check("settings leave the pipeline's steps to the pipelines", !(await texts(jobsPage, "table td.mono")).some((t) => t.startsWith("steps.")));
   await jobsContext.close();
 
+  // ---- the planner: badge, view, and browser notifications
+  const plannerContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  plannerContext.on("page", watch);
+  await plannerContext.addInitScript(() => {
+    window.__notes = [];
+    window.Notification = class { constructor(title, opts) { window.__notes.push([title, opts && opts.tag]); } };
+    window.Notification.permission = "granted";
+    window.Notification.requestPermission = () => Promise.resolve("granted");
+  });
+  const plan = await plannerContext.newPage();
+  await plan.goto(base + "#/planner");
+  await plan.waitForSelector(".finding", { timeout: 15000 });
+  check("the planner badge counts open findings", (await plan.textContent("#planner-count")) === "2" && !(await plan.$eval("#planner-badge", (n) => n.hidden)));
+  check("the badge dot is red at alert_at", (await plan.getAttribute("#planner-dot", "class")).includes("stop"));
+  check("the planner view lists one row per finding", (await plan.$$(".finding")).length === 2);
+  check("each row carries its approve command", (await texts(plan, ".finding-command code")).includes("mfactory plan approve F-1"));
+  for (const theme of ["light", "dark"]) {
+    await plan.emulateMedia({ colorScheme: theme });
+    await plan.screenshot({ path: "planner-" + theme + ".png" });
+  }
+  await plan.check(".notify-toggle input");
+  await plan.waitForTimeout(300);
+  check("turning notifications on does not notify what is already there", (await plan.evaluate(() => window.__notes.length)) === 0);
+  await plan.route("**/planner.json", async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    body.findings.push({ id: "F-3", kind: "conflict", severity: "high", summary: "new", evidence: [], action: "", tickets: [] });
+    body.counts.open += 1; body.counts.high += 1;
+    await route.fulfill({ response: res, json: body });
+  });
+  await plan.evaluate(() => refreshPlanner());
+  await plan.waitForTimeout(300);
+  const notes = await plan.evaluate(() => window.__notes);
+  check("a new high finding notifies once", notes.length === 1 && notes[0][1] === "F-3", JSON.stringify(notes));
+  await plan.reload();
+  await plan.waitForSelector(".finding", { timeout: 15000 });
+  await plan.waitForTimeout(500);
+  check("a reload does not notify again", (await plan.evaluate(() => window.__notes.length)) === 0);
+  const flagged = await plannerContext.newPage();
+  await flagged.goto(base + "#/board");
+  await flagged.waitForSelector(".planner-flag", { timeout: 15000 }).catch(() => null);
+  check("a job in an open finding is flagged on the board", (await flagged.$$(".planner-flag")).length > 0);
+  await plannerContext.close();
+
   // ---- a phone
   const phone = await browser.newContext({ ...devices["iPhone 13"] });
   phone.on("page", watch);

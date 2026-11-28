@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 from .. import activity, config
 from ..config import Config
 from ..config import load as load_config
+from ..planner.state import PlannerState
 from ..service import tracker as trackers
 from ..service.gh import GitHub
 from ..service.tracker.base import key_kind
@@ -34,6 +35,7 @@ from ..util import FactoryError, Refused, dashboard_page, user_dir
 from . import feeds
 from .jobs import read_pipelines
 from .paths import FILE, SERVED
+from .planner_feed import planner_payload
 from .project import Project
 from .queue import QueueMeta
 from .registry import Workspace
@@ -310,6 +312,9 @@ def _routes(page: bytes, cache: QueueCache, blocks: Feeds | None = None) -> list
     def queue(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
         return json_reply(cache.get())
 
+    def planner(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        return json_reply(planner_payload(PlannerState(user_dir() / "planner")))
+
     def issue(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
         project: Project | None = workspace.project(found["project"])
         if project is None or not ISSUE_KEY.fullmatch(found["ref"]):
@@ -347,6 +352,7 @@ def _routes(page: bytes, cache: QueueCache, blocks: Feeds | None = None) -> list
         (re.compile(r"/projects/(?P<project>[^/]+)/pipelines/(?P<name>[a-z][a-z0-9-]*)\.yaml"), pipeline_yaml),
         (re.compile(r"/projects\.json"), projects),
         (re.compile(r"/queue\.json"), queue),
+        (re.compile(r"/planner\.json"), planner),
         (re.compile(r"/projects/(?P<project>[^/]+)/issues/(?P<ref>.+)"), issue),
         (re.compile(r"/projects/(?P<project>[^/]+)/jira/boards"), jira_boards),
         (re.compile(r"/projects/(?P<project>[^/]+)/jira/boards/(?P<board>[^/]+)"), jira_board),
