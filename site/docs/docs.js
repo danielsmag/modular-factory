@@ -34,7 +34,7 @@ const PAGES = [
     heads: [["How values merge", "how-values-merge"], ["Project, tools and run", "project-tools-and-run"], ["Checks", "checks"], ["Steps", "steps"], ["Loop limits", "loop-limits"], ["Who merges", "who-merges"], ["Optional steps", "optional-steps"], ["Adding a step", "adding-a-step"], ["Human steps", "human-steps"], ["Validation", "validation"], ["Reviewers and surfaces", "reviewers-and-surfaces"], ["Models and effort", "models-and-effort"], ["Project skills", "project-skills"], ["Tracker: a Jira board", "tracker-a-jira-board"], ["GitHub issues and a Jira board together", "tracker-both"], ["Labels, paths and ports", "labels-paths-and-ports"]] },
   { id: "cli", group: "Reference", file: "cli.html", title: "CLI",
     blurb: "mfactory commands for install, configuration, jobs, the dashboard, and the workspace.",
-    heads: [["Install and maintain", "install-and-maintain"], ["See the configuration", "see-the-configuration"], ["Run jobs", "run-jobs"], ["Dashboard", "dashboard"], ["Workspace", "workspace"]] },
+    heads: [["Install and maintain", "install-and-maintain"], ["See the configuration", "see-the-configuration"], ["Run jobs", "run-jobs"], ["Telemetry", "telemetry"], ["Dashboard", "dashboard"], ["Workspace", "workspace"]] },
   { id: "changelog", group: "Reference", file: "changelog.html", title: "Changelog",
     blurb: "What changed in 0.2.1, 0.2.0, and 0.1.0.",
     heads: [["0.2.1", "v0-2-1"], ["0.2.0", "v0-2-0"], ["0.1.0", "v0-1-0"], ["Known limits", "known-limits"]] },

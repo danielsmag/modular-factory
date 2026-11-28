@@ -72,6 +72,7 @@ mfactory: the configuration has 3 problem(s):
 - [Project skills](#project-skills)
 - [Tracker: a Jira board](#tracker-a-jira-board)
 - [Planner](#planner)
+- [Telemetry](#telemetry)
 - [Labels, paths and ports](#labels-paths-and-ports)
 
 ## Project, tools and run
@@ -1312,6 +1313,46 @@ when `gh` cannot read the board, labels are used.
 Severity is the kind's base level (`conflict` high, `duplicate`, `dependency` and
 `priority-inversion` medium, `overlap` low), one higher when a ticket is
 `critical` or `high`, and one more when every ticket already has a running job.
+
+## Telemetry
+
+Local execution records for a later comparison of models, reviewers, and
+pipeline settings. Telemetry does not choose the next step, and a write failure
+does not fail the job. Nothing is sent off the machine. The record shape,
+privacy rules, and provider limits are in [Telemetry](telemetry.md).
+
+```toml
+[telemetry]
+enabled = true
+storage = "jsonl"
+retention_days = 90
+fail_open = true
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `[telemetry] enabled` | `true` | `false` writes no telemetry files. |
+| `[telemetry] storage` | `"jsonl"` | The only store in this version. |
+| `[telemetry] retention_days` | `90` | Used by `mfactory telemetry prune`. Prune is explicit. |
+| `[telemetry] fail_open` | `true` | A telemetry error is recorded locally and the job continues. `false` makes that error fail the command. |
+| `[telemetry.collect] *` | `true` | Turn off `lifecycle`, `performance`, `usage`, `cost`, `checks`, `reviews`, `human_feedback`, `git_metrics`, `config_fingerprints`, or `artifact_metadata`. |
+| `[telemetry.privacy] store_*` | `false` | This version has no field for prompts, transcripts, tool arguments, tool outputs, or feedback text. Setting one of these true does not start capturing them. |
+| `[telemetry.privacy] redact_secrets` | `true` | Replace credential-shaped strings. Absolute paths are dropped either way. |
+| `[telemetry.privacy] store_config_content` | `false` | When true, write a sanitized config snapshot next to the hash. Secrets and absolute paths are still removed. |
+
+`mfactory install` ignores `/.factory/telemetry/`. Job events live under
+`.factory/jobs/<id>/telemetry/`, which is already ignored with the job folder.
+An install from before this version needs that ignore line, or a fresh `mfactory install`.
+
+```bash
+mfactory telemetry status
+mfactory telemetry events 004
+mfactory telemetry events 004 --type step.completed
+mfactory telemetry validate
+mfactory telemetry export --format jsonl
+mfactory telemetry export --type step.completed --format csv
+mfactory telemetry prune
+```
 
 ## Labels, paths and ports
 

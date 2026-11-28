@@ -24,7 +24,8 @@ plan the queue across jobs
   plan release <ref>
   plan approve <F-n> | plan dismiss <F-n> [reason]
 other
-  checks | dashboard | start dashboard | stop | version
+  checks | telemetry status | telemetry events | telemetry validate | telemetry export | telemetry prune
+  dashboard | start dashboard | stop | version
 several projects
   workspace add [path] | remove [path] | list | queue | init
 
@@ -203,6 +204,23 @@ def parser() -> argparse.ArgumentParser:
         "--refs", required=True, help='{"<ref>": {"project": <path>, "key": <key>, "url": <url>}} per ref it names')
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
+    telemetry: argparse.ArgumentParser = sub.add_parser(
+        "telemetry", help="local execution records: status, export, validate, prune")
+    telemetry_sub: argparse._SubParsersAction[argparse.ArgumentParser] = telemetry.add_subparsers(
+        dest="telemetry_what", required=True, metavar="<command>")
+    telemetry_sub.add_parser("status", help="collection health and how much data is on disk")
+    events: argparse.ArgumentParser = telemetry_sub.add_parser("events", help="print events for one job")
+    events.add_argument("job", help="job id, its number, or its issue")
+    events.add_argument("--type", dest="event_type", help="only this event type")
+    telemetry_sub.add_parser("validate", help="report malformed records and schema problems")
+    export: argparse.ArgumentParser = telemetry_sub.add_parser("export", help="write telemetry as JSONL or CSV")
+    export.add_argument("--format", choices=("jsonl", "csv"), default="jsonl")
+    export.add_argument("--type", dest="event_type", help="only this event type")
+    export.add_argument("--job", help="one job; omit for every job")
+    export.add_argument("--output", help="file to write; default is standard output")
+    prune: argparse.ArgumentParser = telemetry_sub.add_parser(
+        "prune", help="drop telemetry older than retention_days; active jobs are kept")
+    prune.add_argument("--dry-run", action="store_true", help="say what would be removed")
     sub.add_parser("hook")  # no help text: argparse then leaves it out of the list
     line: argparse.ArgumentParser = sub.add_parser("statusline")  # Claude Code's status line runs this
     line.add_argument("--then", help="the status line command to run after recording")

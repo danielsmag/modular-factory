@@ -27,6 +27,7 @@ from ..planner.state import PlannerState
 from ..queue import queue_json
 from ..service.tracker import Tracker
 from ..store import Store
+from ..telemetry.command import run as telemetry_command
 from ..util import (
     ConfigError,
     FactoryError,
@@ -670,6 +671,8 @@ def run(args: argparse.Namespace) -> int:
     if command == "migrate":
         return migrate_layout(repo) if args.what == "layout" else migrate_pipelines(repo)
     cfg = config.load(repo)
+    if command == "telemetry":
+        return telemetry_command(cfg, args)
     if command == "config":
         print(json.dumps(config.as_json(cfg), indent=1) if args.json else config.show(cfg),
               end="\n" if args.json else "")

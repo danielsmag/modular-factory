@@ -224,6 +224,10 @@ class Humans:
     def answer(self, ref, outcome, text):
         """`factory answer`: the person running the factory replies to a human step."""
         job = self.store.open(ref)
+        with self.observer.session(self, job):
+            self._answer_open(job, outcome, text)
+
+    def _answer_open(self, job, outcome, text):
         name = job["step"]
         step = self._pipe(job).steps.get(name)
         if not step or step["type"] != "human":

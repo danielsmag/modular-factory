@@ -118,8 +118,12 @@ class Queue:
         self.store.save(job)
         job = self.store.open(job_id)
         self._write_issue_md(job, issue)
-        self._enter(job, self._pipe(job)["run"]["start"])
+        _landed, skipped = self._enter(job, self._pipe(job)["run"]["start"])
         self.store.save(job)
+        observer: Any = getattr(self, "observer", None)
+        if observer is not None:
+            with observer.session(self, job):
+                observer.after_create(self, job, skipped)
         return job
 
     def _picks(self: _QueueHost) -> Callable[[dict[str, Any]], bool]:

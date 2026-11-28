@@ -117,7 +117,7 @@ def ignore_entries(repo, worktrees):
     """Add the runtime folders to .gitignore. Returns the lines added."""
     path = Path(repo) / ".gitignore"
     have = {line.strip() for line in path.read_text().splitlines()} if path.exists() else set()
-    wanted = ["/.factory/jobs/", f"/{worktrees.strip('/')}/"]
+    wanted = ["/.factory/jobs/", "/.factory/telemetry/", f"/{worktrees.strip('/')}/"]
     missing = [w for w in wanted if not _pattern_present(have, w)]
     if missing:
         text = path.read_text() if path.exists() else ""

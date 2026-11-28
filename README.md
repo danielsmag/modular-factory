@@ -385,7 +385,8 @@ mfactory install | upgrade | uninstall | doctor | status | sync
 mfactory config show | graph | models | skills     see the configuration
 mfactory pipes list | show | validate | schema the YAML pipes; migrate pipes | layout
 mfactory queue | create | next | done | answer     run jobs (the /mfactory skill uses these)
-mfactory checks | dashboard | start dashboard | stop | version
+mfactory checks | telemetry status | events | validate | export | prune
+mfactory dashboard | start dashboard | stop | version
 mfactory workspace add | remove | list | queue | init
 ```
 
@@ -400,6 +401,7 @@ material is in the repository:
 - [Install guide](docs/install.md): installing, setting up, upgrading, removing.
 - [Configuration reference](docs/configuration.md): every key in `factory/factory.toml`
   and in a pipeline file.
+- [Telemetry](docs/telemetry.md): local execution records, privacy, and export.
 - [Design notes](docs/design.md): how it works, what guards it, what is
   untested, and what changed from the project it is derived from.
 
