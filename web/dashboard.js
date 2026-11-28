@@ -92,6 +92,10 @@ const state = {
   feeds: { jira: {}, github: {} }, jiraPicker: null,
   ghFilter: storedFilter(), collapsed: new Set(storedFolds()),
   memo: new Map(), jobsStamp: 0, queueStamp: 0,
+  pipelines: null, jobSort: prefs.get("mfactory.jobs.sort", { key: "started", dir: -1 }),
+  jobFilter: prefs.get("mfactory.jobs.filter", "all"), jobPipe: "all", jobTab: prefs.get("mfactory.job.tab", "graph"),
+  jobNode: null, dagZoom: {}, pipeView: prefs.get("mfactory.pipeView", "default"),
+  cfgPipe: prefs.get("mfactory.cfgPipe", "default"), cfgTab: "dag",
 };
 if (queryProject()) writeChoice(state.selected);
 
@@ -162,6 +166,7 @@ function span(seconds) {
 const money = (n) => "$" + Number(n).toFixed(2);
 function graphOf(job) {
   if (job && job.graph) return job.graph;
+  if (job && !state.workspace && state.pipelines) return pipelineGraphFor(null, job.pipeline);
   return state.graph;
 }
 function stepOf(name, job) {
@@ -200,7 +205,7 @@ function taggedJob(project, job) {
   const copy = Object.assign({}, job);
   copy.project = project.id;
   copy.projectName = projectLabel(project);
-  copy.graph = project.graph || null;
+  copy.graph = pipelineGraphFor(project, job.pipeline);
   return copy;
 }
 function jobs() {
@@ -2165,143 +2170,75 @@ function order(graph) {
   const ends = graph.end_states.slice().sort((x, y) => (x === "done" ? -1 : y === "done" ? 1 : x < y ? -1 : 1));
   return out.concat(ends);
 }
-function lanes(groups) {
-  // Shortest runs sit closest to the steps; runs that do not overlap share a lane.
-  const taken = [];
-  for (const group of groups.slice().sort((x, y) => (x.hi - x.lo) - (y.hi - y.lo))) {
-    let lane = 0;
-    while ((taken[lane] || []).some((g) => group.lo < g.hi + 8 && g.lo < group.hi + 8)) lane++;
-    (taken[lane] = taken[lane] || []).push(group);
-    group.lane = lane;
-  }
-  return taken.length;
+// ---- pipelines: one or more per project, each a YAML file ----
+function pipelinesOf(project) {
+  const found = project && project.pipelines && Array.isArray(project.pipelines.pipelines) ? project.pipelines.pipelines : [];
+  if (found.length) return found;
+  return project && project.graph ? [{ name: "default", description: "", file: "", graph: project.graph, yaml: "" }] : [];
 }
-function pipelineGraph(graph, count) {
-  const NW = 200, LABEL = 152, LANE = 12, PORT = 16, GAP = 14, PAD = 12, R = 5;
-  const names = order(graph), index = new Map(names.map((n, i) => [n, i]));
-  const nodes = new Map();
-  let y = PAD;
-  for (const name of names) {
-    const step = (graph.steps || []).find((item) => item.name === name) || null;
-    const edges = step ? step.edges.filter((e) => index.has(e.to)) : [];
-    const fwd = edges.filter((e) => index.get(e.to) > index.get(name)), back = edges.filter((e) => index.get(e.to) <= index.get(name));
-    const h = Math.max(42, 26 + PORT * (Math.max(fwd.length, back.length, 1) - 1) + 12);
-    nodes.set(name, { name, step, y, h, fwd, back });
-    y += h + GAP;
-  }
-  const H = y - GAP + PAD;
-  const runs = [];
-  for (const node of nodes.values()) {
-    for (const [side, list] of [["fwd", node.fwd], ["back", node.back]]) {
-      list.forEach((edge, i) => {
-        const target = nodes.get(edge.to);
-        runs.push({ side, from: node.name, to: edge.to, edge, y1: node.y + 26 + PORT * i, y2: target.y + 9,
-          off: node.step.enabled === false && edge.outcome !== node.step.skip });
-      });
-    }
-  }
-  const groups = { fwd: new Map(), back: new Map() };
-  for (const run of runs) {
-    const group = groups[run.side].get(run.to) || { lo: Infinity, hi: -Infinity };
-    group.lo = Math.min(group.lo, run.y1, run.y2);
-    group.hi = Math.max(group.hi, run.y1, run.y2);
-    groups[run.side].set(run.to, group);
-  }
-  const leftLanes = lanes([...groups.back.values()]), rightLanes = lanes([...groups.fwd.values()]);
-  const xl = PAD + Math.max(0, leftLanes - 1) * LANE + (leftLanes ? LABEL : 0), xr = xl + NW;
-  const W = xr + (rightLanes ? LABEL : 0) + Math.max(0, rightLanes - 1) * LANE + PAD;
-
-  const root = svg("svg", { class: "graph", viewBox: `0 0 ${W} ${H}`, style: `width:${W}px`, role: "img",
-    "aria-label": "The pipeline's steps and the edges between them. The Steps table lists the same." });
-  const marker = (id, colour) => svg("marker", { id, viewBox: "0 0 8 8", refX: 7, refY: 4, markerWidth: 6, markerHeight: 6, orient: "auto" }, svg("path", { d: "M0,0 L8,4 L0,8 z", fill: colour }));
-  root.append(svg("defs", {}, marker("arrow", "#8a8a8a"), marker("arrow-back", "#c9836f"), marker("arrow-off", "#3a3a3a")));
-  const wires = svg("g", {}), labels = svg("g", {});
-  for (const run of runs.sort((a, b) => Number(b.off) - Number(a.off))) {
-    const right = run.side === "fwd", dir = right ? 1 : -1, down = run.y2 > run.y1 ? 1 : -1;
-    const x0 = right ? xr : xl, lane = x0 + dir * (LABEL + groups[run.side].get(run.to).lane * LANE);
-    const d = `M${x0},${run.y1} H${lane - dir * R} Q${lane},${run.y1} ${lane},${run.y1 + down * R} V${run.y2 - down * R} Q${lane},${run.y2} ${lane - dir * R},${run.y2} H${x0 + dir * 2}`;
-    const kind = run.off ? " off" : right ? "" : " back";
-    wires.append(svg("path", { class: "edge" + kind, d, "marker-end": `url(#arrow${run.off ? "-off" : right ? "" : "-back"})`, "data-from": run.from, "data-to": run.to }));
-    const text = run.edge.outcome + (run.edge.max !== null && run.edge.max !== undefined ? ` · max ${run.edge.max}` : "");
-    labels.append(svg("circle", { class: "port" + kind, cx: x0, cy: run.y1, r: 2.5, "data-from": run.from, "data-to": run.to }),
-      svg("text", { class: "elabel" + kind, x: x0 + dir * 8, y: run.y1 - 6, "text-anchor": right ? "start" : "end", text, "data-from": run.from, "data-to": run.to }));
-  }
-  root.append(wires);
-  for (const node of nodes.values()) {
-    const { name, step, h } = node, n = count(name), end = !step;
-    const waiting = step && step.type === "human" && n > 0;
-    const kind = end ? "end" : step.type + (step.who ? " · " + whoText(step.who) : "") + (step.enabled === false ? " · off" : "");
-    const group = svg("g", { class: "node" + (end ? " end" : "") + (step && step.enabled === false ? " off" : "") + (waiting ? " wait" : "") });
-    group.append(svg("rect", { x: xl, y: node.y, width: NW, height: h, rx: 3 }),
-      svg("text", { class: "name", x: xl + 11, y: node.y + 18, text: name.length > 20 ? name.slice(0, 19) + "…" : name }),
-      svg("text", { class: "kind", x: xl + 11, y: node.y + 32, text: kind }));
-    if (n) group.append(svg("g", { class: "count" }, svg("rect", { x: xr - 40, y: node.y + 8, width: 28, height: 20, rx: 10 }), svg("text", { x: xr - 26, y: node.y + 22, "text-anchor": "middle", text: n })));
-    group.append(svg("title", { text: `${name}: ${n} job${n === 1 ? "" : "s"}` }));
-    const focus = (on) => {
-      root.classList.toggle("focus", on);
-      for (const part of root.querySelectorAll("[data-from]")) part.classList.toggle("hot", on && (part.dataset.from === name || part.dataset.to === name));
-    };
-    group.addEventListener("mouseenter", () => focus(true));
-    group.addEventListener("mouseleave", () => focus(false));
-    root.append(group);
-  }
-  root.append(labels);
-  return root;
+function staticPipelines() {
+  if (state.pipelines && Array.isArray(state.pipelines.pipelines) && state.pipelines.pipelines.length) return state.pipelines.pipelines;
+  return state.graph ? [{ name: "default", description: "", file: "", graph: state.graph, yaml: "" }] : [];
 }
-function pipelineDiagram(graph, jobList) {
-  if (!graph || !Array.isArray(graph.steps) || !Array.isArray(graph.end_states)) {
-    return [el("div", { class: "notice", text: "No pipeline for this project yet." })];
-  }
-  let drawn;
-  try {
-    const count = (name) => jobList.filter((j) => j.step === name).length;
-    const off = (step) => step.enabled === false;
-    const stepRows = graph.steps.map((step) => el("tr", {},
-      el("td", { class: "mono", text: step.name }),
-      el("td", {}, el("span", { class: "chip" + (off(step) ? " off" : ""), text: step.type + (off(step) ? " · off" : "") }),
-        step.who ? el("div", { class: "dim step-who", text: whoText(step.who) }) : null),
-      el("td", { class: "mono wrap" }, (step.edges || []).map((e) => el("div", { class: off(step) && e.outcome !== step.skip ? "dim" : "" },
-        e.outcome, el("span", { class: "dim", text: " → " }), e.to, e.max !== null && e.max !== undefined ? el("span", { class: "dim", text: `  max ${e.max}` }) : null))),
-      el("td", { class: "mono dim", text: count(step.name) || "-" })));
-    drawn = [el("div", { class: "pipe" },
-      el("div", { class: "panel" }, el("div", { class: "scroll" }, pipelineGraph(graph, count)),
-        el("div", { class: "legend" }, el("span", {}, el("i"), "on to a later step"), el("span", {}, el("i", { class: "back" }), "back to an earlier step"),
-          el("span", {}, el("i", { class: "box" }), "waiting for a person"), el("span", {}, el("i", { class: "box off" }), "step is off"))),
-      el("div", { class: "panel" }, el("h2", { text: "Steps" }), el("p", { class: "sub", text: "As set in factory.toml over the defaults" }),
-        el("div", { class: "scroll" }, el("table", {}, el("thead", {}, el("tr", {}, ["Step", "Type", "Outcomes", "Jobs"].map((t) => el("th", { scope: "col", text: t })))), el("tbody", {}, stepRows)))))];
-  } catch (error) {
-    drawn = [el("div", { class: "notice", text: "This pipeline could not be drawn." })];
-  }
-  return drawn;
+function pipelineGraphFor(project, name) {
+  const list = project ? pipelinesOf(project) : staticPipelines();
+  const found = list.find((p) => p.name === (name || "default")) || list.find((p) => p.name === "default") || list[0];
+  return found && found.graph ? found.graph : (project ? project.graph : state.graph) || null;
 }
-function pipelineIntro(graph) {
-  return el("p", { class: "sub", text: `Starts at ${graph.start}. When an edge's max is used up, the job goes to ${graph.escalate_to}.` });
+function pipeTab(holder, name, label, sub) {
+  const on = state[holder] === name;
+  return el("button", {
+    type: "button", role: "tab", class: "ptab", "aria-selected": String(on), "aria-pressed": on ? "true" : "false",
+    "data-focus": holder + ":" + name, onclick: () => { state[holder] = name; prefs.set("mfactory." + holder, name); render(); },
+  }, el("span", { class: "mono", text: label }), sub ? el("span", { class: "dim", text: sub }) : null);
+}
+function pickedPipeline(holder, list) {
+  if (!list.some((p) => p.name === state[holder])) return list[0] ? list[0].name : null;
+  return state[holder];
+}
+function stepTable(graph, count) {
+  const off = (step) => step.enabled === false;
+  const rows = graph.steps.map((step) => el("tr", {},
+    el("td", { class: "mono", text: step.name }),
+    el("td", {}, el("span", { class: "chip" + (off(step) ? " off" : ""), text: step.type + (off(step) ? " · off" : "") }),
+      step.who ? el("div", { class: "dim step-who", text: whoText(step.who) }) : null),
+    el("td", { class: "mono wrap" }, (step.edges || []).map((e) => el("div", { class: off(step) && e.outcome !== step.skip ? "dim" : "" },
+      e.outcome, el("span", { class: "dim", text: " → " }), e.to, e.max !== null && e.max !== undefined ? el("span", { class: "dim", text: `  max ${e.max}` }) : null))),
+    el("td", { class: "mono dim", text: count(step.name) || "-" })));
+  return el("div", { class: "scroll" }, el("table", {}, el("thead", {}, el("tr", {}, ["Step", "Type", "Outcomes", "Jobs"].map((t) => el("th", { scope: "col", text: t })))), el("tbody", {}, rows)));
+}
+function pipelineBlock(project, jobList) {
+  const list = project ? pipelinesOf(project) : staticPipelines();
+  const holder = "pipeView";
+  if (!list.length) return [el("div", { class: "notice", text: "No pipeline for this project yet." })];
+  const name = pickedPipeline(holder, list);
+  const chosen = list.find((p) => p.name === name) || list[0];
+  const graph = chosen.graph;
+  const mine = jobList.filter((j) => (j.pipeline || "default") === chosen.name);
+  const count = (step) => mine.filter((j) => j.step === step).length;
+  const nodes = [];
+  if (list.length > 1) {
+    nodes.push(el("div", { class: "ptabs", role: "tablist", "aria-label": "Pipelines" },
+      list.map((p) => pipeTab(holder, p.name, p.name, String(jobList.filter((j) => (j.pipeline || "default") === p.name).length) + " jobs"))));
+  }
+  if (!graph || !Array.isArray(graph.steps)) return nodes.concat([el("div", { class: "notice", text: "This pipeline could not be drawn. See Config for its problems." })]);
+  nodes.push(el("p", { class: "sub" },
+    chosen.description ? chosen.description + " · " : "",
+    `Starts at ${graph.start}. When an edge's max is used up, the job goes to ${graph.escalate_to}.`,
+    chosen.file ? el("span", { class: "dim", text: "  " + chosen.file }) : null));
+  nodes.push(el("div", { class: "panel pipe-graph" }, dagView(graph, { counts: count, zoomKey: "pipe:" + (project ? project.id : "") + ":" + chosen.name, label: "Pipeline " + chosen.name }), dagLegend(false)));
+  nodes.push(el("div", { class: "panel" }, el("h2", { text: "Steps" }), el("p", { class: "sub", text: chosen.file && chosen.file !== "built-in" ? "As declared in " + chosen.file : "The built-in pipeline" }), stepTable(graph, count)));
+  return nodes;
 }
 function pipeline() {
-  if (!state.workspace) {
-    return [el("h1", { text: "Pipeline" }), pipelineIntro(state.graph), ...pipelineDiagram(state.graph, jobs())];
-  }
+  const nodes = [el("h1", { text: "Pipeline" })];
+  if (!state.workspace) return nodes.concat(pipelineBlock(null, jobs()));
   const projects = visibleProjects();
-  if (projects.length <= 1) {
-    const project = projects[0];
-    const nodes = [el("h1", { text: "Pipeline" })];
-    if (!project) return nodes.concat([el("p", { class: "kempty", text: "no projects yet" })]);
-    if (project.error) nodes.push(el("p", { class: "error", text: String(project.error) }));
-    if (project.graph) nodes.push(pipelineIntro(project.graph));
-    nodes.push(...pipelineDiagram(project.graph, jobs()));
-    return nodes;
-  }
-  const nodes = [
-    el("h1", { text: "Pipeline" }),
-    el("p", { class: "sub", text: "One pipeline per project. Each factory.toml can differ." }),
-  ];
+  if (!projects.length) return nodes.concat([el("p", { class: "kempty", text: "no projects yet" })]);
   projects.forEach((project) => {
-    const mine = jobs().filter((job) => job.project === project.id);
-    nodes.push(el("h2", { class: "block-title", text: project.name || project.id }));
-    if (project.path) nodes.push(el("p", { class: "sub", text: project.path }));
+    if (projects.length > 1) nodes.push(el("h2", { class: "block-title", text: project.name || project.id }));
     if (project.error) nodes.push(el("p", { class: "error", text: String(project.error) }));
-    if (project.graph) nodes.push(pipelineIntro(project.graph));
-    nodes.push(...pipelineDiagram(project.graph, mine));
+    nodes.push(...pipelineBlock(project, jobs().filter((job) => job.project === project.id)));
   });
   return nodes;
 }
@@ -2322,63 +2259,6 @@ async function showFile(job, path) {
     text = `Could not load ${path}.`;
   }
   if (sameFile(job) && state.file.path === path) { state.file.text = text; render(); }
-}
-function jobDetail(job) {
-  const step = stepOf(job.step, job);
-  const parts = [];
-  parts.push(el("div", { class: "panel" },
-    el("div", { class: "head" }, el("div", { style: "min-width:0" }, el("h2", { class: "job-title", text: job.title }), el("div", { class: "mono dim", style: "margin-top:3px", text: (state.workspace && state.selected === "all" && job.projectName ? job.projectName + " · " : "") + job.id })), chip(job)),
-    el("div", { class: "facts" },
-      el("span", {}, "Issue ", link(job.issue_url, issueRef(job.issue))),
-      jobPrs(job).length ? el("span", {}, jobPrs(job).length > 1 ? "PRs " : "PR ", prLinks(job, "#")) : null,
-      el("span", {}, "By ", el("b", { text: person(job.author, job.author_name, job.project) })),
-      job.intake ? el("span", {}, "Risk ", el("b", { text: job.intake.risk })) : null,
-      job.intake ? el("span", {}, "Surfaces ", el("b", { text: (job.intake.surfaces || []).join(", ") || "none" })) : null,
-      el("span", {}, "Round ", el("b", { text: `${job.round || 0}` + (job.attempt > 1 ? `, attempt ${job.attempt}` : "") })),
-      job.cost_usd !== null && job.cost_usd !== undefined ? el("span", {}, "Cost ", el("b", { text: money(job.cost_usd) })) : null,
-      el("span", {}, "Started ", el("b", {}, ageNode(job.created_at, "ago"))))));
-
-  if (job.waiting) {
-    parts.push(el("div", { class: "ask" },
-      el("h2", {}, "Waiting for " + waitingAudience(job) + " since ", ageNode(job.waiting && job.waiting.since, "ago")),
-      el("p", { text: job.reason || (job.waiting.replies === "tool"
-        ? `Step ${job.step} needs a reply in your coding tool. A comment on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} does not count.`
-        : `Step ${job.step} needs a reply. Type one of these in your coding tool, or comment it on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} without the number.`) }),
-      commands(job).map((cmd) => el("div", { class: "cmd" }, el("code", { text: cmd }),
-        el("button", { type: "button", text: "Copy", onclick: async (e) => {
-          const literal = cmd.replace(/ <[^>]+>$/, " ");
-          try { await navigator.clipboard.writeText(literal); e.target.textContent = "Copied"; } catch (_) { e.target.textContent = "Select it"; }
-          setTimeout(() => { e.target.textContent = "Copy"; }, 1500);
-        } })))));
-  } else if (job.reason && isEnd(job.step, job) && job.step !== "done") {
-    parts.push(el("div", { class: "notice", style: "white-space:pre-wrap;overflow-wrap:anywhere", text: job.reason }));
-  }
-
-  const items = (job.history || []).map((h) => {
-    const bad = /^(FAIL|FAILED|REJECT|CHANGES|BLOCKED|ESCALATE|UNKNOWN|NEEDS-INFO)$/.test(h.outcome);
-    return el("li", { class: bad ? "ko" : "ok" }, el("span", { class: "mark" }), el("span", { class: "mono", text: h.step }),
-      el("span", { class: "what" }, el("span", { class: "mono", text: h.outcome + " → " + h.to }),
-        h.skipped && h.skipped.length ? el("span", { class: "dim", text: "  skipped " + h.skipped.join(", ") }) : null,
-        h.reason ? el("div", { class: "dim history-reason", text: h.reason.split("\n")[0].slice(0, 200) }) : null),
-      el("span", { class: "when" }, span((time(h.at) - time(h.entered_at)) / 1000) + " · ", ageNode(h.at, "ago")));
-  });
-  if (!isEnd(job.step, job)) {
-    items.push(el("li", { class: "now" }, el("span", { class: "mark" }), el("span", { class: "mono", text: job.step }),
-      el("span", { class: "what dim", text: job.waiting ? "waiting for a person" : step ? `${step.type} step, in progress` : "this step is no longer in factory.toml" }),
-      el("span", { class: "when" }, ageNode(job.entered_at, "since"))));
-  }
-  parts.push(el("div", { class: "panel" }, el("h2", { text: "Steps" }), el("p", { class: "sub", text: "In the order the job took them" }), el("ol", { class: "steps" }, items)));
-
-  const files = job.files || [];
-  const open = sameFile(job) ? state.file : null;
-  parts.push(el("div", { class: "panel" }, el("h2", { text: "Files" }), el("p", { class: "sub", text: "What each step wrote, with its first line" }),
-    files.length ? el("div", { class: "files", style: splitStyle() },
-      el("div", { class: "filelist" }, files.map((f) => el("button", { type: "button", "aria-pressed": String(!!open && open.path === f.path), onclick: () => showFile(job, f.path) },
-        el("span", { class: "path", text: f.path }), el("span", { class: "verdict", text: f.first_line || "" })))),
-      grip(),
-      fileView({ path: open ? open.path : null, text: open ? open.text : "Pick a file to read it." }))
-      : el("div", { class: "empty", text: "No files yet." })));
-  return el("div", { class: "detail" }, parts);
 }
 function jobHref(job) {
   if (state.workspace) return "#/jobs/" + encodeURIComponent(job.project) + "/" + encodeURIComponent(job.id);
@@ -2441,25 +2321,436 @@ function enqueueNodes() {
   if (!hint) return ["Label an issue ", el("code", { text: queueLabel() })];
   return String(hint).split("`").map((part, index) => (index % 2 ? el("code", { text: part }) : part));
 }
-function jobsView(id, projectId) {
-  const all = jobs(), shown = all.filter(matches);
-  const current = all.find((job) => sameJob(job, projectId, id)) || shown[0] || null;
-  if (!all.length) return [el("h1", { text: "Jobs" }), el("p", { class: "sub", text: trackerInfo().kind === "jira" ? "One job per card from the queue column" : "One job per labeled issue" }), el("div", { class: "notice" }, "No jobs yet. ", ...enqueueNodes(), " and run ", el("code", { text: "/mfactory run" }), " in your coding tool.")];
+// ---- jobs: a table of every job, and a page per job with its pipeline drawn ----
+const STATUS_ORDER = ["running", "waiting", "queued", "done", "failed", "rejected"];
+const STATUS_LABEL = { running: "Running", waiting: "Waiting", queued: "Queued", done: "Done", failed: "Failed", rejected: "Rejected" };
+const JOB_TABS = [["graph", "Graph"], ["gantt", "Timeline"], ["details", "Details"], ["files", "Files"], ["logs", "Logs"]];
+const BACK = /^(FAIL|FAILED|REJECT|CHANGES|BLOCKED|ESCALATE|UNKNOWN|NEEDS-INFO|FEEDBACK)$/;
+function statusOf(job) {
+  if (job.status && STATUS_LABEL[job.status]) return job.status;
+  if (job.step === "done" || job.step === "failed" || job.step === "rejected") return job.step;
+  if (job.waiting) return "waiting";
+  return job.running_since ? "running" : "queued";
+}
+function statusPill(job) {
+  const st = statusOf(job);
+  return el("span", { class: "pill st-" + st }, st === "running" ? el("i", { class: "pulse", "aria-hidden": "true" }) : el("i", { class: "dot", "aria-hidden": "true" }), STATUS_LABEL[st]);
+}
+function jobSeconds(job) {
+  const start = time(job.created_at);
+  if (!start) return null;
+  return ((time(job.finished_at) || Date.now()) - start) / 1000;
+}
+// Time a job spent being worked on, and waiting for people, from its steps' visits.
+function jobTimes(job) {
+  const graph = graphOf(job);
+  const types = new Map(((graph && graph.steps) || []).map((s) => [s.name, s.type]));
+  let work = 0, wait = 0;
+  (job.history || []).forEach((h) => {
+    const s = (time(h.at) - time(h.entered_at)) / 1000;
+    if (!(s >= 0)) return;
+    if (types.get(h.step) === "human") wait += s; else work += s;
+  });
+  if (job.step && !isEnd(job.step, job) && time(job.entered_at)) {
+    const s = (Date.now() - time(job.entered_at)) / 1000;
+    if (types.get(job.step) === "human") wait += s; else work += s;
+  }
+  return { work, wait };
+}
+function runCells(job) {
+  const graph = graphOf(job);
+  const states = job.step_states || {};
+  if (!graph || !Array.isArray(graph.steps)) return el("span", { class: "dim", text: "-" });
+  const shown = graph.steps.filter((s) => s.enabled !== false || (states[s.name] && states[s.name].state !== "disabled"));
+  return el("span", { class: "cells", "aria-hidden": "true" }, shown.map((s) => {
+    const st = (states[s.name] && states[s.name].state) || "none";
+    return el("i", { class: "cell st-" + st, title: s.name + ": " + DAG_STATES[st].label });
+  }));
+}
+function sortValue(job, key) {
+  switch (key) {
+    case "status": return STATUS_ORDER.indexOf(statusOf(job));
+    case "job": return job.id;
+    case "title": return String(job.title || "").toLowerCase();
+    case "pipeline": return job.pipeline || "default";
+    case "step": return job.step || "";
+    case "round": return job.round || 0;
+    case "started": return time(job.created_at) || 0;
+    case "duration": return jobSeconds(job) || 0;
+    case "updated": return time(job.updated_at) || 0;
+    case "cost": return Number(job.cost_usd) || 0;
+    default: return job.id;
+  }
+}
+function sortJobs(list) {
+  const sort = state.jobSort || { key: "started", dir: -1 };
+  return list.slice().sort((a, b) => {
+    const x = sortValue(a, sort.key), y = sortValue(b, sort.key);
+    if (x < y) return -sort.dir;
+    if (x > y) return sort.dir;
+    return a.id < b.id ? 1 : -1;
+  });
+}
+function sortHeader(key, label, cls) {
+  const sort = state.jobSort || { key: "started", dir: -1 };
+  const on = sort.key === key;
+  return el("th", { scope: "col", class: cls || null, "aria-sort": on ? (sort.dir > 0 ? "ascending" : "descending") : null },
+    el("button", {
+      type: "button", class: "sort" + (on ? " on" : ""), "data-focus": "sort:" + key,
+      onclick: () => {
+        state.jobSort = { key, dir: on ? -sort.dir : (key === "title" || key === "job" || key === "pipeline" || key === "step" ? 1 : -1) };
+        prefs.set("mfactory.jobs.sort", state.jobSort);
+        render();
+      },
+    }, label, el("span", { class: "arrow", "aria-hidden": "true", text: on ? (sort.dir > 0 ? "▲" : "▼") : "↕" })));
+}
+function statusChips(all) {
+  const counts = {};
+  all.forEach((job) => { const st = statusOf(job); counts[st] = (counts[st] || 0) + 1; });
+  const pick = state.jobFilter || "all";
+  const chipFor = (id, label, n) => el("button", {
+    type: "button", class: "fchip" + (id !== "all" ? " st-" + id : ""), "aria-pressed": String(pick === id), "data-focus": "jobfilter:" + id,
+    onclick: () => { state.jobFilter = id; prefs.set("mfactory.jobs.filter", id); render(); },
+  }, id !== "all" ? el("i", { class: "dot", "aria-hidden": "true" }) : null, label, el("b", { text: String(n) }));
+  return el("div", { class: "fchips", role: "group", "aria-label": "Status" },
+    chipFor("all", "All", all.length), STATUS_ORDER.filter((st) => counts[st]).map((st) => chipFor(st, STATUS_LABEL[st], counts[st])));
+}
+function pipelineSelect(all) {
+  const names = [...new Set(all.map((job) => job.pipeline || "default"))].sort();
+  if (names.length < 2) return null;
+  return el("label", { class: "pselect" }, el("span", { class: "dim", text: "Pipeline" }),
+    el("select", { "data-focus": "jobpipe", onchange: (ev) => { state.jobPipe = ev.target.value; render(); } },
+      el("option", { value: "all", text: "all", selected: state.jobPipe === "all" || !state.jobPipe }),
+      names.map((n) => el("option", { value: n, text: n, selected: state.jobPipe === n }))));
+}
+function jobsTable(all) {
+  const pick = state.jobFilter || "all";
+  const shown = sortJobs(all.filter(matches)
+    .filter((job) => pick === "all" || statusOf(job) === pick)
+    .filter((job) => !state.jobPipe || state.jobPipe === "all" || (job.pipeline || "default") === state.jobPipe));
+  const many = state.workspace && state.selected === "all" && visibleProjects().length > 1;
+  const open = (job) => { location.hash = jobHref(job); };
+  const rows = shown.map((job) => el("tr", {
+    class: "link", tabindex: 0, "data-focus": "jobrow:" + (job.project || "") + ":" + job.id,
+    onclick: (ev) => { if (!ev.target.closest("a")) open(job); },
+    onkeydown: (ev) => { if (ev.key === "Enter") open(job); },
+  },
+    el("td", {}, statusPill(job)),
+    el("td", { class: "mono opt-s" }, many && job.projectName ? el("div", { class: "dim", text: job.projectName }) : null, el("a", { href: jobHref(job), text: job.id })),
+    el("td", { class: "wrap title" }, el("div", { text: job.title || "" }), el("div", { class: "dim mono", text: issueRef(job.issue) + (job.author ? " · " + person(job.author, job.author_name, job.project, job.issue, job.tracker) : "") })),
+    el("td", { class: "opt" }, el("span", { class: "chip pipechip", text: job.pipeline || "default" })),
+    el("td", {}, el("div", { class: "mono", text: job.step || "-" }), runCells(job)),
+    el("td", { class: "mono dim opt", text: job.round || "-" }),
+    el("td", { class: "mono dim opt" }, ageNode(job.created_at, "ago")),
+    el("td", { class: "mono dim opt-s" }, elapsedNode(job)),
+    el("td", { class: "mono dim opt" }, ageNode(job.updated_at, "ago")),
+    el("td", { class: "mono dim opt", text: job.cost_usd !== null && job.cost_usd !== undefined ? money(job.cost_usd) : "-" }),
+    el("td", { class: "mono dim opt" }, jobPrs(job).length ? prLinks(job, "#") : "-")));
   return [
-    el("h1", { text: "Jobs" }),
-    el("p", { class: "sub", text: `${shown.length} of ${all.length}` + (state.query ? " match the search" : "") }),
-    el("div", { class: "jobview" },
-      el("nav", { class: "panel joblist", "aria-label": "Jobs" }, shown.length ? shown.map((job) => el("a", { href: jobHref(job), "aria-current": !!current && sameJob(job, current.project || null, current.id) ? "true" : null },
-        el("div", { class: "id", text: state.workspace && state.selected === "all" ? (job.projectName || job.project) + " · " + job.id : job.id }),
-        el("div", { class: "meta" }, el("span", {}, issueRef(job.issue) + " · ", ageNode(job.updated_at, "ago")), chip(job)))) : el("div", { class: "empty", text: "No job matches." })),
-      current ? jobDetail(current) : el("div", { class: "notice", text: "Pick a job." })),
+    el("div", { class: "jobs-tools" }, statusChips(all), pipelineSelect(all)),
+    el("div", { class: "panel flush" }, shown.length
+      ? el("div", { class: "scroll" }, el("table", { class: "jobs" },
+        el("thead", {}, el("tr", {},
+          sortHeader("status", "Status"), sortHeader("job", "Job", "opt-s"), sortHeader("title", "Title"), sortHeader("pipeline", "Pipeline", "opt"),
+          sortHeader("step", "Step · run"), sortHeader("round", "Round", "opt"), sortHeader("started", "Started", "opt"),
+          sortHeader("duration", "Duration", "opt-s"), sortHeader("updated", "Updated", "opt"), sortHeader("cost", "Cost", "opt"),
+          el("th", { scope: "col", class: "opt", text: "PR" }))),
+        el("tbody", {}, rows)))
+      : el("div", { class: "empty", text: "No job matches." })),
+  ];
+}
+
+// The files a step wrote, by the step's type and name.
+function stepFiles(job, name, step) {
+  const files = job.files || [];
+  const type = step ? step.type : "";
+  const test = (re) => files.filter((f) => re.test(f.path));
+  if (type === "checks") return test(/^round-\d+\/checks(-\d+)?\.(md|log)$/);
+  if (type === "review") return test(/^round-\d+\/review-/);
+  if (type === "merge") return test(/^round-\d+\/merge-checks/);
+  if (type === "verify") return test(/^verify/);
+  if (type === "human") return test(/^feedback-\d+\.md$/);
+  const own = { intake: /^intake(-\d+)?\.md$/, spec: /^spec(-\d+)?\.md$/, build: /^(build|progress)(-\d+)?\.md$/,
+    debug: /^round-\d+\/debug/, approve: /^decision(-\d+)?\.md$/, "post-debug": /^round-\d+\/post-debug/ }[name];
+  if (own) return test(own);
+  const plain = new RegExp("^" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(-\\d+)?\\.md$");
+  return test(plain);
+}
+function ensureJobActivity(job) {
+  if (sameDrawer(job) && state.drawer.inline) return;
+  state.drawer = {
+    project: job.project || null, id: job.id, path: null, text: "", focus: false, inline: true,
+    tab: "activity", run: 0, runPicked: false, activity: null, activitySeq: 0,
+  };
+  fetchActivity(job);
+}
+function pickNode(name) {
+  state.jobNode = state.jobNode === name ? null : name;
+  render();
+}
+function visitRows(info) {
+  const visits = (info && info.visits) || [];
+  if (!visits.length) return el("p", { class: "dim", text: "No finished visits." });
+  return el("div", { class: "scroll" }, el("table", { class: "mini" },
+    el("thead", {}, el("tr", {}, ["#", "Entered", "Took", "Outcome"].map((t) => el("th", { scope: "col", text: t })))),
+    el("tbody", {}, visits.map((v, i) => el("tr", { class: BACK.test(v.outcome || "") ? "ko" : "ok" },
+      el("td", { class: "mono dim", text: String(i + 1) }),
+      el("td", { class: "mono dim", text: shortStamp(v.entered_at) }),
+      el("td", { class: "mono", text: span(v.seconds) }),
+      el("td", { class: "mono" }, v.outcome + " → " + v.to, v.reason ? el("div", { class: "dim history-reason", text: String(v.reason).split("\n")[0].slice(0, 160) }) : null))))));
+}
+function shortStamp(stamp) {
+  const t = time(stamp);
+  if (!t) return "-";
+  const d = new Date(t);
+  const today = new Date();
+  const hm = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  if (d.toDateString() === today.toDateString()) return hm;
+  return d.toISOString().slice(5, 10) + " " + hm;
+}
+function nodePanel(job, name) {
+  const graph = graphOf(job);
+  const step = stepOf(name, job);
+  const info = (job.step_states || {})[name] || { state: "none", visits: [] };
+  const st = info.state || "none";
+  const files = stepFiles(job, name, step);
+  const runs = ((state.drawer && state.drawer.activity && state.drawer.activity.runs) || []).filter((r) => r.step === name);
+  const cost = job.cost_by_step && job.cost_by_step[name];
+  const live = name === job.step && !isEnd(name, job);
+  return el("aside", { class: "panel nodepanel", "aria-label": "Step " + name },
+    el("div", { class: "head" },
+      el("div", {}, el("h2", { class: "mono", text: name }),
+        el("div", { class: "dim", text: step ? step.type + (step.who ? " · " + whoText(step.who) : "") + (step.enabled === false ? " · off" : "") : isEnd(name, job) ? "end state" : "" })),
+      el("span", { class: "pill st-" + st }, el("i", { class: "dot", "aria-hidden": "true" }), DAG_STATES[st].label),
+      el("button", { type: "button", class: "close", text: "close", "data-focus": "node-close", onclick: () => pickNode(name) })),
+    el("dl", { class: "kv" },
+      el("dt", { text: "Runs" }), el("dd", { class: "mono", text: String((info.visits || []).length) + (live ? " + now" : "") }),
+      el("dt", { text: "Time" }), el("dd", { class: "mono" }, span(info.seconds || 0), live ? el("span", { class: "dim" }, " + ", ageNode(job.entered_at, "span"), " now") : null),
+      cost ? el("dt", { text: "Cost" }) : null, cost ? el("dd", { class: "mono", text: money(cost) }) : null,
+      el("dt", { text: "Outcomes" }), el("dd", { class: "mono wrap" }, step ? (step.edges || []).map((e) => el("div", {}, e.outcome, el("span", { class: "dim", text: " → " + e.to + (e.max != null ? "  max " + e.max : "") }))) : "-")),
+    el("h3", { text: "Visits" }), visitRows(info),
+    el("h3", { text: "Files" }),
+    files.length ? el("div", { class: "nfiles" }, files.map((f) => el("button", {
+      type: "button", class: "nfile", "data-focus": "nfile:" + f.path,
+      onclick: () => { state.jobTab = "files"; showFile(job, f.path); },
+    }, el("i", { class: "dot " + (tone(f.first_line) || "") }), el("span", { class: "mono", text: f.path }), el("span", { class: "dim", text: f.first_line || "" })))) : el("p", { class: "dim", text: "No files from this step." }),
+    el("h3", { text: "Agent runs" }),
+    runs.length ? el("div", { class: "nruns" }, runs.map((r) => el("button", {
+      type: "button", class: "nrun", onclick: () => { state.jobTab = "logs"; state.drawer.run = state.drawer.activity.runs.indexOf(r); state.drawer.runPicked = true; render(); },
+    }, el("span", { class: "who", text: r.agent || "agent" }), el("span", { class: "dim", text: runMeta(r) })))) : el("p", { class: "dim", text: state.drawer && state.drawer.activity ? "No agent runs recorded for this step." : "Loading agent runs..." }),
+  );
+}
+function jobGraphTab(job) {
+  const graph = graphOf(job);
+  if (!graph || !Array.isArray(graph.steps)) return el("div", { class: "notice", text: "This job's pipeline is not available." });
+  const selected = state.jobNode && (stepOf(state.jobNode, job) || isEnd(state.jobNode, job)) ? state.jobNode : null;
+  const drawn = dagView(graph, {
+    states: job.step_states || {}, taken: job.edges_taken || {}, selected, onSelect: pickNode,
+    zoomKey: "job:" + (job.project || "") + ":" + job.id, label: "Pipeline " + (job.pipeline || "default") + " for job " + job.id,
+  });
+  return el("div", { class: "jobgraph" + (selected ? " with-panel" : "") },
+    el("div", { class: "panel pipe-graph" }, drawn, dagLegend(true),
+      el("p", { class: "dim hint", text: "Click a step for its visits, files and agent runs." })),
+    selected ? nodePanel(job, selected) : null);
+}
+// Each visit of a step as a bar on one time axis, like a scheduler's Gantt view.
+function jobGanttTab(job) {
+  const graph = graphOf(job);
+  const types = new Map(((graph && graph.steps) || []).map((s) => [s.name, s.type]));
+  const bars = (job.history || []).map((h) => ({ step: h.step, from: time(h.entered_at), to: time(h.at), outcome: h.outcome, next: h.to, live: false }))
+    .filter((b) => b.from && b.to);
+  if (job.step && !isEnd(job.step, job) && time(job.entered_at)) bars.push({ step: job.step, from: time(job.entered_at), to: Date.now(), outcome: null, next: null, live: true });
+  if (!bars.length) return el("div", { class: "notice", text: "No step has finished yet." });
+  const start = Math.min(...bars.map((b) => b.from));
+  const end = Math.max(...bars.map((b) => b.to), start + 1000);
+  const W = 1200, label = 150, row = 26, top = 28;
+  const scale = (t) => label + ((t - start) / (end - start)) * (W - label - 16);
+  const height = top + bars.length * row + 10;
+  const chart = svg("svg", { class: "gantt", viewBox: `0 0 ${W} ${height}`, role: "img", "aria-label": "Timeline of " + job.id });
+  const ticks = 5;
+  for (let i = 0; i <= ticks; i++) {
+    const t = start + ((end - start) * i) / ticks;
+    const x = scale(t);
+    chart.append(svg("line", { class: "g-grid", x1: x, x2: x, y1: top - 6, y2: height - 6 }));
+    chart.append(svg("text", { class: "g-tick", x, y: 14, "text-anchor": i === 0 ? "start" : i === ticks ? "end" : "middle", text: shortStamp(new Date(t).toISOString()) }));
+  }
+  bars.forEach((b, i) => {
+    const y = top + i * row;
+    const human = types.get(b.step) === "human";
+    const st = b.live ? (human ? "waiting" : job.running_since ? "running" : "queued")
+      : BACK.test(b.outcome || "") ? (b.next === "failed" || b.next === "rejected" ? "failed" : "retry") : "success";
+    const x = scale(b.from), w = Math.max(3, scale(b.to) - x);
+    const g = svg("g", { class: "g-row" + (state.jobNode === b.step ? " on" : ""), "data-step": b.step });
+    g.append(svg("text", { class: "g-name", x: 8, y: y + 16, text: b.step }));
+    g.append(svg("rect", { class: "g-bar st-" + st + (human ? " human" : ""), x, y: y + 4, width: w, height: row - 9, rx: 3 }));
+    g.append(svg("title", { text: `${b.step}: ${span((b.to - b.from) / 1000)}` + (b.outcome ? ` · ${b.outcome} → ${b.next}` : b.live ? " · now" : "") }));
+    if (w > 60) g.append(svg("text", { class: "g-dur", x: x + 6, y: y + 16, text: span((b.to - b.from) / 1000) }));
+    g.addEventListener("click", () => { state.jobNode = b.step; state.jobTab = "graph"; render(); });
+    chart.append(g);
+  });
+  const times = jobTimes(job);
+  return el("div", { class: "panel" },
+    el("div", { class: "head" }, el("h2", { text: "Timeline" }), el("span", { class: "dim mono", text: "working " + span(times.work) + " · waiting for people " + span(times.wait) })),
+    el("div", { class: "scroll gantt-wrap" }, chart),
+    el("div", { class: "legend dag-legend" }, ["success", "retry", "failed", "running", "waiting"].map((st) => el("span", {}, el("i", { class: "sw st-" + st }), DAG_STATES[st].label)),
+      el("span", {}, el("i", { class: "sw human" }), "a person's turn")));
+}
+function barList(rows, format) {
+  const top = Math.max(...rows.map((r) => r[1]), 0);
+  if (!rows.length || !top) return el("p", { class: "dim", text: "Nothing recorded yet." });
+  return el("div", { class: "bars" }, rows.map(([name, value]) => el("div", { class: "bar-row" },
+    el("span", { class: "mono", text: name }),
+    el("span", { class: "bar" }, el("i", { style: "width:" + Math.max(2, (value / top) * 100).toFixed(1) + "%" })),
+    el("span", { class: "mono dim", text: format(value) }))));
+}
+function jobDetailsTab(job) {
+  const times = jobTimes(job);
+  const states = job.step_states || {};
+  const byTime = Object.keys(states).map((n) => [n, states[n].seconds || 0]).filter((r) => r[1] > 0).sort((a, b) => b[1] - a[1]);
+  const byCost = Object.entries(job.cost_by_step || {}).filter((r) => Number(r[1]) > 0).sort((a, b) => b[1] - a[1]);
+  const kv = (label, value) => [el("dt", { text: label }), el("dd", {}, value === null || value === undefined || value === "" ? el("span", { class: "dim", text: "-" }) : value)];
+  const mono = (text) => el("span", { class: "mono", text: String(text) });
+  return el("div", { class: "details" },
+    el("div", { class: "panel" }, el("h2", { text: "Job" }), el("dl", { class: "kv" },
+      kv("Id", mono(job.id)), kv("Pipeline", el("span", { class: "chip pipechip", text: job.pipeline || "default" })),
+      kv("Status", statusPill(job)), kv("Step", mono(job.step || "-")),
+      kv("Issue", link(job.issue_url, issueRef(job.issue))), kv("Tracker", job.tracker ? mono(job.tracker) : null),
+      kv("Author", job.author ? el("span", { text: person(job.author, job.author_name, job.project, job.issue, job.tracker) }) : null),
+      kv("Risk", job.intake && job.intake.risk ? el("span", { class: riskClass(job.intake.risk), text: job.intake.risk }) : null),
+      kv("Surfaces", job.intake ? mono((job.intake.surfaces || []).join(", ") || "none") : null),
+      kv("Round", mono(String(job.round || 0) + (job.attempt > 1 ? ", attempt " + job.attempt : ""))),
+      kv("Escalated from", job.escalated_from ? mono(job.escalated_from) : null),
+      kv("Reason", job.reason ? el("span", { class: "wrap", text: String(job.reason).split("\n")[0].slice(0, 300) }) : null))),
+    el("div", { class: "panel" }, el("h2", { text: "Code" }), el("dl", { class: "kv" },
+      kv("Branch", job.branch ? mono(job.branch) : null), kv("Worktree", job.worktree ? mono(job.worktree) : null),
+      kv("Pull requests", jobPrs(job).length ? el("span", {}, prLinks(job, "#")) : null),
+      kv("Merge commit", job.merge_sha ? mono(String(job.merge_sha).slice(0, 12)) : null),
+      kv("Follow-ups", job.follow_ups ? mono(job.follow_ups) : null))),
+    el("div", { class: "panel" }, el("h2", { text: "Time" }), el("dl", { class: "kv" },
+      kv("Created", el("span", {}, mono(shortStamp(job.created_at)), el("span", { class: "dim" }, "  ", ageNode(job.created_at, "ago")))),
+      kv("Finished", job.finished_at ? mono(shortStamp(job.finished_at)) : null),
+      kv("Updated", ageNode(job.updated_at, "ago")),
+      kv("Total", elapsedNode(job)), kv("Working", mono(span(times.work))), kv("Waiting for people", mono(span(times.wait)))),
+      el("h3", { text: "Time by step" }), barList(byTime, span)),
+    el("div", { class: "panel" }, el("h2", { text: "Cost" }), el("dl", { class: "kv" },
+      kv("Total", job.cost_usd !== null && job.cost_usd !== undefined ? mono(money(job.cost_usd)) : null),
+      kv("Unpriced models", (job.cost_unpriced_models || []).length ? mono(job.cost_unpriced_models.join(", ")) : null)),
+      el("h3", { text: "Cost by step" }), barList(byCost, money)));
+}
+function fileSize(n) {
+  if (!(n >= 0)) return "-";
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1048576).toFixed(1) + " MB";
+}
+function jobFilesTab(job) {
+  const files = sortedFiles(job.files || []);
+  const open = sameFile(job) ? state.file : null;
+  if (!files.length) return el("div", { class: "panel" }, el("div", { class: "empty", text: "No files yet." }));
+  const graph = graphOf(job);
+  const owner = (path) => {
+    for (const s of (graph && graph.steps) || []) if (stepFiles({ files: [{ path }] }, s.name, s).length) return s.name;
+    return "";
+  };
+  return el("div", { class: "panel" },
+    el("div", { class: "scroll" }, el("table", { class: "files-table" },
+      el("thead", {}, el("tr", {}, ["File", "Step", "First line", "Size", "Modified"].map((t, i) => el("th", { scope: "col", class: i >= 2 && i !== 3 ? "opt" : null, text: t })))),
+      el("tbody", {}, files.map((f) => el("tr", {
+        class: "link" + (open && open.path === f.path ? " on" : ""), tabindex: 0, "data-focus": "file:" + f.path,
+        onclick: () => showFile(job, f.path), onkeydown: (ev) => { if (ev.key === "Enter") showFile(job, f.path); },
+      },
+        el("td", { class: "mono" }, el("i", { class: "dot " + (tone(f.first_line) || "") }), " ", fileLabel(f.path)),
+        el("td", { class: "mono dim", text: owner(f.path) || "-" }),
+        el("td", { class: "mono dim wrap opt", text: f.first_line || "" }),
+        el("td", { class: "mono dim", text: fileSize(f.size) }),
+        el("td", { class: "mono dim opt" }, f.modified_at ? ageNode(f.modified_at, "ago") : "-")))))),
+    open ? el("div", { class: "file-open" }, el("div", { class: "head" }, el("h3", { class: "mono", text: open.path }),
+      el("button", { type: "button", class: "close", text: "close", onclick: () => { state.file = null; render(); } })),
+      fileView({ path: open.path, text: open.text })) : el("p", { class: "dim hint", text: "Pick a file to read it." }));
+}
+function jobLogsTab(job) {
+  return el("div", { class: "panel logs" }, activityBody(job));
+}
+function jobTabButton(id, label) {
+  const on = (state.jobTab || "graph") === id;
+  return el("button", {
+    type: "button", role: "tab", "aria-selected": String(on), "aria-pressed": on ? "true" : "false", "data-focus": "jobtab:" + id,
+    onclick: () => { state.jobTab = id; prefs.set("mfactory.job.tab", id); render(); },
+  }, label);
+}
+function kpi(label, value, cls) {
+  return el("div", { class: "kpi" + (cls ? " " + cls : "") }, el("span", { class: "k", text: label }), el("span", { class: "v" }, value));
+}
+function waitingBox(job) {
+  if (job.waiting) {
+    return el("div", { class: "ask" },
+      el("h2", {}, "Waiting for " + waitingAudience(job) + " since ", ageNode(job.waiting && job.waiting.since, "ago")),
+      el("p", { text: job.reason || (job.waiting.replies === "tool"
+        ? `Step ${job.step} needs a reply in your coding tool. A comment on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} does not count.`
+        : `Step ${job.step} needs a reply. Type one of these in your coding tool, or comment it on the ${job.waiting.asked_on === "pr" ? "pull request" : "issue"} without the number.`) }),
+      commands(job).map((cmd) => el("div", { class: "cmd" }, el("code", { text: cmd }),
+        el("button", { type: "button", text: "Copy", onclick: async (e) => {
+          const literal = cmd.replace(/ <[^>]+>$/, " ");
+          try { await navigator.clipboard.writeText(literal); e.target.textContent = "Copied"; } catch (_) { e.target.textContent = "Select it"; }
+          setTimeout(() => { e.target.textContent = "Copy"; }, 1500);
+        } }))));
+  }
+  if (job.reason && isEnd(job.step, job) && job.step !== "done") {
+    return el("div", { class: "notice", style: "white-space:pre-wrap;overflow-wrap:anywhere", text: job.reason });
+  }
+  return null;
+}
+function jobPage(job) {
+  ensureJobActivity(job);
+  const times = jobTimes(job);
+  const tab = state.jobTab || "graph";
+  const body = tab === "gantt" ? jobGanttTab(job) : tab === "details" ? jobDetailsTab(job) : tab === "files" ? jobFilesTab(job) : tab === "logs" ? jobLogsTab(job) : jobGraphTab(job);
+  const many = state.workspace && state.selected === "all" && job.projectName;
+  return [
+    el("nav", { class: "crumbs", "aria-label": "Breadcrumb" }, el("a", { href: "#/jobs", text: "Jobs" }), el("span", { class: "dim", text: " / " }),
+      many ? el("span", { class: "dim", text: job.projectName + " / " }) : null, el("span", { class: "mono", text: job.id })),
+    el("div", { class: "jobhead" },
+      el("div", { class: "jh-main" },
+        el("h1", { class: "job-title", text: job.title || job.id }),
+        el("div", { class: "jh-meta" }, statusPill(job), el("span", { class: "chip pipechip", title: "pipeline", text: job.pipeline || "default" }),
+          el("span", { class: "mono dim", text: job.id }),
+          link(job.issue_url, "issue " + issueRef(job.issue)), prLinks(job, "PR #"),
+          job.branch ? el("span", { class: "mono dim", title: "branch", text: "⎇ " + job.branch }) : null))),
+    el("div", { class: "kpis" },
+      kpi("Step", el("span", { class: "mono", text: job.step || "-" })),
+      kpi("Duration", elapsedNode(job)),
+      kpi("Working", el("span", { class: "mono", text: span(times.work) })),
+      kpi("Waiting for people", el("span", { class: "mono", text: span(times.wait) })),
+      kpi("Round", el("span", { class: "mono", text: String(job.round || 0) + (job.attempt > 1 ? " · a" + job.attempt : "") })),
+      kpi("Cost", el("span", { class: "mono", text: job.cost_usd !== null && job.cost_usd !== undefined ? money(job.cost_usd) : "-" })),
+      kpi("Files", el("span", { class: "mono", text: String((job.files || []).length) }))),
+    waitingBox(job),
+    el("div", { class: "tabs jobtabs", role: "tablist", "aria-label": "Job view" }, JOB_TABS.map(([id, label]) => jobTabButton(id, label))),
+    body,
+  ].filter(Boolean);
+}
+function jobsView(id, projectId) {
+  const all = jobs();
+  if (!all.length) return [el("h1", { text: "Jobs" }), el("p", { class: "sub", text: trackerInfo().kind === "jira" ? "One job per card from the queue column" : "One job per labeled issue" }), el("div", { class: "notice" }, "No jobs yet. ", ...enqueueNodes(), " and run ", el("code", { text: "/mfactory run" }), " in your coding tool.")];
+  if (id) {
+    const job = all.find((item) => sameJob(item, projectId, id));
+    if (job) return jobPage(job);
+    return [el("nav", { class: "crumbs" }, el("a", { href: "#/jobs", text: "Jobs" })), el("div", { class: "notice", text: "No job " + id + " here. It may have been deleted." })];
+  }
+  const running = all.filter((job) => statusOf(job) === "running").length;
+  const waiting = all.filter((job) => statusOf(job) === "waiting").length;
+  return [
+    el("div", { class: "head" },
+      el("div", {}, el("h1", { text: "Jobs" }), el("p", { class: "sub", text: `${all.length} jobs · ${running} running · ${waiting} waiting for a person` + (state.query ? " · filtered by the search" : "") }))),
+    ...jobsTable(all),
   ];
 }
 
 // ---- config ----
 function configRows(rows) {
   const q = state.query.trim().toLowerCase();
-  return rows.filter((r) => (state.source === "all" || r.source === state.source) && (!q || String(r.key).toLowerCase().includes(q) || JSON.stringify(r.value).toLowerCase().includes(q)));
+  // A pipeline's steps are shown with the pipeline, from its YAML file.
+  return rows.filter((r) => !/^steps\./.test(String(r.key)) && !/^run\.(start|escalate_to)$/.test(String(r.key))).filter((r) => (state.source === "all" || r.source === state.source) && (!q || String(r.key).toLowerCase().includes(q) || JSON.stringify(r.value).toLowerCase().includes(q)));
 }
 function configTable(rows) {
   if (!rows) return el("div", { class: "empty", text: "No config has been written for this project yet." });
@@ -2471,27 +2762,113 @@ function configTable(rows) {
       el("td", {}, el("span", { class: "src" + (r.source === "factory.toml" ? " mine" : ""), text: r.source })))))));
 }
 function sourceFilters(rows) {
-  const sources = ["all", ...new Set((rows || []).map((r) => r.source).filter((source) => source))];
+  const sources = ["all", ...new Set(configRows(rows || []).map((r) => r.source).filter((source) => source))];
   return el("div", { class: "filters", role: "group", "aria-label": "Source" }, sources.map((s) => el("button", {
     type: "button", "aria-pressed": String(state.source === s), text: s, onclick: () => { state.source = s; render(); },
   })));
 }
+// ---- config: the pipelines (YAML files), then factory.toml's settings ----
+// YAML shown with light colouring: keys, comments, strings, outcomes. Each line is built from text nodes.
+function yamlLine(line) {
+  const out = [];
+  const comment = line.match(/^(\s*)(#.*)$/);
+  if (comment) return [comment[1], el("span", { class: "y-c", text: comment[2] })];
+  const m = line.match(/^(\s*-?\s*)([A-Za-z0-9_.-]+|"[^"]*")(:)(\s*)(.*)$/);
+  if (!m) return [yamlValue(line)];
+  out.push(m[1], el("span", { class: /^[A-Z][A-Z0-9-]*$/.test(m[2]) ? "y-o" : "y-k", text: m[2] }), m[3], m[4]);
+  if (m[5]) out.push(yamlValue(m[5]));
+  return out;
+}
+function yamlValue(text) {
+  const hash = text.search(/\s#/);
+  const value = hash >= 0 ? text.slice(0, hash) : text;
+  const rest = hash >= 0 ? text.slice(hash) : "";
+  const cls = /^\s*("|')/.test(value) ? "y-s" : /^\s*(true|false|\d+)\s*$/.test(value) ? "y-n" : /^\s*[{[]/.test(value) ? "y-f" : "y-v";
+  return el("span", {}, el("span", { class: cls, text: value }), rest ? el("span", { class: "y-c", text: rest }) : null);
+}
+function yamlView(text) {
+  const lines = String(text || "").replace(/\n$/, "").split("\n");
+  return el("pre", { class: "yaml", tabindex: 0 }, lines.map((line, i) => el("span", { class: "y-line" },
+    el("span", { class: "y-no", "aria-hidden": "true", text: String(i + 1) }), el("span", { class: "y-text" }, yamlLine(line)))));
+}
+function configPipelines(project) {
+  const info = project ? project.pipelines : state.pipelines;
+  const list = project ? pipelinesOf(project) : staticPipelines();
+  const holder = "cfgPipe";
+  const name = pickedPipeline(holder, list);
+  const chosen = list.find((p) => p.name === name) || null;
+  const files = (info && info.files) || [];
+  const problems = (info && info.problems) || [];
+  const mine = jobs().filter((job) => !project || job.project === project.id);
+  const tab = state.cfgTab || "dag";
+  const head = el("div", { class: "head" },
+    el("div", {}, el("h2", { text: "Pipelines" }),
+      el("p", { class: "sub" }, list.length + " pipeline" + (list.length === 1 ? "" : "s") + " in ",
+        el("code", { text: ((info && info.folder) || "pipelines") + "/" }),
+        info && info.default ? el("span", {}, " · jobs run ", el("code", { text: info.default }), " unless told otherwise") : info && info.ask ? " · no [run].pipeline: /mfactory run asks which one" : null)),
+    problems.length ? el("span", { class: "pill st-failed" }, el("i", { class: "dot" }), problems.length + " problem" + (problems.length === 1 ? "" : "s")) : el("span", { class: "pill st-success" }, el("i", { class: "dot" }), "valid"));
+  const rows = list.map((p) => {
+    const errs = problems.filter((m) => p.file && m.startsWith(p.file));
+    const count = mine.filter((job) => (job.pipeline || "default") === p.name).length;
+    const on = chosen && chosen.name === p.name;
+    return el("button", {
+      type: "button", class: "pcard" + (on ? " on" : ""), "aria-pressed": String(!!on), "data-focus": "cfgpipe:" + p.name,
+      onclick: () => { state[holder] = p.name; prefs.set("mfactory." + holder, p.name); render(); },
+    },
+      el("div", { class: "pc-top" }, el("span", { class: "mono name", text: p.name }),
+        info && info.default === p.name ? el("span", { class: "chip", text: "default" }) : null,
+        errs.length ? el("span", { class: "pill st-failed" }, el("i", { class: "dot" }), String(errs.length)) : null),
+      el("div", { class: "dim", text: p.description || "No description" }),
+      el("div", { class: "pc-meta mono dim" },
+        el("span", { text: p.file === "built-in" ? "built-in" : p.file || "" }),
+        p.extends ? el("span", { text: "extends " + p.extends }) : null,
+        el("span", { text: (p.graph && p.graph.steps ? p.graph.steps.filter((s) => s.enabled !== false).length : p.steps || 0) + " steps" }),
+        el("span", { text: count + " jobs" })));
+  });
+  const broken = files.filter((f) => f.errors && f.errors.length && !list.some((p) => p.file === f.path));
+  broken.forEach((f) => rows.push(el("div", { class: "pcard bad" }, el("div", { class: "pc-top" }, el("span", { class: "mono name", text: f.path }),
+    el("span", { class: "pill st-failed" }, el("i", { class: "dot" }), "not loaded")), el("div", { class: "dim", text: f.errors[0] }))));
+  let detail = el("div", { class: "notice", text: "Pick a pipeline." });
+  if (chosen) {
+    const fileErrors = problems.filter((m) => !chosen.file || m.startsWith(chosen.file) || m.includes('"' + chosen.name + '"'));
+    const tabButton = (id, label) => el("button", {
+      type: "button", role: "tab", "aria-selected": String(tab === id), "aria-pressed": tab === id ? "true" : "false", "data-focus": "cfgtab:" + id,
+      onclick: () => { state.cfgTab = id; render(); },
+    }, label);
+    const body = tab === "yaml" ? (chosen.yaml ? yamlView(chosen.yaml) : el("p", { class: "dim", text: "No YAML for this pipeline." }))
+      : tab === "errors" ? (fileErrors.length ? el("ul", { class: "problems" }, fileErrors.map((m) => el("li", { class: "mono wrap", text: m }))) : el("p", { class: "good", text: "No problems. The file matches the schema and the graph is sound." }))
+      : chosen.graph && Array.isArray(chosen.graph.steps)
+        ? el("div", {}, dagView(chosen.graph, { counts: (s) => mine.filter((j) => (j.pipeline || "default") === chosen.name && j.step === s).length, zoomKey: "cfg:" + (project ? project.id : "") + ":" + chosen.name, label: "Pipeline " + chosen.name }), dagLegend(false))
+        : el("div", { class: "notice", text: "This pipeline could not be drawn." });
+    detail = el("div", { class: "pdetail" },
+      el("div", { class: "head" }, el("div", {}, el("h3", { class: "mono", text: chosen.name }),
+        el("div", { class: "dim mono", text: (chosen.file || "") + (chosen.graph ? " · start " + chosen.graph.start + " · escalate to " + chosen.graph.escalate_to : "") })),
+        el("div", { class: "tabs", role: "tablist", "aria-label": "Pipeline view" }, tabButton("dag", "DAG"), tabButton("yaml", "YAML"), tabButton("errors", "Problems" + (fileErrors.length ? " (" + fileErrors.length + ")" : "")))),
+      body);
+  }
+  return el("div", { class: "panel pipes" }, head, info && info.legacy ? el("p", { class: "notice", text: "factory.toml still has [steps.*]: they override the default pipeline. Run `mfactory migrate pipelines` to move them to YAML." }) : null,
+    el("div", { class: "pipes-body" }, el("div", { class: "pcards" }, rows), detail));
+}
 function configView() {
   const intro = [
     el("h1", { text: "Config" }),
-    el("p", { class: "sub", text: "factory.toml merged over the defaults, and where each value comes from" }),
+    el("p", { class: "sub", text: "The pipelines, as YAML files with a JSON Schema, and factory.toml merged over the defaults" }),
   ];
   if (!state.workspace) {
     if (!state.config) return [el("h1", { text: "Config" }), el("p", { class: "sub", text: "Loading..." })];
-    return intro.concat([sourceFilters(state.config), el("div", { class: "panel" }, configTable(state.config))]);
+    return intro.concat([configPipelines(null), el("h2", { class: "block-title", text: "Settings" }), sourceFilters(state.config), el("div", { class: "panel" }, configTable(state.config))]);
   }
   const projects = visibleProjects();
   if (!projects.length) return intro.concat([el("p", { class: "kempty", text: "no projects yet" })]);
   const allRows = projects.flatMap((project) => project.config || []);
-  intro.push(sourceFilters(allRows));
   projects.forEach((project) => {
     if (projects.length > 1) intro.push(el("h2", { class: "block-title", text: project.name || project.id }));
     if (project.error) intro.push(el("p", { class: "error", text: String(project.error) }));
+    intro.push(configPipelines(project));
+  });
+  intro.push(el("h2", { class: "block-title", text: "Settings" }), el("p", { class: "sub", text: "factory.toml merged over the defaults, and where each value comes from" }), sourceFilters(allRows));
+  projects.forEach((project) => {
+    if (projects.length > 1) intro.push(el("h3", { class: "block-title", text: project.name || project.id }));
     intro.push(el("div", { class: "panel" }, configTable(project.config)));
   });
   return intro;
@@ -2578,6 +2955,8 @@ function render() {
   normalizeSelection();
   renderFilters();
   const { view, id, project } = route();
+  if (state.drawer && state.drawer.inline && !(view === "jobs" && id)) state.drawer = null;
+  if (!(view === "jobs" && id)) state.jobNode = null;
   document.querySelectorAll("[data-view]").forEach((a) => {
     if (a.dataset.view === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   });
@@ -2587,7 +2966,7 @@ function render() {
   const inside = !!(active && target.contains(active));
   const token = inside ? focusToken(active) : "";
   const keep = inside ? null : active;
-  const scrollers = ".joblist, .file, .d-doc, .d-files, .d-runs, .d-timeline, .sh-out, .filelist";
+  const scrollers = ".joblist, .file, .d-doc, .d-files, .d-runs, .d-timeline, .sh-out, .filelist, .yaml";
   const scroll = [...target.querySelectorAll(scrollers)].map((n) => n.scrollTop);
   // The board has a kanban per Jira board and one for the factory: each keeps its own scroll, by key.
   const keyed = new Map([...target.querySelectorAll("[data-scroll-key]")].map((n) => [n.getAttribute("data-scroll-key"), [n.scrollLeft, n.scrollTop]]));
@@ -2637,8 +3016,12 @@ async function load(path) {
   if (!res.ok) throw new Error(data.error || res.status);
   return data;
 }
+function activityView() {
+  const view = route().view;
+  return view === "board" || (view === "jobs" && !!(state.drawer && state.drawer.inline));
+}
 function openJob() {
-  if (!state.drawer || route().view !== "board") return null;
+  if (!state.drawer || !activityView()) return null;
   return jobs().find((job) => sameDrawer(job)) || null;
 }
 function refetchDrawer() {
@@ -2689,7 +3072,7 @@ function restoreFocus(root, token) {
   }
 }
 function refreshActivity() {
-  if (!state.drawer || state.drawer.tab !== "activity" || route().view !== "board") return;
+  if (!state.drawer || state.drawer.tab !== "activity" || !activityView()) return;
   const open = openJob();
   if (open) fetchActivity(open);
 }
@@ -2761,6 +3144,9 @@ async function refreshSingle() {
   state.index = index; state.graph = graph; state.planUsage = index.plan_usage || null;
   const hadError = state.error; state.error = null;
   if (route().view === "config" || !state.config) state.config = await load("jobs/config.json");
+  if (route().view === "config" || !state.pipelines) {
+    try { state.pipelines = await load("jobs/pipelines.json"); } catch (error) { state.pipelines = state.pipelines || { pipelines: [] }; }
+  }
   // Re-drawing only on change keeps selections and scroll positions while you read.
   if (changed || hadError || route().view === "config") {
     render();

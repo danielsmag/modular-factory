@@ -112,7 +112,7 @@ class Humans:
                 how.append(f"- or move this card: {columns}")
         # Asked on the issue of a tracker that is not GitHub, the pull request is named by its address.
         this_pr: str = "this pull request" if kind == "pr" else f"the pull request {job['pr_url']}"
-        if open_pr and name == self.cfg["run"]["escalate_to"]:
+        if open_pr and name == self._pipe(job)["run"]["escalate_to"]:
             how.append(f"- or merge {this_pr} to approve it as it is")
         elif open_pr and step.get("pr_ready"):
             how.append(f"- or merge {this_pr} yourself; the factory will continue from there")
@@ -183,7 +183,7 @@ class Humans:
     def _apply_reply(self, job, outcome, text, login, comment_id=None):
         """Record a person's reply to the human step the job is parked in, and move on."""
         name = job["step"]
-        step = self.cfg.steps[name]
+        step = self._pipe(job).steps[name]
         d = self.dir(job)
         if comment_id:
             job["consumed"].append(comment_id)
@@ -200,7 +200,7 @@ class Humans:
                 f"# Feedback {k}\n\nFrom {who} at the {name} step ({outcome}).\n\n{text}\n")
             job["handoff"].append(f"{who} replied {outcome} at the {name} step: read feedback-{k}.md "
                                   "and act on it. It comes before the spec and the reviews where they disagree.")
-        if name == self.cfg["run"]["escalate_to"]:
+        if name == self._pipe(job)["run"]["escalate_to"]:
             job["taken"], job["gate_failed"] = {}, False  # a person's feedback gives a fresh budget
         if outcome != "REJECT":
             target = self._ready_target(job, step["on"][outcome]["to"])
@@ -208,16 +208,16 @@ class Humans:
 
     def _ready_target(self, job, target):
         """A job with no spec can't go to a step that builds on one: send it back where it came from."""
-        target, _ = graph.resolve(self.cfg.steps, target)
+        target, _ = graph.resolve(self._pipe(job).steps, target)
         if target in graph.END_STATES or (self.dir(job) / "spec.md").exists():
             return None
-        step = self.cfg.steps[target]
+        step = self._pipe(job).steps[target]
         builds_on_spec = step["type"] in ("checks", "review", "merge") or (
-            step["type"] == "agent" and self.cfg.role(target) in ("build", "debug", "approve"))
+            step["type"] == "agent" and self._pipe(job).role(target) in ("build", "debug", "approve"))
         if not builds_on_spec:
             return None
         origin = job.get("escalated_from")
-        if origin in self.cfg.steps and self.cfg.steps[origin]["type"] == "agent":
+        if origin in self._pipe(job).steps and self._pipe(job).steps[origin]["type"] == "agent":
             return origin
         raise Refused(f"{job['id']} has no spec yet, so it can't go to {target}. Reject it instead.")
 
@@ -225,7 +225,7 @@ class Humans:
         """`factory answer`: the person running the factory replies to a human step."""
         job = self.store.open(ref)
         name = job["step"]
-        step = self.cfg.steps.get(name)
+        step = self._pipe(job).steps.get(name)
         if not step or step["type"] != "human":
             raise Refused(f"{job['id']} is at {name}, which isn't waiting for a person")
         outcome = outcome.upper()
@@ -249,10 +249,10 @@ class Humans:
         if not pr or pr["state"] != "MERGED":
             return False
         old = job["step"]
-        self._leave(job, old, self.cfg.steps[old])
+        self._leave(job, old, self._pipe(job).steps[old])
         job["merge_sha"] = (pr.get("mergeCommit") or {}).get("oid")
-        merges = [n for n, s in self.cfg.steps.items() if s["type"] == "merge"]
-        target = self.cfg.steps[merges[0]]["on"]["MERGED"]["to"] if merges else "done"
+        merges = [n for n, s in self._pipe(job).steps.items() if s["type"] == "merge"]
+        target = self._pipe(job).steps[merges[0]]["on"]["MERGED"]["to"] if merges else "done"
         entry = {"step": old, "outcome": "MERGED-BY-HAND", "entered_at": job["entered_at"], "at": now(),
                  "reason": f"PR #{job['pr']} was merged on GitHub"}
         job["reason"] = None

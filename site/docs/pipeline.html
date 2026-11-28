@@ -10,7 +10,19 @@
 <article class="doc" id="doc">
   <h1>Pipeline</h1>
   <p class="lede">A graph of steps. Each step has a type and an edge for every outcome. The script follows the edges. No prompt does.</p>
-  <p>Every key is in the <a href="configuration.html">factory.toml reference</a>. This page is how the graph behaves.</p>
+  <p>Every key is in the <a href="configuration.html">configuration reference</a>. This page is how the graph behaves.</p>
+
+  <h2 id="yaml-files">Pipelines are YAML files</h2>
+  <p>The pipelines live in <code>pipelines/</code> at the root of the repository. <code>mfactory install</code> writes <code>pipelines/default.yaml</code>: the default pipeline, spelled out. Each file declares one or more pipelines. One may <code>extends</code> another and change only what differs. The JSON Schema in <code>.factory/schema/pipeline.schema.json</code> says what a file may contain; an editor with a YAML language server completes and checks it, and the factory checks every file against it, then checks each graph, before anything runs.</p>
+  <pre data-lang="yaml"><code># pipelines/hotfix.yaml
+pipelines:
+  hotfix:
+    description: Small fixes, straight from intake to build
+    extends: default
+    steps:
+      spec: { enabled: false, skip: DONE }
+      approve: { enabled: false, skip: APPROVE }</code></pre>
+  <p>A job keeps the pipeline it starts with: <code>/mfactory run 12 --pipeline hotfix</code>. Without the flag it runs <code>[run].pipeline</code> from <code>factory.toml</code>, or the only pipeline. With several and none named, <code>/mfactory run</code> asks which. <code>mfactory pipelines list</code>, <code>pipelines validate</code> and <code>graph --pipeline NAME</code> show them. <code>[steps.*]</code> left in <code>factory.toml</code> still override <code>default</code>; <code>mfactory migrate pipelines</code> moves them to YAML. The examples below show only the keys that change: edit them in place in <code>pipelines/default.yaml</code>.</p>
 
   <h2 id="the-default-graph">The default graph</h2>
   <pre data-lang="text"><code>intake           agent   ACCEPT -&gt; spec | NEEDS-INFO -&gt; ask-author (max 2) | REJECT -&gt; rejected
@@ -30,10 +42,13 @@ escalated        human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pr
   <p>End states are <code>done</code>, <code>rejected</code>, and <code>failed</code>. A switched-off step is passed through as if it had returned its <code>skip</code> outcome. Several in a row are passed through at once.</p>
 
   <h2 id="steps-and-edges">Steps and edges</h2>
-  <pre data-lang="toml"><code>[steps.gate]
-type = "checks"
-on = { PASS = "review", FAIL = { to = "debug", max = 2 } }</code></pre>
-  <p>An edge is a step name, or <code>{ to = "&lt;step&gt;", max = &lt;n&gt; }</code>.</p>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      gate:
+        type: checks
+        on: { PASS: review, FAIL: { to: debug, max: 2 } }</code></pre>
+  <p>An edge is a step name, or <code>{ to: &lt;step&gt;, max: &lt;n&gt; }</code>.</p>
   <div class="def">
     <div class="def-h"><code>agent</code><span class="chip">type</span></div>
     <p>One agent does the step and writes one file. Its first line is the outcome. Built-in steps have fixed outcomes. A step you add uses the names in <code>on</code>.</p>
@@ -75,61 +90,70 @@ on = { PASS = "review", FAIL = { to = "debug", max = 2 } }</code></pre>
 
   <h2 id="loop-limits">Loop limits</h2>
   <p>A <code>max</code> on an edge is how many times in a row a step may send a job that way. The count starts again when the step returns a different outcome.</p>
-  <pre data-lang="toml"><code>[steps.review]
-on = { CHANGES = { max = 2 } }</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      review:
+        on: { CHANGES: { max: 2 } }</code></pre>
   <p>Those defaults: intake may ask the author twice, the gate may fail twice, review may ask for changes twice, and spec approval may ask for changes three times. When a limit is used up, the job goes to <code>[run].escalate_to</code> (default <code>escalated</code>) and the reason names the edge:</p>
   <pre data-lang="text"><code>[steps.gate].on.FAIL max = 2 reached</code></pre>
   <p>A maintainer's reply on an escalated job clears every count.</p>
   <p>Writing an edge as a bare step name changes only its target and keeps the default <code>max</code>. Without that, renaming a target would silently remove a loop limit.</p>
-  <pre data-lang="toml"><code>[steps.review]
-on = { CHANGES = "rework" }                     # still max = 2
-# on = { CHANGES = { to = "rework", max = 5 } } # to change both</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      review:
+        on: { CHANGES: rework }   # still max = 2
+        # on = { CHANGES = { to = "rework", max = 5 } } # to change both</code></pre>
 
   <h2 id="who-merges">Who merges</h2>
   <p>By default the factory does not merge. <code>approve</code> leads to <code>ready-to-merge</code>, which marks the pull request ready, labels the issue, and waits without holding a slot. The merge step stays off. Its <code>MERGED</code> edge still says what happens after a person merges.</p>
   <aside class="callout">
     <p class="tag">0.2.0</p>
-    <p>A project that never overrode <code>approve</code> or <code>merge</code> changes behavior on upgrade from 0.1.0. Schema stays 1. To keep the old behavior, point <code>approve</code> at <code>merge</code>, switch <code>ready-to-merge</code> off, and set <code>[steps.merge] enabled = true</code>.</p>
+    <p>A project that never overrode <code>approve</code> or <code>merge</code> changes behavior on upgrade from 0.1.0. Schema stays 1. To keep the old behavior, point <code>approve</code> at <code>merge</code>, switch <code>ready-to-merge</code> off, and set <code>enabled: true</code> on the <code>merge</code> step.</p>
   </aside>
   <p>That wait does not sync the base branch or run the checks again. Branch protection is the gate before the person merges.</p>
   <p>To let the factory merge, all three keys are required. Enabling <code>merge</code> alone leaves it unreachable. Leaving <code>ready-to-merge</code> on after retargeting <code>approve</code> does the same.</p>
-  <pre data-lang="toml"><code>[steps.approve]
-on = { APPROVE = "merge" }
-
-[steps.ready-to-merge]
-enabled = false
-skip = "REJECT"
-
-[steps.merge]
-enabled = true</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      approve:
+        on: { APPROVE: merge }
+      ready-to-merge:
+        enabled: false
+        skip: REJECT
+      merge:
+        enabled: true</code></pre>
   <p>Do that only when a merge to the base branch does not publish a release. The script then syncs the base branch, runs the checks again, and merges. <code>[project] merge_method</code> is <code>squash</code>, <code>merge</code>, or <code>rebase</code>.</p>
 
   <h2 id="optional-steps">Optional steps</h2>
   <p><code>spec-approval</code>, <code>debug</code>, <code>ready-to-verify</code>, and <code>verify</code> ship with <code>enabled = false</code>. The merge step does too. Turning that one on is the block above, not a single key.</p>
-  <pre data-lang="toml"><code>[steps.spec-approval]   # a maintainer approves spec.md before anything is built
-enabled = true
-
-[steps.debug]           # after failing checks, a debugger finds the cause
-enabled = true
-
-[steps.ready-to-verify] # wait until a person says the deploy is live
-enabled = true
-who = "operator"
-
-[steps.verify]          # check the change after it is merged or deployed
-enabled = true
-commands = ["npm run test:smoke"]</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      spec-approval:   # a maintainer approves spec.md before anything is built
+        enabled: true
+      debug:   # after failing checks, a debugger finds the cause
+        enabled: true
+      ready-to-verify:   # wait until a person says the deploy is live
+        enabled: true
+        who: operator
+      verify:   # check the change after it is merged or deployed
+        enabled: true
+        commands: ["npm run test:smoke"]</code></pre>
   <p>The debugger changes no code. It writes what fails and why, and the next builder reads it. With the debugger off, failing checks send the job straight back to the builder.</p>
 
   <h2 id="adding-a-step">Adding a step</h2>
   <p>Add a block and point one edge at it.</p>
-  <pre data-lang="toml"><code>[steps.docs]
-type = "agent"
-instructions = "Update docs/ for the change on this branch."
-on = { DONE = "gate" }
-
-[steps.build]
-on = { READY = "docs" }</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      docs:
+        type: agent
+        instructions: Update docs/ for the change on this branch.
+        on: { DONE: gate }
+      build:
+        on: { READY: docs }</code></pre>
   <p><code>mfactory sync</code> writes a <code>mfactory-docs</code> agent. It works in the job's worktree, commits to the job's branch, and writes <code>docs.md</code>, whose first line is <code>STATUS: DONE</code>. The outcomes are the names you give in <code>on</code>.</p>
   <p><code>instructions</code> is required for a step you add. <code>writes</code> defaults to <code>&lt;step&gt;.md</code>. <code>context</code> adds project facts to the prompt. <code>skills</code> names project skills. <code>port = true</code> gives the agent a port for a dev server. <code>role</code> reuses a built-in prompt: <code>intake</code>, <code>spec</code>, <code>build</code>, <code>debug</code>, or <code>approve</code>.</p>
 
@@ -151,14 +175,17 @@ on = { READY = "docs" }</code></pre>
 
   <h2 id="validation-after-merge">Validation after merge</h2>
   <p>Turn <code>verify</code> on to check the change again after it is merged, or after a deploy your own script waits for. Turn <code>ready-to-verify</code> on when a person has to say the deploy is live first: <code>/mfactory verify</code> runs the check, and <code>VERIFY: BLOCKED</code> waits there again. The factory never deploys. A job being validated holds no slot.</p>
-  <pre data-lang="toml"><code>[steps.verify]
-enabled = true
-after = "deploy"
-wait = "scripts/wait-for-deploy.sh"
-commands = ["npm run test:smoke"]
-agent = true
-url = "https://staging.example.com"
-on_failure = "revert-pr"</code></pre>
+  <pre data-lang="yaml"><code>pipelines:
+  default:
+    steps:
+      verify:
+        enabled: true
+        after: deploy
+        wait: scripts/wait-for-deploy.sh
+        commands: ["npm run test:smoke"]
+        agent: true
+        url: "https://staging.example.com"
+        on_failure: revert-pr</code></pre>
   <p><code>after = "merge"</code> validates the merge commit straight away. <code>after = "deploy"</code> runs <code>wait</code> until it exits 0, again every 15 seconds, until <code>timeout_minutes</code> (default 20). Commands run in a clean checkout of the merge commit. They receive <code>FACTORY_CHECKOUT</code> (the main checkout), <code>FACTORY_JOB</code>, <code>FACTORY_MERGE_SHA</code>, <code>FACTORY_PR</code>, and <code>FACTORY_DEPLOY_URL</code>.</p>
   <p>When validation fails the job ends as <code>failed</code>. <code>on_failure</code> is <code>comment</code> (comment on the pull request), <code>issue</code> (also open a new <code>factory</code> issue), or <code>revert-pr</code> (also open a draft pull request that reverts the merge). The factory never merges that revert.</p>
 </article>

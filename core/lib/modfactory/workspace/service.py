@@ -32,6 +32,7 @@ from ..service.tracker.base import key_kind
 from ..service.tracker.jira_api import Client, account_email, account_token
 from ..util import FactoryError, Refused, dashboard_page, user_dir
 from . import feeds
+from .jobs import read_pipelines
 from .paths import FILE, SERVED
 from .project import Project
 from .queue import QueueMeta
@@ -331,8 +332,19 @@ def _routes(page: bytes, cache: QueueCache, blocks: Feeds | None = None) -> list
             return HTTPStatus.OK, target.read_bytes(), SERVED[target.suffix]
         return NOT_FOUND
 
+    def pipeline_yaml(workspace: Workspace, found: re.Match[str], query: dict[str, list[str]]) -> Reply:
+        project: Project | None = workspace.project(found["project"])
+        if project is None:
+            return NOT_FOUND
+        found_pipelines, _ = read_pipelines(project)
+        for row in (found_pipelines or {}).get("pipelines") or []:
+            if isinstance(row, dict) and row.get("name") == found["name"] and isinstance(row.get("yaml"), str):
+                return HTTPStatus.OK, row["yaml"].encode(), "text/yaml; charset=utf-8"
+        return NOT_FOUND
+
     return [
         (re.compile(r"/(?:index\.html)?"), index),
+        (re.compile(r"/projects/(?P<project>[^/]+)/pipelines/(?P<name>[a-z][a-z0-9-]*)\.yaml"), pipeline_yaml),
         (re.compile(r"/projects\.json"), projects),
         (re.compile(r"/queue\.json"), queue),
         (re.compile(r"/projects/(?P<project>[^/]+)/issues/(?P<ref>.+)"), issue),

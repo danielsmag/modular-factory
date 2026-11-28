@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import board, graph
+from . import board, graph, pipelines
 from .util import CORE, ConfigError, Refused, adapters_dir
 
 SCHEMA = 1
@@ -67,14 +67,71 @@ def load_adapters():
 
 
 class Config:
-    def __init__(self, repo, data, sources, adapters):
+    def __init__(self, repo, data, sources, adapters, pipes=None, pipeline_files=None, pipeline_problems=None,
+                 pipeline_name=None):
         self.repo = Path(repo)
         self.data = data
         self.sources = sources
         self.adapters = adapters
+        self.pipelines: dict[str, pipelines.Pipeline] = pipes or {}
+        self.pipeline_files: list[pipelines.PipelineFile] = pipeline_files or []
+        self.pipeline_problems: list[str] = pipeline_problems or []
+        # The pipeline this config is scoped to. None is the project's config, whose steps are `default`'s.
+        self.pipeline_name: str | None = pipeline_name
+        self._views: dict[str, Config] = {}
 
     def __getitem__(self, key):
         return self.data[key]
+
+    # -- pipelines
+
+    def view(self, name: str | None) -> "Config":
+        """This config scoped to one pipeline: its steps, start and escalate_to. Everything else is shared."""
+        name = name or pipelines.DEFAULT
+        base: Config = self.base_config
+        if name == (self.pipeline_name or pipelines.DEFAULT):
+            return self
+        if name == pipelines.DEFAULT:
+            return base
+        if name in base._views:
+            return base._views[name]
+        if name not in base.pipelines:
+            raise Refused(f'there is no pipeline "{name}". Pipelines: {", ".join(base.pipelines) or "none"}')
+        pipe: pipelines.Pipeline = base.pipelines[name]
+        data: dict[str, Any] = dict(base.data, steps=pipe.steps,
+                                    run=dict(base.data["run"], start=pipe.start, escalate_to=pipe.escalate_to))
+        view = Config(base.repo, data, base.sources, base.adapters, base.pipelines, base.pipeline_files,
+                      base.pipeline_problems, pipeline_name=name)
+        view._base = base
+        base._views[name] = view
+        return view
+
+    @property
+    def base_config(self) -> "Config":
+        return getattr(self, "_base", None) or self
+
+    def pipeline_of(self, job: dict[str, Any] | None) -> "Config":
+        """The config of the pipeline a job runs. Jobs from before pipelines run `default`."""
+        name: object = (job or {}).get("pipeline")
+        return self.view(name if isinstance(name, str) and name else pipelines.DEFAULT)
+
+    @property
+    def pipeline(self) -> pipelines.Pipeline:
+        return self.base_config.pipelines[self.pipeline_name or pipelines.DEFAULT]
+
+    def choose_pipeline(self, flag: str | None) -> str | None:
+        """The pipeline a new job runs: the flag, else [run].pipeline, else the only one. None means ask."""
+        base: Config = self.base_config
+        if flag:
+            if flag not in base.pipelines:
+                raise Refused(f'there is no pipeline "{flag}". Pipelines: {", ".join(base.pipelines)}')
+            return flag
+        chosen: str = str(base.data["run"].get("pipeline") or "")
+        if chosen:
+            return chosen
+        if len(base.pipelines) == 1:
+            return next(iter(base.pipelines))
+        return None
 
     # -- shortcuts
 
@@ -130,23 +187,63 @@ class Config:
 
     # -- agents and models
 
+    def agent_steps(self, every=False):
+        """`(key, pipeline, step)` for every agent a step starts, across the project's pipelines.
+
+        A step of another pipeline shares the default pipeline's agent when the two
+        are the same apart from their edges. Otherwise its agent is its own,
+        keyed `<pipeline>-<step>`.
+        """
+        base: Config = self.base_config
+        found: list[tuple[str, str, str]] = []
+        seen: set[str] = set()
+        names: list[str] = list(base.pipelines) or [pipelines.DEFAULT]
+        for pipe_name in names:
+            steps: dict[str, Any] = base.pipelines[pipe_name].steps if base.pipelines else base.steps
+            for name, step in steps.items():
+                if not isinstance(step, dict):
+                    continue
+                if not every and not graph.enabled(step):
+                    continue
+                if step.get("type") == "agent" or (step.get("type") == "verify" and (every or step.get("agent"))):
+                    key: str = base.agent_key(pipe_name, name)
+                    if key not in seen:
+                        seen.add(key)
+                        found.append((key, pipe_name, name))
+        return found
+
+    def agent_key(self, pipe_name: str | None, step_name: str) -> str:
+        """The agent (and model table key) of a step in a pipeline."""
+        base: Config = self.base_config
+        pipe_name = pipe_name or pipelines.DEFAULT
+        if pipe_name == pipelines.DEFAULT or pipe_name not in base.pipelines:
+            return step_name
+        own: object = base.pipelines[pipe_name].steps.get(step_name)
+        default: object = base.pipelines[pipelines.DEFAULT].steps.get(step_name) if pipelines.DEFAULT in \
+            base.pipelines else None
+        if isinstance(own, dict) and isinstance(default, dict) and _agent_part(own) == _agent_part(default):
+            return step_name
+        return f"{pipe_name}-{step_name}"
+
+    def _own_key(self, key: str) -> str:
+        """A step name of this config's pipeline, as the key of its agent."""
+        if self.pipeline_name and key in self.steps:
+            return self.agent_key(self.pipeline_name, key)
+        return key
+
     def agent_keys(self, every=False):
         """The agents the factory can start: agent steps, verifier agents and reviewers.
 
         These are also the keys of the model tables. `every` includes the ones
         that are switched off, which may still have a model set.
         """
-        keys = []
-        for name, step in self.steps.items():
-            if not every and not graph.enabled(step):
-                continue
-            if step.get("type") == "agent" or (step.get("type") == "verify" and (every or step.get("agent"))):
-                keys.append(name)
+        keys = [key for key, _, _ in self.agent_steps(every)]
         reviewers = self.reviewers if every else self.live_reviewers
         return keys + [f"reviewer-{name}" for name in reviewers]
 
     def variants(self, key):
         """Risk levels for which any enabled tool gives this agent its own model or effort."""
+        key = self._own_key(key)
         found = set()
         for tool in self.tools:
             entry = self.data["models"].get(tool, {}).get(key, {})
@@ -154,16 +251,24 @@ class Config:
         return [risk for risk in RISKS if risk in found]
 
     def agent_name(self, key, risk=None):
+        key = self._own_key(key)
         return f"mfactory-{key}-{risk}" if risk in self.variants(key) else f"mfactory-{key}"
 
     def model_for(self, tool, key, risk=None):
-        """The step's entry over the tool's `default`, key by key, then the entry for the job's risk."""
+        """The step's entry over the tool's `default`, key by key, then the entry for the job's risk.
+
+        A pipeline's own agent, `<pipeline>-<step>`, starts from the entry of the plain step name.
+        """
+        own: str = self._own_key(key)
         table = self.data["models"].get(tool, {})
-        entry = table.get(key) or {}
         chosen = {k: v for k, v in (table.get("default") or {}).items() if k in ("model", "effort")}
-        chosen.update({k: v for k, v in entry.items() if k in ("model", "effort")})
-        if risk and isinstance(entry.get(risk), dict):
-            chosen.update(entry[risk])
+        entries: list[dict[str, Any]] = [table.get(key) or {}] if own != key else []
+        entries.append(table.get(own) or {})
+        for entry in entries:
+            chosen.update({k: v for k, v in entry.items() if k in ("model", "effort")})
+        for entry in entries:
+            if risk and isinstance(entry.get(risk), dict):
+                chosen.update(entry[risk])
         return chosen
 
     def reviewers_for(self, surfaces):
@@ -180,6 +285,25 @@ class Config:
                 continue
             chosen += [r for r in self.data["surfaces"][surface]["reviewers"] if r in live and r not in chosen]
         return chosen
+
+
+def all_steps(cfg: "Config") -> dict[str, Any]:
+    """Every step name across the project's pipelines, the default pipeline's definition first.
+
+    For what is shared by name, such as Jira columns: a step of another pipeline
+    with the same name sits in the same column.
+    """
+    base: Config = cfg.base_config
+    out: dict[str, Any] = {}
+    for pipe in base.pipelines.values():
+        for name, step in pipe.steps.items():
+            out.setdefault(name, step)
+    return out or dict(base.data.get("steps", {}))
+
+
+def _agent_part(step: dict[str, Any]) -> dict[str, Any]:
+    """What a step's agent is made of: everything but where its outcomes lead and whether it is on."""
+    return {k: v for k, v in step.items() if k not in ("on", "enabled", "skip")}
 
 
 def shown_agent(name):
@@ -211,7 +335,30 @@ def load(repo, validate=True, text=None):
             for old in [p for p in sources if p[:len(key_path)] == key_path or key_path[:len(p)] == p]:
                 del sources[old]
             sources[key_path] = label
-    cfg = Config(repo, data, sources, adapters)
+    # The pipelines. [steps.*] and [run].start/escalate_to in factory.toml are the old way to change
+    # `default`; they still override it.
+    legacy_steps: dict[str, Any] = data.pop("steps", None) or {}
+    run_table: dict[str, Any] = data.setdefault("run", {}) if isinstance(data.get("run"), dict) else {}
+    legacy_run: dict[str, Any] = {k: run_table.pop(k) for k in ("start", "escalate_to") if k in run_table}
+    for old in [p for p in sources if p[:1] == ("steps",) or p in (("run", "start"), ("run", "escalate_to"))]:
+        del sources[old]
+    paths_table: object = data.get("paths")
+    pipes, files, pipe_problems = pipelines.load_all(
+        repo, paths_table.get("pipelines") if isinstance(paths_table, dict) else None,
+        legacy_steps if isinstance(legacy_steps, dict) else {}, legacy_run, FILE)
+    default: pipelines.Pipeline | None = pipes.get(pipelines.DEFAULT)
+    if default is not None:
+        data["steps"] = default.steps
+        run_table["start"], run_table["escalate_to"] = default.start, default.escalate_to
+        for key_path, label in default.sources.items():
+            sources[("steps", *key_path)] = label
+        for key in ("start", "escalate_to"):
+            sources[("run", key)] = FILE if key in legacy_run else (
+                pipelines.BUILTIN_LABEL if default.file == "built-in" else default.file)
+    else:
+        data["steps"] = {}
+    cfg = Config(repo, data, sources, adapters, pipes, files, pipe_problems)
+    cfg.legacy_pipeline = bool(legacy_steps or legacy_run)
     if validate:
         problems = check(cfg)
         if problems:
@@ -542,13 +689,13 @@ TABLES = {
                 "merge_method": one_of("merge", "squash", "rebase"),
                 "pr_title": a_string, "pr_title_pattern": a_regex, "issue_link": one_of("refs", "closes"),
                 "branch_prefix": a_branch_prefix, "branch_pattern": a_regex},
-    "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string,
+    "run": {"concurrency": an_int(1), "start": a_filled_string, "escalate_to": a_filled_string, "pipeline": a_string,
             "pick": one_of("all", "mine"), "report_problems": a_bool,
             "authors": a_login_list, "assignees": a_login_list},
     "workspace": {"concurrency": an_int(1)},
     "checks": {"commands": a_string_list, "timeout_minutes": an_int(1)},
     "labels": {"queue": a_filled_string, "needs_info": a_filled_string, "needs_human": a_filled_string},
-    "paths": {"worktrees": a_filled_string, "protected": a_string_list},
+    "paths": {"worktrees": a_filled_string, "protected": a_string_list, "pipelines": a_filled_string},
     "ports": {"base": an_int(1024), "step": an_int(3)},
     "skills": {"all": a_string_list},
     "rules": {"all": a_string_list},
@@ -604,15 +751,19 @@ def check(cfg):
     """Every problem in the config, each naming the key to fix."""
     d, out = cfg.data, []
 
-    def test_table(label, table, spec):
+    def test_table_into(label, table, spec):
+        found: list[str] = []
         if not isinstance(table, dict):
-            out.append(f"[{label}] must be a table")
-            return
+            return [f"[{label}] must be a table"]
         for key, value in table.items():
             if key not in spec:
-                out.append(f"[{label}].{key} is not a setting. Known: {', '.join(sorted(spec)) or 'none'}")
+                found.append(f"[{label}].{key} is not a setting. Known: {', '.join(sorted(spec)) or 'none'}")
             elif (problem := spec[key](value)):
-                out.append(f"[{label}].{key} {problem} (got {json.dumps(value)})")
+                found.append(f"[{label}].{key} {problem} (got {json.dumps(value)})")
+        return found
+
+    def test_table(label, table, spec):
+        out.extend(test_table_into(label, table, spec))
 
     for key in d:
         if key == "fleet":
@@ -647,8 +798,9 @@ def check(cfg):
     if cfg.sources.get(("workspace", "concurrency")) == FILE:
         out.append("[workspace].concurrency is the cap across projects. Set it in workspace.toml, "
                    "or pass --concurrency to `mfactory workspace queue`.")
+    every_step: dict[str, Any] = all_steps(cfg)
     for tag in ([""] if not uses_jira else [_KEY_SAMPLE] if not both else ["", _KEY_SAMPLE]):
-        out.extend(_branch_pattern_gaps(d.get("project"), d.get("steps"), tag))
+        out.extend(_branch_pattern_gaps(d.get("project"), every_step, tag))
 
     # the tracker
     tracker = d.get("tracker", {})
@@ -656,7 +808,7 @@ def check(cfg):
     jira = tracker.get("jira", {}) if isinstance(tracker, dict) else {}
     test_table("tracker.jira", jira, JIRA_KEYS)
     if isinstance(tracker, dict) and isinstance(jira, dict):
-        valid_steps = {n: s for n, s in d.get("steps", {}).items()
+        valid_steps = {n: s for n, s in every_step.items()
                        if isinstance(s, dict) and s.get("type") in graph.TYPES}
         if "columns" in jira or uses_jira:
             out.extend(board.problems(valid_steps, jira.get("columns", {}), "tracker.jira.columns", uses_jira))
@@ -688,41 +840,20 @@ def check(cfg):
         else:
             test_table(f"tools.{key}", value, TOOL_KEYS.get(key, {}))
 
-    # steps
+    # pipelines: the files, then each pipeline's steps and graph
+    out += cfg.pipeline_problems
     steps = d.get("steps", {})
-    for name, step in steps.items():
-        label = f"steps.{name}"
-        if not NAME.fullmatch(name) or name in RESERVED:
-            out.append(f"[{label}]: a step name is lowercase letters, digits and hyphens, "
-                       f"and not one of {', '.join(sorted(RESERVED))}")
-        if not isinstance(step, dict) or step.get("type") not in graph.TYPES:
-            out.append(f"[{label}].type must be one of: {', '.join(graph.TYPES)}")
-            continue
-        own_keys = human_keys if step["type"] == "human" else STEP_KEYS[step["type"]]
-        spec = STEP_COMMON | own_keys | {"on": lambda v: None}
-        test_table(label, step, spec)
-        if both and step["type"] == "human" and "who" in step:
-            out.extend(_per_tracker_problems(label, "who", step["who"], kinds, WHO_CHECKS, every=True))
-        role_name: str = graph.role(name, step) if step["type"] == "agent" else ""
-        if role_name == "custom" and not step.get("instructions") and not step.get("instructions_file"):
-            out.append(f"[{label}].instructions is missing: say what this step's agent must do")
-        if step["type"] == "agent" and "instructions_file" in step:
-            if role_name != "custom":
-                out.append(f"[{label}].instructions_file is only for a custom step")
-            else:
-                file_value: object = step.get("instructions_file")
-                if isinstance(file_value, str) and file_value.strip():
-                    file_problem: str | None = prompt_path_problem(cfg.repo, file_value)
-                    if file_problem:
-                        out.append(f"[{label}].instructions_file {file_problem}")
-        if step["type"] == "verify" and graph.enabled(step):
-            if not step.get("commands") and not step.get("agent"):
-                out.append(f"[{label}] is on but checks nothing: set commands, or agent = true")
-            if step.get("after") == "deploy" and not (step.get("wait") or "").strip():
-                out.append(f'[{label}].wait is missing: with after = "deploy" it is the command that '
-                           "exits 0 once the merge commit is live")
-    graph_problems = graph.problems(d)
-    out += graph_problems
+    graph_problems: list[str] = []
+    for pipe in (cfg.pipelines.values() if cfg.pipelines else [None]):
+        pipe_steps: dict[str, Any] = pipe.steps if pipe else steps
+        found: list[str] = _step_problems(cfg, pipe_steps, kinds, both, human_keys, test_table_into)
+        found_graph: list[str] = graph.problems(pipe.graph_data() if pipe else d)
+        graph_problems += found_graph
+        out += _in_pipeline(pipe, found + found_graph)
+    run_pipeline: object = d.get("run", {}).get("pipeline") if isinstance(d.get("run"), dict) else None
+    if isinstance(run_pipeline, str) and run_pipeline and cfg.pipelines and run_pipeline not in cfg.pipelines:
+        out.append(f'[run].pipeline = "{run_pipeline}" is not a pipeline. '
+                   f"Pipelines: {', '.join(cfg.pipelines)}")
 
     # reviewers and surfaces
     for name, reviewer in d.get("reviewers", {}).items():
@@ -759,7 +890,7 @@ def check(cfg):
     if isinstance(reviewers_table, dict):
         any_live = any(not (isinstance(r, dict) and r.get("enabled", True) is False)
                        for r in reviewers_table.values())
-        for step_name, step in steps.items():
+        for step_name, step in every_step.items():
             if isinstance(step, dict) and step.get("type") == "review" and graph.enabled(step) and not any_live:
                 out.append(f"every reviewer is off, but [steps.{step_name}] is on. "
                            f"Switch it off with [steps.{step_name}] enabled = false")
@@ -773,7 +904,10 @@ def check(cfg):
         allowed = cfg.adapters[tool]["efforts"]["allowed"]
         for key, entry in table.items() if isinstance(table, dict) else []:
             label = f"models.{tool}"
-            if keys is not None and key not in keys:
+            # An adapter's table names the built-in steps; only a key the project set must name an agent.
+            set_here: bool = any(p[:3] == ("models", tool, key) and label == FILE
+                                 for p, label in cfg.sources.items())
+            if keys is not None and key not in keys and set_here:
                 out.append(f"[{label}].{key} names no agent. Agents: {', '.join(sorted(keys))}")
             if not isinstance(entry, dict):
                 out.append(f'[{label}].{key} must be a table like {{ model = "...", effort = "..." }}')
@@ -795,6 +929,58 @@ def check(cfg):
                         out.append(f'{where}.effort = "{v}" is not an effort level {tool} documents. '
                                    f"Known: {', '.join(allowed)}")
     return out
+
+
+def _step_problems(cfg, steps, kinds, both, human_keys, test_table):
+    """The problems of one pipeline's steps, each naming the key as [steps.<name>]."""
+    out: list[str] = []
+    for name, step in steps.items():
+        label = f"steps.{name}"
+        if not NAME.fullmatch(name) or name in RESERVED:
+            out.append(f"[{label}]: a step name is lowercase letters, digits and hyphens, "
+                       f"and not one of {', '.join(sorted(RESERVED))}")
+        if not isinstance(step, dict) or step.get("type") not in graph.TYPES:
+            out.append(f"[{label}].type must be one of: {', '.join(graph.TYPES)}")
+            continue
+        own_keys = human_keys if step["type"] == "human" else STEP_KEYS[step["type"]]
+        spec = STEP_COMMON | own_keys | {"on": lambda v: None}
+        out.extend(test_table(label, step, spec))
+        if both and step["type"] == "human" and "who" in step:
+            out.extend(_per_tracker_problems(label, "who", step["who"], kinds, WHO_CHECKS, every=True))
+        role_name: str = graph.role(name, step) if step["type"] == "agent" else ""
+        if role_name == "custom" and not step.get("instructions") and not step.get("instructions_file"):
+            out.append(f"[{label}].instructions is missing: say what this step's agent must do")
+        if step["type"] == "agent" and "instructions_file" in step:
+            if role_name != "custom":
+                out.append(f"[{label}].instructions_file is only for a custom step")
+            else:
+                file_value: object = step.get("instructions_file")
+                if isinstance(file_value, str) and file_value.strip():
+                    file_problem: str | None = prompt_path_problem(cfg.repo, file_value)
+                    if file_problem:
+                        out.append(f"[{label}].instructions_file {file_problem}")
+        if step["type"] == "verify" and graph.enabled(step):
+            if not step.get("commands") and not step.get("agent"):
+                out.append(f"[{label}] is on but checks nothing: set commands, or agent = true")
+            if step.get("after") == "deploy" and not (step.get("wait") or "").strip():
+                out.append(f'[{label}].wait is missing: with after = "deploy" it is the command that '
+                           "exits 0 once the merge commit is live")
+    return out
+
+
+def cfg_legacy_only(pipe) -> bool:
+    """True when factory.toml's [steps.*] still change this pipeline, so a problem is named as factory.toml names it."""
+    return any(label == FILE for label in pipe.sources.values())
+
+
+def _in_pipeline(pipe, found):
+    """Problems of a pipeline other than default name its file and the pipeline."""
+    if pipe is None or (pipe.name == pipelines.DEFAULT and (pipe.file == "built-in" or cfg_legacy_only(pipe))):
+        return found
+    def relabel(message: str) -> str:
+        message = re.sub(r"\[steps\.([^\]]+)\]", r"steps.\1", message)
+        return message.replace("[run].start", "start").replace("[run].escalate_to", "escalate_to")
+    return [f'{pipe.file} (pipeline "{pipe.name}"): {relabel(m)}' for m in found]
 
 
 # ---- Showing ---------------------------------------------------------------
@@ -834,3 +1020,34 @@ def as_json(cfg):
     """The merged config as rows, for the dashboard."""
     return [{"key": ".".join(p), "value": v, "source": cfg.sources.get(p, "default")}
             for p, v in leaves(cfg.data)]
+
+
+def pipelines_json(cfg):
+    """The project's pipelines for the dashboard: each one's graph, its file's YAML, and any problems."""
+    base = cfg.base_config
+    texts: dict[str, str] = {report.path: report.text for report in base.pipeline_files}
+    builtin_text: str = pipelines.BUILTIN_FILE.read_text()
+    chosen: str = str(base.data["run"].get("pipeline") or "")
+    rows = []
+    for name, pipe in base.pipelines.items():
+        try:
+            drawn = graph.as_json(base.view(name))
+        except (KeyError, TypeError, ValueError):
+            drawn = None
+        rows.append({
+            "name": name, "description": pipe.description, "file": pipe.file, "extends": pipe.extends,
+            "start": pipe.start, "escalate_to": pipe.escalate_to, "graph": drawn,
+            "yaml": texts.get(pipe.file, builtin_text if pipe.file == "built-in" else ""),
+            "steps": len(pipe.steps),
+        })
+    return {
+        "default": chosen or (next(iter(base.pipelines)) if len(base.pipelines) == 1 else None),
+        "ask": not chosen and len(base.pipelines) > 1,
+        "folder": str(base.data["paths"].get("pipelines") or "pipelines"),
+        "legacy": bool(getattr(base, "legacy_pipeline", False)),
+        "pipelines": rows,
+        "files": [{"path": r.path, "names": r.names, "errors": r.errors, "yaml": r.text}
+                  for r in base.pipeline_files],
+        "problems": list(base.pipeline_problems),
+    }
+

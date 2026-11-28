@@ -1,4 +1,5 @@
-# The software factory's configuration. This is the only file you edit.
+# The software factory's configuration. With the pipelines in pipelines/*.yaml,
+# this is all you edit.
 #
 # It holds what this project changes. Everything else comes from
 # .factory/defaults.toml and each tool's adapter in .factory/adapters/.
@@ -53,6 +54,9 @@ concurrency = 3
 # pick = "mine"
 # authors = ["alice"]
 # assignees = ["@me"]
+# The pipeline a new job runs when `/mfactory run` gets no --pipeline. Unset, a
+# project with one pipeline runs it, and with several /mfactory run asks which.
+# pipeline = "default"
 
 [checks]
 # Commands run in order in the job's worktree with `bash -c`. The first non-zero exit fails the step.
@@ -61,86 +65,17 @@ concurrency = 3
 # https://danielsmag.github.io/modular-factory/docs/configuration.html#checks
 commands = []
 
-# ---- Merging ----------------------------------------------------------------
+# ---- The pipeline ----------------------------------------------------------
 #
-# By default a maintainer merges the pull request. The factory does not.
-# Remove the leading "# " on all three tables to let the factory merge.
-# Do that only when a merge to the base branch does not publish a release.
-# The script then syncs the base branch, runs the checks again, and merges.
-# https://danielsmag.github.io/modular-factory/docs/configuration.html#who-merges
-
-# Send an approval straight to the merge step.
-# [steps.approve]
-# on = { APPROVE = "merge" }
-
-# Switch off the human "ready to merge" wait. `skip` is the outcome a switched-off step counts as.
-# [steps.ready-to-merge]
-# enabled = false
-# skip = "REJECT"
-
-# Turn the factory's merge step on.
-# [steps.merge]
-# enabled = true
-
-# ---- Optional steps: remove the leading "# " to switch one on --------------
-# https://danielsmag.github.io/modular-factory/docs/configuration.html#optional-steps
-
-# A maintainer approves spec.md before anything is built.
-# [steps.spec-approval]
-# enabled = true
-
-# After failing checks, a debugger finds the cause before the builder retries.
-# The debugger changes no code. Off, failing checks go straight back to the builder.
-# [steps.debug]
-# enabled = true
-
-# Wait until a person says the deploy is live, then verify. Off, merge goes straight to verify.
-# `who` is who must answer: maintainer, operator, author, or a list of logins.
-# https://danielsmag.github.io/modular-factory/docs/configuration.html#human-steps
-# [steps.ready-to-verify]
-# enabled = true
-# who = "operator"
-
-# Check the change again after it is merged or deployed.
-# `after = "merge"` validates the merge commit immediately.
-# `after = "deploy"` first runs `wait`, a command that exits 0 once the commit is live.
-# `commands` run in a clean checkout of the merge commit. All must exit 0.
-# https://danielsmag.github.io/modular-factory/docs/configuration.html#validation
-# [steps.verify]
-# enabled = true
-# after = "merge"
-# commands = []
-
-# After the merge, ask a maintainer to close the job, test, or debug. A post-debug
-# agent investigates; on FOUND the same job opens a follow-up fix PR on <job>-fix-N.
-# https://danielsmag.github.io/modular-factory/docs/configuration.html#fixing-after-the-merge
-# [steps.merge]
-# on = { MERGED = "after-merge", FAILED = "escalated" }
+# The steps a job goes through are not in this file. They are YAML files in
+# pipelines/, starting with pipelines/default.yaml, which `mfactory install`
+# wrote: who merges, the optional steps (spec approval, debug, verify after the
+# merge), loop limits (`max` on an edge), and steps you add all go there.
+# .factory/schema/pipeline.schema.json says what a pipeline file may contain.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#pipelines-yaml-files
 #
-# [steps.after-merge]
-# type = "human"
-# who = "maintainer"
-# ask = "merged: close the job, or debug"
-# on = { CLOSE = "done", DEBUG = "post-debug" }
-#
-# [steps.post-debug]
-# type = "agent"
-# on = { FOUND = { to = "build", max = 2 }, UNKNOWN = "after-merge" }
-
-# ---- Loop limits: how often a step may send a job back ---------------------
-#
-# A `max` on an edge is how many times in a row a step may send a job that way.
-# When the limit is used up, the job goes to escalated and a maintainer is asked.
-# Writing only these keys keeps the default target and changes the count.
-# https://danielsmag.github.io/modular-factory/docs/configuration.html#loop-limits
-
-# Failed checks: retries before a maintainer is asked.
-# [steps.gate]
-# on = { FAIL = { max = 2 } }
-
-# Review rounds that may ask for changes.
-# [steps.review]
-# on = { CHANGES = { max = 2 } }
+#   .factory/bin/mfactory pipelines list       every pipeline
+#   .factory/bin/mfactory pipelines validate   check them
 
 # ---- Models: per tool, per step --------------------------------------------
 #
@@ -163,18 +98,17 @@ commands = []
 
 # [skills]
 # all = ["code-style"]
-# [steps.build]
-# skills = ["testing", "user:python-best-practices", "superpowers:test-driven-development"]
-# [steps.spec]
-# skills = ["all"]
+#
+# A step's own skills go on the step, in pipelines/default.yaml:
+#   build:
+#     skills: [testing, "user:python-best-practices", "superpowers:test-driven-development"]
 
 # Claude Code agents may use every tool, plugin and MCP tools included. Narrow one with a list;
 # "default" is its built-in list.
 # https://danielsmag.github.io/modular-factory/docs/configuration.html#tools
-# [steps.intake]
-# tools = ["default"]
-# [steps.build]
-# tools = ["default", "WebFetch", "mcp__github__*"]
+# A step's tools go on the step, in pipelines/default.yaml:
+#   build:
+#     tools: [default, WebFetch, "mcp__github__*"]
 
 # ---- Instruction files -----------------------------------------------------
 #
@@ -188,8 +122,9 @@ commands = []
 [rules]
 all = ["all"]
 
-# [steps.build]
-# rules = ["AGENTS.md", "user:CLAUDE.md"]
+# A step's own rules go on the step, in pipelines/default.yaml:
+#   build:
+#     rules: [AGENTS.md, "user:CLAUDE.md"]
 
 # ---- Reviewers and custom steps --------------------------------------------
 #
@@ -218,10 +153,11 @@ all = ["all"]
 # [surfaces.ui]
 # enabled = true
 #
-# [steps.docs]
-# type = "agent"
-# instructions_file = "docs/docs-step.md"
-# on = { DONE = "gate", SKIP = "gate" }
+# A custom step goes in pipelines/default.yaml, and an edge points at it:
+#   docs:
+#     type: agent
+#     instructions_file: docs/docs-step.md
+#     on: { DONE: gate, SKIP: gate }
 #
 # Jobs come from GitHub issues with the `factory` label. To take them from a
 # Jira kanban board instead, or as well, map each step to a status of the

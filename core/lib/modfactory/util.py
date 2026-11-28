@@ -71,12 +71,12 @@ def has_dashboard_page() -> bool:
 def dashboard_page() -> bytes:
     """The dashboard as one document.
 
-    `dashboard.css`, `markdown.js` and `dashboard.js` are inlined. The browser is
+    `dashboard.css`, `markdown.js`, `dag.js` and `dashboard.js` are inlined. The browser is
     not given a separate file to load: the page's policy allows only inline style
     and script.
     """
     root: Path = web_dir()
-    inlined: tuple[str, ...] = ("dashboard.css", "markdown.js", "dashboard.js")
+    inlined: tuple[str, ...] = ("dashboard.css", "markdown.js", "dag.js", "dashboard.js")
     names: tuple[str, ...] = ("dashboard.html", *inlined)
     missing: list[str] = [name for name in names if not (root / name).is_file()]
     if missing:

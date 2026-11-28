@@ -8,9 +8,11 @@ and review it. By default a maintainer merges the pull request. A project can
 turn the merge step on so the factory merges it. It runs inside the coding tool
 you already use: Claude Code, Cursor or Codex.
 
-Everything a project changes lives in one file, `factory.toml`: the pipeline's
-steps, the commands that prove a build works, which model and effort each step
-uses, how often a step may send work back, and which of the project's own
+A project changes two things. The pipelines are YAML files in `pipelines/`,
+checked against a JSON Schema: the steps, where each outcome leads, and how
+often a step may send work back. A project can have several pipelines and pick
+one per job. `factory.toml` holds the rest: the commands that prove a build
+works, which model and effort each step uses, and which of the project's own
 skills each agent reads.
 
 ![The dashboard's board view: Jira boards, GitHub issues and the factory's jobs, all made up](docs/dashboard-board.png?v=3)
@@ -51,7 +53,7 @@ Then, in your coding tool:
 ```
 
 This reads the project and fills in `factory.toml`: what the project is for and
-the commands that install, lint and test it. Commit `factory.toml`, `.factory/`
+the commands that install, lint and test it. Commit `factory.toml`, `pipelines/`, `.factory/`
 and the generated agent files to your base branch, and push. The
 [install guide](docs/install.md) has each step and what to do when
 `mfactory doctor` reports a problem.
@@ -79,6 +81,10 @@ on its own tracker. See
 
 ## The pipeline is a graph you can read and change
 
+A pipeline is declared in YAML, in the spirit of declarative data pipelines:
+`mfactory install` writes the default one to `pipelines/default.yaml`, and the
+schema in `.factory/schema/pipeline.schema.json` says what a file may contain,
+so an editor with a YAML language server completes and checks it as you type.
 Each step names its type and where each outcome leads. This is the default
 pipeline, printed by `.factory/bin/mfactory graph`:
 
@@ -99,20 +105,24 @@ verify           verify  off, continues as PASS -> done
 escalated        human   FEEDBACK -> build | REJECT -> rejected
 ```
 
+The examples below show only the keys that change. Edit them in place in
+`pipelines/default.yaml`.
+
 The factory does not merge unless the project turns that step on. All three
 keys are required. Enabling `merge` alone leaves it unreachable, and leaving
 `ready-to-merge` on after retargeting `approve` does the same:
 
-```toml
-[steps.approve]
-on = { APPROVE = "merge" }
-
-[steps.ready-to-merge]
-enabled = false
-skip = "REJECT"
-
-[steps.merge]
-enabled = true
+```yaml
+pipelines:
+  default:
+    steps:
+      approve:
+        on: { APPROVE: merge }
+      ready-to-merge:
+        enabled: false
+        skip: REJECT
+      merge:
+        enabled: true
 ```
 
 Do that only when a merge to the base branch does not publish a release.
@@ -120,44 +130,83 @@ With the default, approving marks the pull request ready and waits. Merging
 it by hand continues from the merge step's `MERGED` edge. That path does not
 sync the base branch or run the checks again.
 
-Four other steps ship switched off. Turning one on is two lines in `factory.toml`:
+Four other steps ship switched off. Turning one on is one line in `pipelines/default.yaml`:
 
-```toml
-[steps.spec-approval]     # a maintainer approves the spec before anything is built
-enabled = true
-
-[steps.debug]             # a debugger diagnoses failing checks before the builder retries
-enabled = true
-
-[steps.ready-to-verify]   # wait until a person says the deploy is live
-enabled = true
-who = "operator"
-
-[steps.verify]            # check the change again after it is merged or deployed
-enabled = true
-commands = ["npm run test:smoke"]
+```yaml
+pipelines:
+  default:
+    steps:
+      spec-approval:   # a maintainer approves the spec before anything is built
+        enabled: true
+      debug:   # a debugger diagnoses failing checks before the builder retries
+        enabled: true
+      ready-to-verify:   # wait until a person says the deploy is live
+        enabled: true
+        who: operator
+      verify:   # check the change again after it is merged or deployed
+        enabled: true
+        commands: ["npm run test:smoke"]
 ```
 
 Adding your own step is a block and one changed edge:
 
-```toml
-[steps.docs]
-type = "agent"
-instructions = "Update docs/ for the change on this branch."
-on = { DONE = "gate" }
-
-[steps.build]
-on = { READY = "docs" }   # build now hands over to docs, which hands over to the checks
+```yaml
+pipelines:
+  default:
+    steps:
+      docs:
+        type: agent
+        instructions: Update docs/ for the change on this branch.
+        on: { DONE: gate }
+      build:
+        on: { READY: docs }   # build now hands over to docs, which hands over to the checks
 ```
 
 A `max` on an edge is a loop limit: how many times in a row a step may send a
 job that way. When it is used up, the job goes to a maintainer instead of going
 round again.
 
-```toml
-[steps.review]
-on = { CHANGES = { max = 2 } }    # review may ask for changes twice
+```yaml
+pipelines:
+  default:
+    steps:
+      review:
+        on: { CHANGES: { max: 2 } }   # review may ask for changes twice
 ```
+
+### Several pipelines
+
+Each file in `pipelines/` declares one or more pipelines. One can extend
+another and change only what differs: here a short path for small fixes, with
+no spec and no approval agent, that is still checked and reviewed.
+
+```yaml
+# pipelines/hotfix.yaml
+pipelines:
+  hotfix:
+    description: Small fixes, straight from intake to build
+    extends: default
+    steps:
+      spec: { enabled: false, skip: DONE }
+      approve: { enabled: false, skip: APPROVE }
+```
+
+A job keeps the pipeline it starts with:
+
+```text
+/mfactory run 12 --pipeline hotfix
+```
+
+Without `--pipeline`, a job runs the pipeline named by `[run].pipeline` in
+`factory.toml`, or the only one there is. With several and none named,
+`/mfactory run` asks you which one to use. `mfactory pipelines list` shows
+them, `mfactory pipelines validate` checks every file against the schema and the
+graph rules, and `mfactory graph --pipeline hotfix` prints one. A project that
+still has `[steps.*]` in `factory.toml` keeps working: those tables override
+the default pipeline, and `mfactory migrate pipelines` moves them to YAML.
+
+The pipelines need PyYAML. `install.sh` installs it when it is missing, and
+`mfactory doctor` checks for it.
 
 ### After the merge: close, test or debug
 
@@ -169,25 +218,27 @@ request merges. They answer on the issue with `/mfactory close`,
 ```toml
 [project]
 issue_link = "refs"   # the default: the issue stays open, so the follow-up PR links it
+```
 
-[steps.merge]
-on = { MERGED = "after-merge", FAILED = "escalated" }
-
-[steps.after-merge]
-type = "human"
-who = "maintainer"
-ask = "merged: close the job, run the post-merge tests, or debug"
-on = { CLOSE = "done", TEST = "verify", DEBUG = "post-debug" }
-
-[steps.verify]
-enabled = true
-after = "merge"
-commands = ["pytest -q"]
-on = { PASS = "after-merge", FAIL = "post-debug", BLOCKED = { to = "after-merge", max = 3 } }
-
-[steps.post-debug]
-type = "agent"
-on = { FOUND = { to = "build", max = 2 }, UNKNOWN = "after-merge" }
+```yaml
+pipelines:
+  default:
+    steps:
+      merge:
+        on: { MERGED: after-merge, FAILED: escalated }
+      after-merge:
+        type: human
+        who: maintainer
+        ask: "merged: close the job, run the post-merge tests, or debug"
+        on: { CLOSE: done, TEST: verify, DEBUG: post-debug }
+      verify:
+        enabled: true
+        after: merge
+        commands: [pytest -q]
+        on: { PASS: after-merge, FAIL: post-debug, BLOCKED: { to: after-merge, max: 3 } }
+      post-debug:
+        type: agent
+        on: { FOUND: { to: build, max: 2 }, UNKNOWN: after-merge }
 ```
 
 `post-debug` is a built-in role. Its agent works in a fresh checkout of the
@@ -224,18 +275,22 @@ plugin skill. `all` takes every one of those.
 [skills]
 all = ["code-style"]          # every agent
 
-[steps.build]
-skills = ["testing", "user:python-best-practices", "superpowers:test-driven-development"]
-
-[steps.spec]
-skills = ["all"]              # every project, user and plugin skill on this machine
-
 [rules]
 all = ["all"]                 # default: every AGENTS.md, CLAUDE.md, and rule file found
 
 # builder default: AGENTS.md (or CLAUDE.md if missing) and ~/.claude/CLAUDE.md
-# [steps.build]
-# rules = ["AGENTS.md", "user:CLAUDE.md"]
+```
+
+```yaml
+pipelines:
+  default:
+    steps:
+      build:
+        skills: [testing, "user:python-best-practices", "superpowers:test-driven-development"]
+      spec:
+        skills: [all]   # every project, user and plugin skill on this machine
+      # build:
+        # rules: [AGENTS.md, "user:CLAUDE.md"]
 ```
 
 ## Dashboard
@@ -258,15 +313,29 @@ It serves a read-only page on your machine. Its Board has three blocks:
   current step and the queued issues that are not jobs yet.
 
 A card or an issue that is a factory job carries the job's chip. Each block
-folds, and the browser remembers the boards you chose and what you folded. The
-page also has the pipeline, what each job wrote, an overview with the job
-table, and the merged configuration with the source of each value. An issue
+folds, and the browser remembers the boards you chose and what you folded.
+
+**Jobs** is a table of every job, filtered by status and pipeline and sorted by
+any column, with a row of cells for the state of each step. A job opens its own
+page: its pipeline drawn as a graph, left to right, with each step coloured by
+what happened in that job (succeeded, running, waiting for a person, sent back,
+failed, skipped or not reached) and the edges it took. A step opens its visits,
+timings, files and agent runs. The page also has a timeline of every visit, the
+job's details (branch, pull requests, risk, time working and time waiting for
+people, cost by step), its files and its agents' logs.
+
+**Config** lists every pipeline, its file, the pipeline it extends and the jobs
+on it, with its graph, its YAML and any problem the schema or the graph rules
+found, then the merged `factory.toml` with the source of each value. The page
+also has each pipeline with its job counts, and an overview. An issue
 opens its body and comments. It changes nothing; approvals and feedback go
 through `/mfactory` or an issue comment. The Jira block reads Jira's REST API,
 with the account email and token the factory uses. If they come from
 `JIRA_EMAIL` and `JIRA_API_TOKEN`, start the dashboard from a shell that has them.
 
-![The dashboard's pipeline view, showing made-up sample jobs](docs/dashboard-pipeline.png?v=2)
+![The dashboard's jobs table, with each job's pipeline and the state of every step, all made up](docs/dashboard-jobs.png)
+
+![A job's page: its pipeline drawn as a graph, each step coloured by its state, with one step's visits and files open](docs/dashboard-job.png)
 
 ## Several projects
 
@@ -285,6 +354,7 @@ The dashboard lists every project in the workspace, and a filter can show one of
 ```text
 mfactory install | upgrade | uninstall | doctor | status | sync
 mfactory config show | graph | models | skills     see the configuration
+mfactory pipelines list | show | validate | schema the YAML pipelines; migrate pipelines
 mfactory queue | create | next | done | answer     run jobs (the /mfactory skill uses these)
 mfactory checks | dashboard | start dashboard | stop | version
 mfactory workspace add | remove | list | queue | init
@@ -299,7 +369,8 @@ search, and a page for each guide, in the same look as the dashboard. The same
 material is in the repository:
 
 - [Install guide](docs/install.md): installing, setting up, upgrading, removing.
-- [Configuration reference](docs/configuration.md): every key in `factory.toml`.
+- [Configuration reference](docs/configuration.md): every key in `factory.toml`
+  and in a pipeline file.
 - [Design notes](docs/design.md): how it works, what guards it, what is
   untested, and what changed from the project it is derived from.
 
@@ -312,7 +383,7 @@ make help                  # mfactory CLI targets
 make sample-dashboard      # the dashboard with made-up jobs
 ```
 
-The factory itself uses only Python's standard library.
+The factory itself uses Python's standard library and PyYAML, for the pipelines.
 
 ## Licence
 

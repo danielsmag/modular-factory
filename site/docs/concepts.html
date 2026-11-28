@@ -16,7 +16,7 @@
     <table>
       <thead><tr><th>Part</th><th>What it is</th><th>What it decides</th></tr></thead>
       <tbody>
-        <tr><td>The script, <code>.factory/bin/mfactory</code></td><td>Python, standard library only</td><td>Everything about state: which step a job is in, where an outcome leads, whether a limit is reached, whether the checks pass, when to merge.</td></tr>
+        <tr><td>The script, <code>.factory/bin/mfactory</code></td><td>Python, the standard library and PyYAML</td><td>Everything about state: which step a job is in, where an outcome leads, whether a limit is reached, whether the checks pass, when to merge.</td></tr>
         <tr><td>The orchestrator, the <code>/mfactory</code> skill</td><td>A prompt your coding tool's main agent follows</td><td>Nothing. It asks the script what to do, starts the agents the script names, and reports back.</td></tr>
         <tr><td>The agents</td><td>One small generated file per step, pointing at a prompt in <code>.factory/roles/</code></td><td>The content of their one step: a spec, a build, a review.</td></tr>
       </tbody>

@@ -5,11 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, TextIO
 
-from .. import board, checks, config, graph, install, plan_usage
+from .. import board, checks, config, graph, install, pipelines, plan_usage
 from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
@@ -172,6 +173,111 @@ def _hand_off(argv: list[str]) -> None:
     os.execv(sys.executable, [sys.executable, str(binary), *argv])
 
 
+def pipelines_command(cfg: config.Config, args: argparse.Namespace) -> int:
+    """`mfactory pipelines list|show|validate|schema`."""
+    what: str = args.pipelines_what
+    if what == "schema":
+        print(pipelines.SCHEMA_FILE.read_text(), end="")
+        return 0
+    if what == "show":
+        shown: config.Config = cfg.view(args.name)
+        pipe: pipelines.Pipeline = shown.pipeline
+        print(pipelines.dump({"pipelines": {pipe.name: {
+            "description": pipe.description, "start": pipe.start, "escalate_to": pipe.escalate_to,
+            "steps": {name: _flat_edges(step) for name, step in pipe.steps.items()}}}}), end="")
+        return 0
+    if what == "validate":
+        # config.load already refused any problem; reaching here means every file is valid.
+        for report in cfg.pipeline_files:
+            print(f"ok    {report.path}: {', '.join(report.names) or 'no pipelines'}")
+        if not cfg.pipeline_files:
+            print("ok    no pipeline files: jobs run the built-in default pipeline")
+        print(f"{len(cfg.pipelines)} pipeline(s) valid: {', '.join(cfg.pipelines)}")
+        return 0
+    chosen: str = str(cfg["run"].get("pipeline") or "")
+    ask: bool = not chosen and len(cfg.pipelines) > 1
+    if args.json:
+        print(json.dumps({
+            "default": chosen or (next(iter(cfg.pipelines)) if len(cfg.pipelines) == 1 else None),
+            "ask": ask,
+            "pipelines": [{"name": name, "description": pipe.description, "file": pipe.file,
+                           "extends": pipe.extends, "start": pipe.start,
+                           "steps": [n for n, s in pipe.steps.items() if graph.enabled(s)]}
+                          for name, pipe in cfg.pipelines.items()],
+        }, indent=1))
+        return 0
+    width: int = max(len(name) for name in cfg.pipelines)
+    for name, pipe in cfg.pipelines.items():
+        mark: str = "*" if name == chosen else " "
+        on: int = sum(1 for s in pipe.steps.values() if graph.enabled(s))
+        print(f"{mark} {name.ljust(width)}  {pipe.file:<28} {on:>2} steps  {pipe.description}")
+    print("")
+    print(f"[run].pipeline = {json.dumps(chosen)}" + (
+        ": `/mfactory run` asks which pipeline each new job runs" if ask else ""))
+    return 0
+
+
+def _flat_edges(step: dict[str, Any]) -> dict[str, Any]:
+    """A step with each `{ to }` edge written as the bare step name, as people write it."""
+    if not isinstance(step.get("on"), dict):
+        return step
+    edges: dict[str, Any] = {k: v["to"] if isinstance(v, dict) and set(v) == {"to"} else v
+                             for k, v in step["on"].items()}
+    return dict(step, on=edges)
+
+
+def migrate_pipelines(repo: Path) -> int:
+    """`mfactory migrate pipelines`: [steps.*] and [run].start/escalate_to in factory.toml move to YAML."""
+    path: Path = repo / config.FILE
+    text: str = path.read_text()
+    data: dict[str, Any] = config.read_toml(path, config.FILE)
+    run_table: dict[str, Any] = data.get("run") or {}
+    legacy: dict[str, Any] = {k: run_table[k] for k in ("start", "escalate_to") if k in run_table}
+    steps: dict[str, Any] = data.get("steps") or {}
+    if not steps and not legacy:
+        print(f"nothing to migrate: {config.FILE} has no [steps.*] and no [run].start or escalate_to")
+        return 0
+    cfg: config.Config = config.load(repo)
+    pipe: pipelines.Pipeline = cfg.pipelines[pipelines.DEFAULT]
+    folder: Path = pipelines.folder(repo, cfg["paths"].get("pipelines"))
+    target: Path = folder / "default.yaml"
+    if pipe.file not in ("built-in", target.relative_to(repo).as_posix()):
+        raise Refused(f"the default pipeline is declared in {pipe.file}. Move [steps.*] there by hand.")
+    folder.mkdir(parents=True, exist_ok=True)
+    body: str = pipelines.dump({"pipelines": {pipelines.DEFAULT: {
+        "description": pipe.description, "start": pipe.start, "escalate_to": pipe.escalate_to,
+        "steps": {name: _flat_edges(step) for name, step in pipe.steps.items()}}}})
+    head: str = pipelines.starter_text().split("\npipelines:\n", 1)[0]
+    target.write_text(head + "\n" + body)
+    kept: list[str] = []
+    skipping: bool = False
+    for line in text.splitlines():
+        header: str = line.strip()
+        if header.startswith("[") and not header.startswith("[["):
+            skipping = header.startswith("[steps.") or header == "[steps]"
+        if skipping:
+            continue
+        if re.match(r"\s*(start|escalate_to)\s*=", line) and _in_table(text, line, "run"):
+            continue
+        kept.append(line)
+    path.write_text("\n".join(kept).rstrip("\n") + "\n")
+    config.load(repo)  # the moved settings must still be valid where they now live
+    print(f"wrote {target.relative_to(repo).as_posix()} and removed [steps.*] "
+          f"and [run].start/escalate_to from {config.FILE}")
+    return 0
+
+
+def _in_table(text: str, wanted_line: str, table: str) -> bool:
+    current: str = ""
+    for line in text.splitlines():
+        header: str = line.strip()
+        if header.startswith("[") and header.endswith("]"):
+            current = header.strip("[]").strip()
+        if line == wanted_line:
+            return current == table
+    return False
+
+
 def run(args: argparse.Namespace) -> int:
     command: str | None = args.command
     if command == "version":
@@ -215,13 +321,18 @@ def run(args: argparse.Namespace) -> int:
     if command == "doctor":
         return 1 if install.doctor(repo, run_checks=not args.skip_checks) else 0
 
+    if command == "migrate":
+        return migrate_pipelines(repo)
     cfg = config.load(repo)
     if command == "config":
         print(json.dumps(config.as_json(cfg), indent=1) if args.json else config.show(cfg),
               end="\n" if args.json else "")
     elif command == "graph":
-        print(json.dumps(graph.as_json(cfg), indent=1) if args.json else graph.describe(cfg),
+        shown: config.Config = cfg.view(args.pipeline)
+        print(json.dumps(graph.as_json(shown), indent=1) if args.json else graph.describe(shown),
               end="\n" if args.json else "")
+    elif command == "pipelines":
+        return pipelines_command(cfg, args)
     elif command == "models":
         print(syncer.describe_models(cfg), end="")
     elif command == "skills":
@@ -264,8 +375,9 @@ def run(args: argparse.Namespace) -> int:
                 print(f"nothing to do: {factory.tracker.empty_note()} and no job is unfinished")
             _problem_lines(factory)
         elif command == "create":
-            job = factory.create(args.issue)
-            print(f"created {job['id']} for {factory.tracker.ref(job['issue'])} at {job['step']}")
+            job = factory.create(args.issue, args.pipeline)
+            chose: str = f" (pipeline {job['pipeline']})" if len(cfg.pipelines) > 1 else ""
+            print(f"created {job['id']} for {factory.tracker.ref(job['issue'])} at {job['step']}{chose}")
         elif command == "file":
             text: str = _stdin_text()
             if not text.strip():
@@ -313,7 +425,9 @@ def main(argv: list[str]) -> int:
             _hand_off(argv)
         return run(args)
     except ConfigError as error:
-        print(f"mfactory: {config.FILE} has {len(error.problems)} problem(s):", file=sys.stderr)
+        yaml_too: bool = any(".yaml" in problem or ".yml" in problem for problem in error.problems)
+        where: str = "the configuration" if yaml_too else config.FILE
+        print(f"mfactory: {where} has {len(error.problems)} problem(s):", file=sys.stderr)
         for problem in error.problems:
             print(f"  - {problem}", file=sys.stderr)
         return 1

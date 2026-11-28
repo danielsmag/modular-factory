@@ -229,6 +229,7 @@ def describe(cfg):
 
 def as_json(cfg):
     return {
+        "pipeline": getattr(cfg, "pipeline_name", None) or "default",
         "start": cfg["run"]["start"],
         "escalate_to": cfg["run"]["escalate_to"],
         "end_states": sorted(END_STATES),

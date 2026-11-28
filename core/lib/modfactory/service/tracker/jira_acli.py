@@ -64,7 +64,7 @@ def from_config(cfg, gh=None) -> JiraTracker:
     ready: bool = via != "acli" and rest_ready(settings, cfg.repo)
     use_acli: bool = via == "acli" or (via == "auto" and not ready and shutil.which("acli") is not None)
     cls: type[JiraTracker] = AcliJiraTracker if use_acli else JiraTracker
-    return cls(settings, steps=cfg.steps, start=cfg["run"]["start"], escalate=cfg["run"]["escalate_to"],
+    return cls(settings, steps=config.all_steps(cfg), start=cfg["run"]["start"], escalate=cfg["run"]["escalate_to"],
                repo=cfg.repo)
 
 

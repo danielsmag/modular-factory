@@ -1,4 +1,4 @@
-// The Board in a real browser, against `tests/sample_dashboard.py`.
+// The Board, Jobs and Config in a real browser, against `tests/sample_dashboard.py`.
 //
 //     node tests/dashboard_browser.js http://127.0.0.1:4747/
 //
@@ -156,6 +156,57 @@ async function main() {
   check("with Jira slow, the GitHub rows still draw at once", fast, "no rows after " + (Date.now() - start) + " ms");
   await quiet.close();
 
+  // ---- Jobs: the table, a job's pipeline drawn with each step's state, and its tabs.
+  // A context of its own, so the sort and tab it remembers stay out of the other checks.
+  const jobsContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  jobsContext.on("page", watch);
+  const jobsPage = await jobsContext.newPage();
+  await jobsPage.goto(base + "#/jobs");
+  await jobsPage.waitForSelector("table.jobs tbody tr", { timeout: 15000 });
+  const rowCount = (await jobsPage.$$("table.jobs tbody tr")).length;
+  check("the jobs table lists every job", rowCount === 20, String(rowCount));
+  await jobsPage.click('[data-focus="jobfilter:running"]');
+  const running = await texts(jobsPage, "table.jobs tbody tr td:first-child");
+  check("the status chips filter the table", running.length === 3 && running.every((t) => t === "Running"), JSON.stringify(running));
+  await jobsPage.click('[data-focus="jobfilter:all"]');
+  await jobsPage.selectOption('[data-focus="jobpipe"]', "hotfix");
+  const hot = await texts(jobsPage, "table.jobs tbody tr td:nth-child(2) a");
+  check("the pipeline filter keeps only that pipeline's jobs", JSON.stringify(hot.sort()) === JSON.stringify(["019-fix-rounding-of-vat", "020-show-a-history-of"]), JSON.stringify(hot));
+  await jobsPage.selectOption('[data-focus="jobpipe"]', "all");
+  await jobsPage.click('[data-focus="sort:job"]');
+  const firstAsc = (await texts(jobsPage, "table.jobs tbody tr td:nth-child(2) a"))[0];
+  check("a header sorts the table", firstAsc === "001-add-dark-mode-to", firstAsc);
+  await jobsPage.click("table.jobs tbody tr:has-text('019-fix-rounding-of-vat')");
+  await jobsPage.waitForSelector("svg.dag-job", { timeout: 5000 });
+  check("a row opens the job's page", /#\/jobs\/clinic-invoices\/019-fix-rounding-of-vat$/.test(jobsPage.url()), jobsPage.url());
+  const nodeStates = await jobsPage.$$eval("svg.dag-job .dag-node", (els) => Object.fromEntries(els.map((e) => [e.getAttribute("data-node"), [...e.classList].find((c) => c.startsWith("st-")) || ""])));
+  check("the job graph colours each step by its state", nodeStates.intake === "st-success" && nodeStates.build === "st-success"
+    && nodeStates.gate === "st-running" && nodeStates.spec === "st-skipped" && nodeStates.review === "st-none", JSON.stringify(nodeStates));
+  check("a step that is off and unreachable is left out of the graph", !("debug" in nodeStates), JSON.stringify(Object.keys(nodeStates)));
+  await jobsPage.click('[data-node="build"]');
+  const panel = await jobsPage.textContent(".nodepanel");
+  check("clicking a step opens its visits and files", /Visits/.test(panel) && /build\.md/.test(panel), panel.slice(0, 200));
+  await jobsPage.click('[data-focus="jobtab:gantt"]');
+  check("the timeline draws a bar per visit", (await jobsPage.$$("svg.gantt .g-bar")).length === 3);
+  await jobsPage.click('[data-focus="jobtab:details"]');
+  const details = await jobsPage.textContent(".details");
+  check("details show the branch and the pipeline", /factory\/019-fix-rounding-of-vat/.test(details) && /hotfix/.test(details));
+  await jobsPage.click('[data-focus="jobtab:files"]');
+  await jobsPage.click("table.files-table tbody tr:has-text('build')");
+  await jobsPage.waitForSelector(".file-open .fileview", { timeout: 5000 });
+  check("a file opens under the files table", /READY|Implemented/.test(await jobsPage.textContent(".file-open")));
+
+  // ---- Config: every pipeline, its graph and its YAML
+  await jobsPage.goto(base + "#/config");
+  await jobsPage.waitForSelector(".pcard", { timeout: 15000 });
+  check("config lists each pipeline", JSON.stringify(await texts(jobsPage, ".pcard .name")) === JSON.stringify(["default", "hotfix"]));
+  await jobsPage.click('[data-focus="cfgpipe:hotfix"]');
+  await jobsPage.click('[data-focus="cfgtab:yaml"]');
+  const yaml = await jobsPage.textContent(".yaml");
+  check("a pipeline's YAML file is shown", /extends: default/.test(yaml) && /description: Small fixes/.test(yaml), yaml.slice(0, 120));
+  check("settings leave the pipeline's steps to the pipelines", !(await texts(jobsPage, "table td.mono")).some((t) => t.startsWith("steps.")));
+  await jobsContext.close();
+
   // ---- a phone
   const phone = await browser.newContext({ ...devices["iPhone 13"] });
   phone.on("page", watch);
@@ -164,6 +215,12 @@ async function main() {
   await small.waitForSelector(".irow", { timeout: 15000 });
   const wide = await small.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
   check("no sideways page scroll on a phone", wide[0] <= wide[1], JSON.stringify(wide));
+  for (const hash of ["#/jobs", "#/jobs/clinic-invoices/018-export-invoices-as-csv", "#/config"]) {
+    await small.goto(base + hash);
+    await small.waitForTimeout(800);
+    const span = await small.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
+    check("no sideways page scroll on a phone at " + hash, span[0] <= span[1], JSON.stringify(span));
+  }
 
   check("no script errors", errors.length === 0, JSON.stringify(errors));
   await browser.close();

@@ -1,15 +1,27 @@
 # Configuration reference
 
-`factory.toml`, at the root of the repository, is the only file you edit. It
-holds what your project changes; everything else comes from the factory's
-defaults in `.factory/defaults.toml` and from each tool's adapter in
-`.factory/adapters/`.
+A project edits two things, both at the root of the repository:
 
-The files merge key by key. To change one value you write only that value:
+- **`pipelines/`**: the pipelines, as YAML files. Each declares the steps a job
+  goes through and where each outcome leads. `mfactory install` writes the
+  default pipeline to `pipelines/default.yaml`. A JSON Schema,
+  `.factory/schema/pipeline.schema.json`, says what a file may contain.
+- **`factory.toml`**: everything else: the project, the checks, the tools, the
+  models, the tracker. It holds what your project changes; the rest comes from
+  the factory's defaults in `.factory/defaults.toml` and from each tool's
+  adapter in `.factory/adapters/`.
 
-```toml
-[steps.review]
-on = { CHANGES = { max = 3 } }     # the other edge of review, and its target, stay as they are
+`factory.toml` merges over the defaults key by key, and a pipeline that
+`extends` another merges over it the same way. To change one value you write
+only that value. The pipeline examples on this page show only the keys that
+change: edit them in place in `pipelines/default.yaml`.
+
+```yaml
+pipelines:
+  default:
+    steps:
+      review:
+        on: { CHANGES: { max: 3 } }   # the other edge of review, and its target, stay as they are
 ```
 
 After a change:
@@ -23,16 +35,18 @@ To see what is in effect:
 
 ```bash
 .factory/bin/mfactory config show   # every setting and which file set it
-.factory/bin/mfactory graph         # the pipeline
+.factory/bin/mfactory graph         # the default pipeline; --pipeline NAME for another
+.factory/bin/mfactory pipelines list   # every pipeline, its file and its steps
 .factory/bin/mfactory models        # the model and effort of every agent, per tool
 .factory/bin/mfactory skills        # project, user and plugin skills, and who reads them
 ```
 
-A mistake is reported with the key to fix, and nothing runs until it is fixed:
+A mistake is reported with the file and the key to fix, and nothing runs until it is fixed:
 
 ```text
-mfactory: factory.toml has 2 problem(s):
-  - [steps.review].on.CHANGES points at unknown step "biuld". Steps: intake, ask-author, spec, ...; end states: done, failed, rejected
+mfactory: the configuration has 3 problem(s):
+  - pipelines/hotfix.yaml: pipelines.hotfix.steps.gate.on.FAIL.max must be at least 0 (got -1)
+  - pipelines/default.yaml (pipeline "default"): steps.review.on.CHANGES points at unknown step "biuld". Steps: intake, ask-author, spec, ...; end states: done, failed, rejected
   - [models.claude].build.effort = "extreme" is not an effort level claude documents. Known: low, medium, high, xhigh, max
 ```
 
@@ -40,6 +54,7 @@ mfactory: factory.toml has 2 problem(s):
 
 - [Project, tools and run](#project-tools-and-run)
 - [Checks](#checks)
+- [Pipelines: YAML files](#pipelines-yaml-files)
 - [The pipeline: steps](#the-pipeline-steps)
 - [Loop limits](#loop-limits)
 - [Who merges](#who-merges)
@@ -91,8 +106,7 @@ concurrency = 3
 | `[tools.codex] intake_shell` | `false` | Let the Codex intake agent run commands. See [Design notes](design.md#limiting-intake). |
 | `[run] concurrency` | `3` | Jobs this project works on at once. A job waiting for a person, or being validated after merge, does not count. |
 | `[workspace] concurrency` | `3` | `new` and `resume` rows kept across every project when this factory runs `workspace queue`. `workspace.toml` or `--concurrency` overrides it. A project's `factory.toml` cannot. |
-| `[run] start` | `"intake"` | The step a new job starts in. |
-| `[run] escalate_to` | `"escalated"` | The human step a job goes to when a loop limit is reached. |
+| `[run] pipeline` | `""` | The pipeline a job runs when it is started without `--pipeline`. Empty: the only pipeline, or `/mfactory run` asks. See [Pipelines: YAML files](#pipelines-yaml-files). |
 | `[run] pick` | `"all"` | Which labeled issues `queue` offers as new jobs. `"mine"` means the issues the operator (the `gh` user) opened or is assigned to. Issues it filters out are not listed. Jobs that already exist keep running, and `/mfactory run <n>` still runs any labeled issue. |
 | `[run] report_problems` | `false` | Open a GitHub issue when a job escalates (a step's `max` is reached, or build, approve or verify hands it to a person). One issue per job, without the queue label so the factory does not pick it up. |
 | `[run] authors` | `[]` | Also offer issues these logins opened. `"@me"` is the operator. Once `authors`, `assignees` or `pick = "mine"` names anyone, an issue is offered only if its author or one of its assignees is named. |
@@ -169,18 +183,93 @@ commands say. See [Labels, paths and ports](#labels-paths-and-ports).
 
 Run them yourself in any checkout with `.factory/bin/mfactory checks`.
 
-## The pipeline: steps
+## Pipelines: YAML files
 
-Each step is a `[steps.<name>]` table with a `type` and an `on` table that says
-where each outcome leads:
+Each `.yaml` or `.yml` file in `pipelines/` (`[paths].pipelines` names another
+folder) declares one or more pipelines under `pipelines:`, by name:
 
-```toml
-[steps.gate]
-type = "checks"
-on = { PASS = "review", FAIL = { to = "debug", max = 2 } }
+```yaml
+# yaml-language-server: $schema=../.factory/schema/pipeline.schema.json
+pipelines:
+  hotfix:
+    description: Small fixes, straight from intake to build
+    extends: default          # start from another pipeline; factory:default is the built-in one
+    start: intake             # the step a new job starts in
+    escalate_to: escalated    # the enabled human step a job goes to when an edge's max is reached
+    steps:
+      spec: { enabled: false, skip: DONE }
+      approve: { enabled: false, skip: APPROVE }
 ```
 
-An edge is a step name, or `{ to = "<step>", max = <n> }`. The end states are
+| Key | Meaning |
+| --- | --- |
+| `description` | What the pipeline is for. `/mfactory run` shows it when it asks which pipeline to use. |
+| `extends` | Another pipeline of the project, or `factory:default`. Its steps, `start` and `escalate_to` come first; this pipeline's keys merge over them, step by step and key by key. Without `extends` a pipeline is complete as written. |
+| `start` | The step a new job starts in. Required unless the pipeline extends one that has it. |
+| `escalate_to` | The enabled human step a job goes to when a loop limit is reached. Required unless inherited. |
+| `steps` | The steps, by name. See [The pipeline: steps](#the-pipeline-steps). |
+
+**The schema.** `.factory/schema/pipeline.schema.json` (also
+`mfactory pipelines schema`) is a JSON Schema (draft 2020-12) of a pipeline
+file: every key, which keys each step type takes, and the shape of an edge. The
+first line of `pipelines/default.yaml` points an editor's YAML language server
+at it, so keys complete and typos are underlined as you type. The factory checks
+every file against it before anything runs, then checks each pipeline's graph:
+every edge leads to a step, every step can be reached, and every loop has a
+`max` or a person in it. A YAML key given twice in one mapping is an error.
+Only `true` and `false` are booleans, so `on:` and `no` stay words.
+
+**Which pipeline a job runs.** A job keeps the pipeline it was created with
+(`pipeline` in its `job.json`; jobs from before pipelines run `default`):
+
+1. `/mfactory run <n> --pipeline NAME`, or `mfactory create <n> --pipeline NAME`.
+2. Otherwise `[run].pipeline` in `factory.toml`.
+3. Otherwise the only pipeline, when there is one.
+4. Otherwise `create` refuses and lists the pipelines, and `/mfactory run` asks
+   you which one the new jobs run. `mfactory pipelines list --json` says
+   whether it has to ask (`"ask": true`).
+
+```toml
+[run]
+pipeline = "default"   # the pipeline a job runs when it is started without --pipeline
+```
+
+**Agents.** A step of another pipeline shares the default pipeline's agent when
+the two steps differ only in their edges. A step with its own instructions,
+role, skills, rules or tools gets its own agent, `mfactory-<pipeline>-<step>`.
+Its model table key is `<pipeline>-<step>`, which starts from the entry of the
+plain step name.
+
+**From `[steps.*]` in `factory.toml`.** Older projects changed the pipeline in
+`factory.toml`. Those `[steps.*]` tables, and `[run].start` and
+`[run].escalate_to`, still override the default pipeline, and `doctor` says so.
+`.factory/bin/mfactory migrate pipelines` writes the result to
+`pipelines/default.yaml` and removes them from `factory.toml`.
+
+```text
+mfactory pipelines list             every pipeline, its file and its steps
+mfactory pipelines show NAME        one pipeline after extends, as YAML
+mfactory pipelines validate         check every file against the schema and the graph rules
+mfactory pipelines schema           print the JSON Schema
+mfactory graph --pipeline NAME      one pipeline, a line per step
+mfactory migrate pipelines          [steps.*] in factory.toml to pipelines/default.yaml
+```
+
+## The pipeline: steps
+
+Each step is a mapping under `steps:` with a `type` and an `on` mapping that says
+where each outcome leads:
+
+```yaml
+pipelines:
+  default:
+    steps:
+      gate:
+        type: checks
+        on: { PASS: review, FAIL: { to: debug, max: 2 } }
+```
+
+An edge is a step name, or `{ to: <step>, max: <n> }`. The end states are
 `done`, `rejected` and `failed`.
 
 | Type | What happens | Outcomes |
@@ -221,18 +310,18 @@ human step in it.
 A `max` on an edge is how many times in a row a step may send a job that way.
 The count starts again when the step returns a different outcome.
 
-```toml
-[steps.intake]
-on = { NEEDS-INFO = { max = 2 } }      # times intake may ask the author
-
-[steps.gate]
-on = { FAIL = { max = 2 } }            # builder attempts to fix failing checks
-
-[steps.review]
-on = { CHANGES = { max = 2 } }         # review rounds that may ask for changes
-
-[steps.spec-approval]
-on = { CHANGES = { max = 3 } }         # spec revisions a person may ask for
+```yaml
+pipelines:
+  default:
+    steps:
+      intake:
+        on: { NEEDS-INFO: { max: 2 } }   # times intake may ask the author
+      gate:
+        on: { FAIL: { max: 2 } }   # builder attempts to fix failing checks
+      review:
+        on: { CHANGES: { max: 2 } }   # review rounds that may ask for changes
+      spec-approval:
+        on: { CHANGES: { max: 3 } }   # spec revisions a person may ask for
 ```
 
 Those are the defaults. When a limit is used up, the job goes to the
@@ -248,10 +337,13 @@ feedback on an escalated job starts every count again.
 Writing an edge as a bare step name changes only its target and keeps the
 default `max`:
 
-```toml
-[steps.review]
-on = { CHANGES = "rework" }                       # still max = 2
-# on = { CHANGES = { to = "rework", max = 5 } }   # to change both
+```yaml
+pipelines:
+  default:
+    steps:
+      review:
+        on: { CHANGES: rework }   # still max = 2
+        # on = { CHANGES = { to = "rework", max = 5 } }   # to change both
 ```
 
 ## Who merges
@@ -261,18 +353,20 @@ which marks the pull request ready, labels the issue `needs_human`, and waits
 without holding a slot. The merge step stays off. Its `MERGED` edge still says
 what happens after a person merges, including when that step is off:
 
-```toml
-[steps.ready-to-merge]
-type = "human"
-who = "maintainer"
-ask = "approved: merge it yourself"
-shows = "decision.md"
-pr_ready = true
-on = { FEEDBACK = { to = "build", max = 3 }, REJECT = "rejected" }
-
-[steps.merge]
-enabled = false
-skip = "MERGED"
+```yaml
+pipelines:
+  default:
+    steps:
+      ready-to-merge:
+        type: human
+        who: maintainer
+        ask: "approved: merge it yourself"
+        shows: decision.md
+        pr_ready: true
+        on: { FEEDBACK: { to: build, max: 3 }, REJECT: rejected }
+      merge:
+        enabled: false
+        skip: MERGED
 ```
 
 That wait does not sync the base branch or run the checks again. Branch
@@ -283,16 +377,17 @@ To let the factory merge, turn the step on, point `approve` at it, and switch
 `ready-to-merge` off. Enabling the merge step alone leaves it unreachable, and
 leaving `ready-to-merge` on after retargeting `approve` does the same:
 
-```toml
-[steps.approve]
-on = { APPROVE = "merge" }
-
-[steps.ready-to-merge]
-enabled = false
-skip = "REJECT"
-
-[steps.merge]
-enabled = true
+```yaml
+pipelines:
+  default:
+    steps:
+      approve:
+        on: { APPROVE: merge }
+      ready-to-merge:
+        enabled: false
+        skip: REJECT
+      merge:
+        enabled: true
 ```
 
 Do that only when a merge to the base branch does not publish a release. The
@@ -304,20 +399,20 @@ script then syncs the base branch, runs the checks again, and merges.
 `enabled = false`. The merge step does too; turning that one on is the block
 above, not a single key.
 
-```toml
-[steps.spec-approval]     # a maintainer approves spec.md before anything is built
-enabled = true
-
-[steps.debug]             # after failing checks, a debugger finds the cause before the builder retries
-enabled = true
-
-[steps.ready-to-verify]   # wait until a person says the deploy is live
-enabled = true
-who = "operator"
-
-[steps.verify]            # check the change after it is merged or deployed
-enabled = true
-commands = ["npm run test:smoke"]
+```yaml
+pipelines:
+  default:
+    steps:
+      spec-approval:   # a maintainer approves spec.md before anything is built
+        enabled: true
+      debug:   # after failing checks, a debugger finds the cause before the builder retries
+        enabled: true
+      ready-to-verify:   # wait until a person says the deploy is live
+        enabled: true
+        who: operator
+      verify:   # check the change after it is merged or deployed
+        enabled: true
+        commands: ["npm run test:smoke"]
 ```
 
 The debugger changes no code. It writes what fails and why to
@@ -328,14 +423,16 @@ failing checks send the job straight back to the builder.
 
 Add a block and point one edge at it.
 
-```toml
-[steps.docs]
-type = "agent"
-instructions = "Update docs/ for the change on this branch."
-on = { DONE = "gate" }
-
-[steps.build]
-on = { READY = "docs" }
+```yaml
+pipelines:
+  default:
+    steps:
+      docs:
+        type: agent
+        instructions: Update docs/ for the change on this branch.
+        on: { DONE: gate }
+      build:
+        on: { READY: docs }
 ```
 
 `mfactory sync` writes a `mfactory-docs` agent. It works in the job's worktree,
@@ -348,18 +445,24 @@ A long task can live in a file instead of, or as well as, `instructions`.
 `step.md`. A missing file, or a path that leaves the repo, fails `mfactory
 sync`. Only a custom step can set it. This does not change `schema`.
 
-```toml
-[steps.docs]
-type = "agent"
-instructions_file = "docs/docs-step.md"
-on = { DONE = "gate", SKIP = "gate" }
+```yaml
+pipelines:
+  default:
+    steps:
+      docs:
+        type: agent
+        instructions_file: docs/docs-step.md
+        on: { DONE: gate, SKIP: gate }
 ```
 
-```toml
-[steps.license-check]
-type = "agent"
-instructions = "List every new dependency and its licence. FLAG if any is not MIT, BSD or Apache-2.0."
-on = { CLEAR = "review", FLAG = "escalated" }
+```yaml
+pipelines:
+  default:
+    steps:
+      license-check:
+        type: agent
+        instructions: "List every new dependency and its licence. FLAG if any is not MIT, BSD or Apache-2.0."
+        on: { CLEAR: review, FLAG: escalated }
 ```
 
 Keys of an `agent` step:
@@ -392,23 +495,23 @@ holds no slot while it waits.
 Adding a person's approval, then letting the factory merge. The merge step
 has to be on, or the job skips it:
 
-```toml
-[steps.release-approval]
-type = "human"
-who = "maintainer"
-ask = "approve the release"
-shows = "decision.md"
-on = { APPROVE = "merge", CHANGES = { to = "build", max = 2 }, REJECT = "rejected" }
-
-[steps.approve]
-on = { APPROVE = "release-approval" }
-
-[steps.ready-to-merge]
-enabled = false
-skip = "REJECT"
-
-[steps.merge]
-enabled = true
+```yaml
+pipelines:
+  default:
+    steps:
+      release-approval:
+        type: human
+        who: maintainer
+        ask: approve the release
+        shows: decision.md
+        on: { APPROVE: merge, CHANGES: { to: build, max: 2 }, REJECT: rejected }
+      approve:
+        on: { APPROVE: release-approval }
+      ready-to-merge:
+        enabled: false
+        skip: REJECT
+      merge:
+        enabled: true
 ```
 
 | Key | Default | Meaning |
@@ -458,32 +561,35 @@ lands on verify. Turn it on when a person has to say the deploy is live and
 nothing the factory runs can tell. `who` and `replies` are the same keys as any
 human step. `/mfactory verify` then runs verify. `/mfactory reject` ends the job.
 
-```toml
-[steps.ready-to-verify]
-enabled = true
-who = "operator"
-
-[steps.verify]
-enabled = true
-after = "merge"
-agent = true
-url = "https://app.example.com"
-commands = [
-  "test \"$(curl -fsS \"$FACTORY_DEPLOY_URL/health\")\" = ok",
-]
+```yaml
+pipelines:
+  default:
+    steps:
+      ready-to-verify:
+        enabled: true
+        who: operator
+      verify:
+        enabled: true
+        after: merge
+        agent: true
+        url: "https://app.example.com"
+        commands: ["test \"$(curl -fsS \"$FACTORY_DEPLOY_URL/health\")\" = ok"]
 ```
 
 A script that can see the deploy leaves `ready-to-verify` off and uses `wait`:
 
-```toml
-[steps.verify]
-enabled = true
-after = "deploy"
-wait = "scripts/wait-for-deploy.sh"
-commands = ["npm run test:smoke"]
-agent = true
-url = "https://staging.example.com"
-on_failure = "revert-pr"
+```yaml
+pipelines:
+  default:
+    steps:
+      verify:
+        enabled: true
+        after: deploy
+        wait: scripts/wait-for-deploy.sh
+        commands: ["npm run test:smoke"]
+        agent: true
+        url: "https://staging.example.com"
+        on_failure: revert-pr
 ```
 
 | Key | Default | Meaning |
@@ -539,7 +645,7 @@ failure, open an issue, or open a revert pull request. If `ready-to-verify` is
 off, there is nobody to ask, so `BLOCKED` fails the job through `on_failure`
 instead of running verify again.
 
-A project that replaces `[steps.verify].on` must keep an edge for `BLOCKED`.
+A project that replaces `steps.verify.on` must keep an edge for `BLOCKED`.
 The default is `{ to = "ready-to-verify", max = 3 }`.
 
 When validation fails the job ends as `failed`, and:
@@ -566,25 +672,27 @@ maintainer decides what happens after each merge:
 ```toml
 [project]
 issue_link = "refs"   # the default: the issue stays open, so the follow-up PR links it
+```
 
-[steps.merge]
-on = { MERGED = "after-merge", FAILED = "escalated" }
-
-[steps.after-merge]
-type = "human"
-who = "maintainer"
-ask = "merged: close the job, run the post-merge tests, or debug"
-on = { CLOSE = "done", TEST = "verify", DEBUG = "post-debug" }
-
-[steps.verify]
-enabled = true
-after = "merge"
-commands = ["pytest -q"]
-on = { PASS = "after-merge", FAIL = "post-debug", BLOCKED = { to = "after-merge", max = 3 } }
-
-[steps.post-debug]
-type = "agent"
-on = { FOUND = { to = "build", max = 2 }, UNKNOWN = "after-merge" }
+```yaml
+pipelines:
+  default:
+    steps:
+      merge:
+        on: { MERGED: after-merge, FAILED: escalated }
+      after-merge:
+        type: human
+        who: maintainer
+        ask: "merged: close the job, run the post-merge tests, or debug"
+        on: { CLOSE: done, TEST: verify, DEBUG: post-debug }
+      verify:
+        enabled: true
+        after: merge
+        commands: [pytest -q]
+        on: { PASS: after-merge, FAIL: post-debug, BLOCKED: { to: after-merge, max: 3 } }
+      post-debug:
+        type: agent
+        on: { FOUND: { to: build, max: 2 }, UNKNOWN: after-merge }
 ```
 
 **post-debug.** An agent step whose role is `post-debug`. A step with that
@@ -618,7 +726,7 @@ reopens the issue, and `doctor` warns about the setup. With a `branch_pattern`
 set, `mfactory config` checks that it also accepts `-fix-N` branches when a
 `post-debug` step is on.
 
-**Follow-up or new issue.** `[steps.verify].on_failure = "issue"` opens a new
+**Follow-up or new issue.** `on_failure: issue` on the verify step opens a new
 issue, which the factory picks up as a new job with its own history. A
 follow-up keeps the fix in the same job, with the same issue and one history,
 and its pull requests are listed one after another.
@@ -771,14 +879,18 @@ a reviewer.
 [skills]
 all = ["code-style"]                 # every agent
 
-[steps.build]
-skills = ["testing", "user:python-best-practices", "superpowers:test-driven-development"]
-
 [reviewers.security]
 skills = ["auth-rules"]
+```
 
-[steps.spec]
-skills = ["all"]                     # every project, user and plugin skill on this machine
+```yaml
+pipelines:
+  default:
+    steps:
+      build:
+        skills: [testing, "user:python-best-practices", "superpowers:test-driven-development"]
+      spec:
+        skills: [all]   # every project, user and plugin skill on this machine
 ```
 
 | Entry | Where it comes from | What the agent does |
@@ -815,14 +927,18 @@ list (intake: `Read, Grep, Glob, Write`; build: `Read, Grep, Glob, Bash, Edit, W
 A list on a step or reviewer replaces `agent_tools` for that agent.
 
 ```toml
-[steps.intake]
-tools = ["default"]                  # read and write, no shell
-
-[steps.build]
-tools = ["default", "WebFetch", "mcp__github__*"]
-
 [reviewers.security]
 tools = ["default", "mcp__plugin_semgrep_semgrep__*"]
+```
+
+```yaml
+pipelines:
+  default:
+    steps:
+      intake:
+        tools: [default]   # read and write, no shell
+      build:
+        tools: [default, WebFetch, "mcp__github__*"]
 ```
 
 Use Claude Code's tool names. `mcp__<server>__*` allows every tool of one MCP
@@ -846,9 +962,14 @@ fails; a missing user file is a doctor warning.
 ```toml
 [rules]
 all = ["all"]
+```
 
-# [steps.build]
-# rules = ["AGENTS.md", "user:CLAUDE.md"]
+```yaml
+pipelines:
+  default:
+    steps:
+      # build:
+        # rules: [AGENTS.md, "user:CLAUDE.md"]
 ```
 
 | Entry | Where it comes from |
@@ -957,7 +1078,7 @@ A `factory.toml` committed for a team leaves `email` and `token_file` empty, so 
   queue = "Pending Development"
   watch = ["Pending Design", "Pending US Approval"]
   ```
-- A key is a step's name in `factory.toml`, so a step you add, rename or switch off needs no other change.
+- A key is a step's name, so a step you add, rename or switch off needs no other change. A step of any pipeline with that name sits in that column.
   A key that is not a step fails `mfactory sync`, with the steps listed.
 - Steps may share a status, for a smaller board.
 - A step with no status leaves the card where it is.
@@ -1005,7 +1126,7 @@ edge targets is that outcome:
 
 These come from the graph, not from a list: an edge through a step that is switched off counts as the step
 the job lands in. Words for the move are the mover's newest comment. `REJECT` needs none, and neither does
-`FEEDBACK` at `[run].escalate_to`.
+`FEEDBACK` at the pipeline's `escalate_to`.
 
 Any other move by a person is moved back, with one comment that says why and names the statuses that are
 answers: a status two outcomes share, a status that is no edge target, a move by someone the step's `who`
@@ -1105,13 +1226,18 @@ queue = "Ready for factory"
   pattern must also accept a title without a Jira key.
 - People are named per tracker, because a GitHub login and a Jira account id can look the same:
 
-  ```toml
+```toml
   [run]
   authors = { github = ["alice"], jira = ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }
+```
 
-  [steps.spec-approval]
-  who = { github = ["alice"], jira = ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }
-  ```
+```yaml
+pipelines:
+  default:
+    steps:
+      spec-approval:
+        who: { github: [alice], jira: ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }
+```
 
   In `authors` and `assignees`, a tracker left out is not filtered. A `who` table names every tracker. The words
   `author`, `maintainer` and `operator` stay plain strings.
@@ -1149,10 +1275,12 @@ step = 10
 | `[labels] needs_info` | Put on an issue while its author is being asked. |
 | `[labels] needs_human` | Put on an issue while a maintainer, the operator, or a named login is being asked. |
 | `[paths] worktrees` | Where each job's worktree goes, relative to the repository. Keep it ignored by git. |
+| `[paths] pipelines` | The folder of the pipeline YAML files, relative to the repository. Default `pipelines`. |
 | `[paths] protected` | Patterns of files no job may change or delete. `*` also matches `/`. A job may add new files that match. |
 | `[ports] base`, `step` | Job number `n` gets ports from `base + step * (n % 100)`, so dev servers of parallel jobs do not collide. |
 
-No job may add, change or delete `factory.toml`, anything under `.factory/`, or
-a generated `mfactory-*` agent or skill file, whatever `protected` says. This
+No job may add, change or delete `factory.toml`, anything in `pipelines/` (or
+the folder `[paths].pipelines` names), anything under `.factory/`, or a
+generated `mfactory-*` agent or skill file, whatever `protected` says. This
 stops a job from rewriting the pipeline, the checks, or the agents that judge
 it.

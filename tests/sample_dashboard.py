@@ -25,8 +25,9 @@ sys.path.insert(0, str(ROOT / "core" / "lib"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import stub_jira  # noqa: E402
+from modfactory import runstate  # noqa: E402
 from modfactory.config import as_json as config_as_json  # noqa: E402
-from modfactory.config import load  # noqa: E402
+from modfactory.config import load, pipelines_json  # noqa: E402
 from modfactory.graph import as_json as graph_as_json  # noqa: E402
 from modfactory.store import SCHEMA  # noqa: E402
 from modfactory.util import version  # noqa: E402
@@ -45,18 +46,8 @@ enabled = ["claude", "cursor"]
 [checks]
 commands = ["npm ci --prefer-offline", "npm run lint", "npm test -- --run"]
 
-[steps.spec-approval]
-enabled = true
-
-[steps.debug]
-enabled = true
-
-[steps.verify]
-enabled = true
-commands = ["npm run test:smoke"]
-
-[steps.gate]
-on = { FAIL = { max = 3 } }
+[run]
+pipeline = "default"
 
 [tracker]
 kind = ["github", "jira"]
@@ -83,6 +74,51 @@ done = "Done"
 rejected = "Rejected"
 failed = "Failed"
 """
+# The project's pipelines: the built-in one with three steps switched on, and a short one for small fixes.
+PIPELINES = {
+    "default.yaml": """\
+# yaml-language-server: $schema=../.factory/schema/pipeline.schema.json
+pipelines:
+  default:
+    description: Every change, with a spec a maintainer approves and a smoke test after the merge
+    extends: factory:default
+    steps:
+      spec-approval:
+        enabled: true
+      debug:
+        enabled: true
+      gate:
+        on:
+          FAIL: { max: 3 }
+      verify:
+        enabled: true
+        commands: ["npm run test:smoke"]
+""",
+    "hotfix.yaml": """\
+# yaml-language-server: $schema=../.factory/schema/pipeline.schema.json
+# Small fixes: no spec, no approval agent. Still checked and reviewed.
+pipelines:
+  hotfix:
+    description: Small fixes, straight from intake to build
+    extends: default
+    steps:
+      spec:
+        enabled: false
+        skip: DONE
+      spec-approval:
+        enabled: false
+        skip: APPROVE
+      approve:
+        enabled: false
+        skip: APPROVE
+      debug:
+        enabled: false
+      gate:
+        on:
+          FAIL: { to: build, max: 2 }
+""",
+}
+HOTFIX_SKIPS = {"spec", "spec-approval", "approve"}
 # The factory's own board, as a team would lay it out: the factory's steps share one column.
 CLINIC_COLUMNS = [
     ("Backlog", ["Backlog"]), ("Ready for factory", ["Ready for factory"]),
@@ -108,8 +144,8 @@ def stamp(t):
     return t.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=False):
-    """One job that went along the default path and stopped at `stop`."""
+def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=False, pipeline="default"):
+    """One job that went along its pipeline's usual path and stopped at `stop`."""
     words = "-".join(title.lower().replace(",", "").split()[:4])
     job_id = f"{number:03d}-{words}"
     t = datetime.now(UTC) - timedelta(days=days_ago, hours=rng.randint(0, 8))
@@ -120,14 +156,19 @@ def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=Fals
         path[i:i + 1] = [("gate", "FAIL", 4), ("debug", "FOUND", 6), ("build", "READY", 12), ("gate", "PASS", 4)]
         path.insert(i + 5, ("review", "CHANGES", 8))
         path[i + 6:i + 6] = [("build", "READY", 15), ("gate", "PASS", 4)]
+    if pipeline == "hotfix":
+        path = [row for row in path if row[0] not in HOTFIX_SKIPS]
     step = stop
     for k, (name, outcome, minutes) in enumerate(path):
         if name == stop and stop not in ("done",):
             break
         end = t + timedelta(minutes=minutes * rng.uniform(.6, 1.6))
         nxt = path[k + 1][0] if k + 1 < len(path) else "done"
+        skipped = []
+        if pipeline == "hotfix":
+            skipped = {"intake": ["spec", "spec-approval"], "review": ["approve"]}.get(name, [])
         history.append({"step": name, "outcome": outcome, "entered_at": stamp(t), "at": stamp(end), "reason": None,
-                        "to": nxt, "skipped": []})
+                        "to": nxt, "skipped": skipped})
         if name in COST:
             cost[name] = round(cost.get(name, 0) + COST[name] * rng.uniform(.5, 1.5), 2)
         t = end
@@ -141,7 +182,7 @@ def make(jobs_dir, number, title, stop, days_ago, rng, waiting=None, detour=Fals
     finished = stop in ("done", "rejected", "failed")
     pr = 100 + number if any(h["step"] == "build" for h in history) else None
     job = {
-        "id": job_id, "number": number, "issue": 30 + number, "title": title,
+        "id": job_id, "number": number, "issue": 30 + number, "title": title, "pipeline": pipeline,
         "issue_url": f"https://github.com/acme/clinic-invoices/issues/{30 + number}", "author": rng.choice(
             ["mira", "tomas", "ines", "kofi"]),
         "step": step, "entered_at": stamp(t), "running_since": None if finished or waiting else stamp(t),
@@ -336,6 +377,9 @@ def publish(repo: Path, jobs_dir: Path, queue: list[dict[str, object]]) -> None:
         if not isinstance(loaded, dict):
             continue
         loaded["files"] = file_rows(child)
+        steps = cfg.pipeline_of(loaded).steps
+        loaded.update(status=runstate.job_status(loaded, steps), step_states=runstate.step_states(loaded, steps),
+                      edges_taken=runstate.edges_taken(loaded))
         jobs.append(loaded)
     project: object = cfg["project"]
     labels: object = cfg["labels"]
@@ -355,6 +399,7 @@ def publish(repo: Path, jobs_dir: Path, queue: list[dict[str, object]]) -> None:
     (jobs_dir / "index.json").write_text(json.dumps(index, indent=1) + "\n")
     (jobs_dir / "graph.json").write_text(json.dumps(graph_as_json(cfg), indent=1) + "\n")
     (jobs_dir / "config.json").write_text(json.dumps(config_as_json(cfg), indent=1) + "\n")
+    (jobs_dir / "pipelines.json").write_text(json.dumps(pipelines_json(cfg), indent=1) + "\n")
     binary: Path = repo / ".factory" / "bin" / "mfactory"
     binary.parent.mkdir(parents=True, exist_ok=True)
     binary.write_text("#!/bin/sh\ncat <<'EOF'\n" + json.dumps(queue) + "\nEOF\n")
@@ -374,6 +419,9 @@ def main():
         jira, building = sample_jira(datetime.now(UTC))
         os.environ["JIRA_EMAIL"], os.environ["JIRA_API_TOKEN"] = stub_jira.EMAIL, stub_jira.TOKEN
         (repo / "factory.toml").write_text(CONFIG.replace("{site}", jira.url))
+        (repo / "pipelines").mkdir()
+        for name, text in PIPELINES.items():
+            (repo / "pipelines" / name).write_text(text)
         jobs_dir = repo / ".factory" / "jobs"
         jobs_dir.mkdir(parents=True)
         if not args.empty:
@@ -381,8 +429,11 @@ def main():
             plan += [("rejected", 8, None, False), ("failed", 2, None, False), ("build", 0, None, False),
                      ("review", 0, None, True)]
             plan += [("spec-approval", 0, "maintainer", False), ("escalated", 1, "maintainer", True)]
-            for number, (stop, days_ago, waiting, detour) in enumerate(plan, 1):
-                make(jobs_dir, number, TITLES[(number - 1) % len(TITLES)], stop, days_ago, rng, waiting, detour)
+            plan = [row + ("default",) for row in plan]
+            plan += [("gate", 0, None, False, "hotfix"), ("done", 4, None, False, "hotfix")]
+            for number, (stop, days_ago, waiting, detour, pipe) in enumerate(plan, 1):
+                make(jobs_dir, number, TITLES[(number - 1) % len(TITLES)], stop, days_ago, rng, waiting, detour,
+                     pipe)
             from_jira(jobs_dir, 16, jira, building)
         os.environ["FACTORY_HOME"] = str(Path(tmp) / "home")
         (Path(tmp) / "home").mkdir()

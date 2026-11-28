@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ... import board
+from ...config import all_steps
 from ...util import Refused
 from . import adf
 from .base import JIRA_KEY, Key, OneTracker, Who
@@ -147,7 +148,7 @@ class JiraTracker(OneTracker):
 
     @classmethod
     def from_config(cls, cfg, gh=None) -> "JiraTracker":
-        return cls(cfg["tracker"]["jira"], steps=cfg.steps, start=cfg["run"]["start"],
+        return cls(cfg["tracker"]["jira"], steps=all_steps(cfg), start=cfg["run"]["start"],
                    escalate=cfg["run"]["escalate_to"], repo=cfg.repo)
 
     # -- keys

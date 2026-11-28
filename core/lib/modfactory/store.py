@@ -3,13 +3,18 @@
 import fcntl
 import json
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
-from . import config, graph, plan_usage
+from . import config, graph, plan_usage, runstate
 from .service import tracker as trackers
 from .util import Refused, first_line, now, version, write_atomic
 
 RUNNING_TYPES = {"agent", "checks", "review", "merge"}
+
+
+def iso(stamp: float) -> str:
+    return datetime.fromtimestamp(stamp, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 # The shape of job.json and index.json that the dashboard reads. Raise it when a field changes meaning.
 SCHEMA: int = 1
 
@@ -97,8 +102,11 @@ class Store:
 
     # -- slots
 
+    def _pipe(self, job):
+        return self.cfg.pipeline_of(job)
+
     def holds_slot(self, job):
-        step = self.cfg.steps.get(job["step"])
+        step = self._pipe(job).steps.get(job["step"])
         return bool(step) and step["type"] in RUNNING_TYPES
 
     def running(self):
@@ -113,7 +121,9 @@ class Store:
         rows = []
         for path in sorted(root.rglob("*")):
             if path.is_file() and path.suffix in (".md", ".log"):
-                rows.append({"path": str(path.relative_to(root)), "size": path.stat().st_size,
+                stat = path.stat()
+                rows.append({"path": str(path.relative_to(root)), "size": stat.st_size,
+                             "modified_at": iso(stat.st_mtime),
                              "first_line": first_line(path) if path.suffix == ".md" else None})
         return rows
 
@@ -136,8 +146,22 @@ class Store:
             "trackers": [{"kind": member.kind, "label": member.label, "enqueue": member.enqueue_hint()}
                          for member in tracker.members],
             "plan_usage": plan_usage.read(),
-            "jobs": [dict(job, files=self.files(job["id"])) for job in self.all()],
+            "pipelines": [name for name in cfg.pipelines],
+            "jobs": [self._shown(job) for job in self.all()],
         }
+
+    def _shown(self, job):
+        """A job as the dashboard reads it: its files, and the state of each step of its pipeline."""
+        steps = self._pipe_steps(job)
+        return dict(job, files=self.files(job["id"]), pipeline=job.get("pipeline") or "default",
+                    status=runstate.job_status(job, steps), step_states=runstate.step_states(job, steps),
+                    edges_taken=runstate.edges_taken(job))
+
+    def _pipe_steps(self, job):
+        try:
+            return self._pipe(job).steps
+        except Refused:
+            return self.cfg.steps  # a pipeline that is gone: show the job against default
 
     def write_index(self):
         cfg = self.cfg
@@ -145,6 +169,7 @@ class Store:
         write_atomic(self.dir / "index.json", json.dumps(self.index(), indent=1) + "\n")
         write_atomic(self.dir / "graph.json", json.dumps(graph.as_json(cfg), indent=1) + "\n")
         write_atomic(self.dir / "config.json", json.dumps(config.as_json(cfg), indent=1) + "\n")
+        write_atomic(self.dir / "pipelines.json", json.dumps(config.pipelines_json(cfg), indent=1) + "\n")
 
     def reconcile_index(self) -> list[str]:
         """Rewrite index.json when its job ids differ from the folders on disk.

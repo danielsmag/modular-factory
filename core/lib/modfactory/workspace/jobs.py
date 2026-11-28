@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
-from .. import config, graph, plan_usage
+from .. import config, graph, plan_usage, runstate
 from ..store import SCHEMA as DATA_SCHEMA
 from ..util import FactoryError, first_line
 from .paths import SERVED
@@ -17,9 +18,11 @@ def file_rows(root: Path) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for path in sorted(root.rglob("*")):
         if path.is_file() and path.suffix in SERVED:
+            stat = path.stat()
             rows.append({
                 "path": str(path.relative_to(root)),
-                "size": path.stat().st_size,
+                "size": stat.st_size,
+                "modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "first_line": first_line(path) if path.suffix == ".md" else None,
             })
     return rows
@@ -71,6 +74,48 @@ def graph_from_config(project: Project) -> tuple[dict[str, object] | None, str |
         return None, "factory.toml did not produce a pipeline"
     pipeline: dict[str, object] = drawn
     return pipeline, None
+
+
+def read_pipelines(project: Project) -> tuple[dict[str, object] | None, str | None]:
+    """The project's pipelines, from pipelines.json, else read from its pipelines/ folder. (None, error) on failure."""
+    path: Path = project.jobs_dir / "pipelines.json"
+    if path.is_file():
+        try:
+            loaded: object = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            return None, f"pipelines.json: {error}"
+        if isinstance(loaded, dict) and isinstance(loaded.get("pipelines"), list):
+            return loaded, None
+        return None, "pipelines.json is not a list of pipelines"
+    if not (project.path / config.FILE).is_file():
+        return None, None
+    try:
+        cfg: config.Config = config.load(project.path, validate=False)
+        return config.pipelines_json(cfg), None
+    except FactoryError as error:
+        return None, str(error)
+
+
+def _steps_of(drawn: object) -> dict[str, dict[str, object]]:
+    """A graph as graph.json writes it, as the steps mapping runstate reads."""
+    if not isinstance(drawn, dict) or not isinstance(drawn.get("steps"), list):
+        return {}
+    return {str(row["name"]): {"type": row.get("type"), "enabled": row.get("enabled", True)}
+            for row in drawn["steps"] if isinstance(row, dict) and isinstance(row.get("name"), str)}
+
+
+def with_run_state(job: dict[str, object], drawn: object) -> dict[str, object]:
+    """A job with its pipeline's name and each step's state, when the index that listed it has none."""
+    out: dict[str, object] = dict(job)
+    pipeline: object = out.get("pipeline")
+    out["pipeline"] = pipeline if isinstance(pipeline, str) and pipeline else "default"
+    if isinstance(out.get("step_states"), dict) and isinstance(out.get("status"), str):
+        return out
+    steps: dict[str, dict[str, object]] = _steps_of(drawn)
+    out["status"] = runstate.job_status(out, steps)
+    out["step_states"] = runstate.step_states(out, steps)
+    out["edges_taken"] = runstate.edges_taken(out)
+    return out
 
 
 def read_config(project: Project) -> tuple[list[dict[str, object]] | None, str | None]:
@@ -277,5 +322,17 @@ def build_snapshot(projects: list[Project], label_of: Callable[[Project], str]) 
             pipeline = fallback
         if pipeline is not None:
             item["graph"] = pipeline
+        found_pipelines, pipelines_error = read_pipelines(project)
+        if pipelines_error:
+            error = f"{error}; {pipelines_error}" if isinstance(error, str) and error else pipelines_error
+            item["error"] = error
+        item["pipelines"] = found_pipelines
+        graphs: dict[str, object] = {}
+        if found_pipelines:
+            for row in found_pipelines.get("pipelines") or []:  # type: ignore[union-attr]
+                if isinstance(row, dict) and isinstance(row.get("name"), str):
+                    graphs[row["name"]] = row.get("graph")
+        item["jobs"] = [with_run_state(job, graphs.get(str(job.get("pipeline") or "default"), pipeline))
+                        if isinstance(job, dict) else job for job in item["jobs"]]  # type: ignore[union-attr]
         items.append(item)
     return {"projects": items, "plan_usage": plan_usage.read()}

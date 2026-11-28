@@ -63,7 +63,7 @@ class Cards:
             return "stray", (move, f"Only {self._audience(job, self._who_of(job, step))} "
                                    f"may answer `{name}`.")
         tracker: Tracker = self.tracker.of(job["issue"])
-        outcomes: list[str] = board.drag_outcomes(self.cfg.steps, tracker.status_for, name, to)
+        outcomes: list[str] = board.drag_outcomes(self._pipe(job).steps, tracker.status_for, name, to)
         if len(outcomes) > 1:
             return "stray", (move, f"`{to}` could mean {' or '.join(outcomes)}, so answer in a comment "
                                    f"instead: {commands}")
@@ -76,7 +76,7 @@ class Cards:
         if not text and outcome in NEEDS_TEXT:
             if outcome == "REJECT":
                 text = f"Moved the card to `{to}` on the {tracker.label} board."
-            elif not (outcome == "FEEDBACK" and name == self.cfg["run"]["escalate_to"]):
+            elif not (outcome == "FEEDBACK" and name == self._pipe(job)["run"]["escalate_to"]):
                 return "stray", (move, f"{outcome} needs words: say them in a comment, then move the card to "
                                        f"`{to}` again. Or comment `/mfactory {outcome.lower()} <your words>`.")
         return "reply", (outcome, text, login, comment_id)
@@ -96,9 +96,9 @@ class Cards:
         tracker: Tracker = self.tracker.of(job["issue"])
         if not tracker.drag_answers:
             return ""
-        escalate: str = self.cfg["run"]["escalate_to"]
+        escalate: str = self._pipe(job)["run"]["escalate_to"]
         shown: list[str] = []
-        for status, outcomes in board.drags(self.cfg.steps, tracker.status_for, name).items():
+        for status, outcomes in board.drags(self._pipe(job).steps, tracker.status_for, name).items():
             if len(outcomes) != 1 or outcomes[0] == "ANSWER":
                 continue  # ambiguous, or a step a plain comment already answers
             outcome: str = outcomes[0]
@@ -138,7 +138,7 @@ class Cards:
         """
         active: list[dict[str, Any]] = [
             j for j in self.store.all()
-            if j["step"] not in graph.END_STATES and j["step"] in self.cfg.steps
+            if j["step"] not in graph.END_STATES and j["step"] in self._pipe(j).steps
             and self._card_status(j) is not None]
         if not active:
             return set()
@@ -147,7 +147,7 @@ class Cards:
         for j in active:
             name: str = j["step"]
             try:
-                kind, data = self._read_card(j, name, self.cfg.steps[name], where.get(j["issue"]))
+                kind, data = self._read_card(j, name, self._pipe(j).steps[name], where.get(j["issue"]))
                 if kind == "reply":
                     answered.add(j["id"])
                 elif kind != "ok":
@@ -172,7 +172,7 @@ class Cards:
         For use after the board or `[tracker.jira.columns]` changed. Finished jobs keep their cards.
         """
         jobs: list[dict[str, Any]] = [j for j in self.store.all()
-                                      if j["step"] not in graph.END_STATES and j["step"] in self.cfg.steps]
+                                      if j["step"] not in graph.END_STATES and j["step"] in self._pipe(j).steps]
         mapped: list[Any] = [j["issue"] for j in jobs if self._card_status(j) is not None]
         where: dict[Any, str] = self.tracker.statuses(mapped) if mapped else {}
         fine: bool = True

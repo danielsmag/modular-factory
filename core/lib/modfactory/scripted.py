@@ -148,7 +148,7 @@ class Scripted:
         detail: str = (section(self.dir(job) / "verify.md", "Blocked")
                        or "The verifier could not reach the environment. See verify.md.")
         target: str
-        target, _skipped = graph.resolve(self.cfg.steps, step["on"]["BLOCKED"]["to"])
+        target, _skipped = graph.resolve(self._pipe(job).steps, step["on"]["BLOCKED"]["to"])
         if target == name:
             return self._move(job, self._verify_failed(job, step, detail), detail)
         reason: str = ("The verifier could not reach the environment. "

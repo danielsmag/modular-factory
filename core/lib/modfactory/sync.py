@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, LiteralString
 
-from . import graph, plan_usage
+from . import graph, pipelines, plan_usage
 from .config import BUILTIN_REVIEWERS, Config
 from .service import tracker as trackers
 from .util import CORE, GENERATED, ConfigError, is_generated
@@ -554,11 +554,23 @@ def _prompt_file(settings: dict[str, Any], key: str) -> str | None:
     return text or None
 
 
+def _rules_source(cfg: Config, owner: tuple[str, str] | None) -> str | None:
+    """Where a step's `rules` came from: "default" when nobody set them, so the builder's fallback applies."""
+    if owner is None:
+        return None
+    pipe_name, step_name = owner
+    pipe: pipelines.Pipeline | None = cfg.pipelines.get(pipe_name)
+    if pipe is None:
+        return cfg.sources.get(("steps", step_name, "rules"))
+    return pipe.sources.get((step_name, "rules"))
+
+
 def agents(cfg: Config) -> list[Agent]:
     """Every agent the factory can start, one per risk variant."""
     out: list[Agent] = []
     problems: list[str] = []
     home: Path = skill_home()
+    owners: dict[str, tuple[str, str]] = {key: (pipe, step) for key, pipe, step in cfg.agent_steps()}
     for key in cfg.agent_keys():
         prompt_file: str | None = None
         if key.startswith("reviewer-") and key.removeprefix("reviewer-") in cfg.reviewers:
@@ -576,9 +588,12 @@ def agents(cfg: Config) -> list[Agent]:
                 sections.append(("What to look for", settings["focus"]))
             prompt_file = _prompt_file(settings, "prompt")
         else:
-            settings = cfg.steps[key]
-            where = f"[steps.{key}]"
-            kind = cfg.role(key) if settings["type"] == "agent" else "verify"
+            pipe_name, step_name = owners.get(key, (pipelines.DEFAULT, key))
+            view: Config = cfg.view(pipe_name)
+            settings = view.steps[step_name]
+            where = f"[steps.{step_name}]" if pipe_name == pipelines.DEFAULT else \
+                f'{view.pipeline.file} (pipeline "{pipe_name}"): steps.{step_name}'
+            kind = view.role(step_name) if settings["type"] == "agent" else "verify"
             roles = ["common.md", "step.md" if kind == "custom" else f"{kind}.md"]
             description = f"Factory step {key}. {DESCRIPTIONS[kind]}"
             sections = []
@@ -597,8 +612,8 @@ def agents(cfg: Config) -> list[Agent]:
                 sections.append(("Your file", f"Write `{writes}` in the job folder. Its first line must be "
                                  f"`STATUS: <OUTCOME>`, with OUTCOME one of: {', '.join(settings['on'])}."))
                 prompt_file = _prompt_file(settings, "instructions_file")
-            if key == "approve":
-                merge_step: dict = cfg.steps.get("merge", {})
+            if kind == "approve":
+                merge_step: dict = view.steps.get("merge", {})
                 who_merges: str
                 if graph.enabled(merge_step):
                     who_merges = ("APPROVE means the factory merges after syncing the base branch "
@@ -615,7 +630,9 @@ def agents(cfg: Config) -> list[Agent]:
         if settings.get("context", "").strip():
             sections.append(("Project context", settings["context"].strip()))
         skills = _skills(cfg, settings.get("skills", []), where, problems, home)
-        defaulted = kind == "build" and cfg.sources.get(("steps", key, "rules")) == "default"
+        # The shipped rules, whether from the built-in pipeline or the copy `install` wrote to pipelines/.
+        defaulted = kind == "build" and (_rules_source(cfg, owners.get(key)) == "default"
+                                         or settings.get("rules") == pipelines.builtin_step("build").get("rules"))
         rules = _rules(cfg, settings.get("rules", []), where, problems, home, defaulted)
         tools = list(settings.get("tools", cfg["tools"].get("claude", {}).get("agent_tools", ["all"])))
         for risk in [None] + cfg.variants(key):

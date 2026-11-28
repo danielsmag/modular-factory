@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 from conftest import ROOT, git
-from modfactory import install
+from modfactory import config, install, pipelines
 from modfactory.cli.maintain import _changelog_note, status_all, upgrade_everything
 from modfactory.util import dashboard_page
 from modfactory.workspace.service import DashboardServer, one_handler
@@ -51,7 +51,16 @@ def test_init_installs_everything_a_project_needs(bare):
     toml = (repo / "factory.toml").read_text()
     assert 'enabled = ["claude", "codex"]' in toml and 'base_branch = "main"' in toml
     assert "pr_title_pattern" in toml
-    assert "# [steps.merge]\n# enabled = true" in toml
+    assert "[steps" not in toml and '# pipeline = "default"' in toml
+    for item in ("pipelines/default.yaml", "schema/pipeline.schema.json"):
+        assert (repo / ".factory" / item).exists(), item
+    starter = (repo / "pipelines" / "default.yaml").read_text()
+    assert starter.startswith("# yaml-language-server: $schema=../.factory/schema/pipeline.schema.json")
+    cfg = config.load(repo)
+    assert cfg.pipelines["default"].file == "pipelines/default.yaml"
+    shipped = pipelines.parse(pipelines.BUILTIN_FILE.read_text(), "built-in")
+    builtin = pipelines.normalise_edges(shipped["pipelines"]["default"]["steps"])
+    assert cfg.steps == builtin  # the starter is the built-in pipeline, spelled out
     assert (repo / ".gitignore").read_text() == (
         "node_modules/\n\n# software factory runtime state\n/.factory/jobs/\n/.worktrees/\n")
     assert (repo / ".claude/agents/mfactory-build.md").exists()
@@ -90,7 +99,7 @@ def test_personal_install_leaves_the_factory_untracked(bare):
     assert res.returncode == 0, res.stderr
     assert (bare.repo / ".gitignore").read_text() == before
     assert ".gitignore" not in res.stdout
-    assert "Leave factory.toml, .factory/ and the generated files untracked." in res.stdout
+    assert "Leave factory.toml, pipelines/, .factory/ and the generated files untracked." in res.stdout
     exclude = Path(git("rev-parse", "--git-path", "info/exclude", cwd=bare.repo))
     if not exclude.is_absolute():
         exclude = bare.repo / exclude
@@ -99,6 +108,7 @@ def test_personal_install_leaves_the_factory_untracked(bare):
         "# software factory, this checkout only",
         "/factory.toml",
         "/.factory/",
+        "/pipelines/",
         "/.worktrees/",
         "/.claude/agents/mfactory-*",
         "/.claude/agents/factory-*",
@@ -257,7 +267,9 @@ def test_doctor_passes_on_a_ready_project(world):
     res = doctor(world)
     assert res.returncode == 0, res.stdout
     for line in ("ok    gh is signed in",
-                 "ok    factory.toml is valid: 9 steps on, off: spec-approval, debug, merge, ready-to-verify, verify",
+                 "ok    factory.toml is valid",
+                 'ok    pipeline "default" (pipelines/default.yaml) is valid: 9 steps on, '
+                 "off: spec-approval, debug, merge, ready-to-verify, verify",
                  "ok    generated agent and skill files match factory.toml", "ok    origin/main can be fetched",
                  "ok    .factory/jobs/ is ignored by git", "ok    GitHub labels exist",
                  "Everything a run needs is in place."):

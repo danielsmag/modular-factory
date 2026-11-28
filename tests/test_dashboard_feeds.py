@@ -68,6 +68,31 @@ def test_the_routes_answer_with_json(world, base):
     assert "no-store" in get(base + "/projects.json")[2]["Cache-Control"]
 
 
+def test_projects_carry_their_pipelines_and_each_jobs_step_states(world, base):
+    world.pipeline_file("hotfix.yaml", "pipelines:\n  hotfix:\n    description: Small fixes\n    extends: default\n"
+                                       "    steps:\n      spec: { enabled: false, skip: DONE }\n")
+    job = world.create(world.issue(title="Fix it"), "hotfix")
+    world.play(job, until="build")
+    name = world.repo.name
+    project = json.loads(get(base + "/projects.json")[1])["projects"][0]
+    pipes = project["pipelines"]
+    assert [p["name"] for p in pipes["pipelines"]] == ["default", "hotfix"]
+    assert pipes["ask"] is True and pipes["default"] is None and pipes["problems"] == []
+    hot = pipes["pipelines"][1]
+    assert hot["file"] == "pipelines/hotfix.yaml" and "extends: default" in hot["yaml"]
+    assert hot["graph"]["pipeline"] == "hotfix" and hot["graph"]["start"] == "intake"
+    shown = project["jobs"][0]
+    assert shown["pipeline"] == "hotfix" and shown["status"] == "running"
+    assert shown["step_states"]["spec"]["state"] == "skipped"
+    assert shown["step_states"]["intake"]["state"] == "success"
+    assert shown["step_states"]["build"]["state"] == "running"
+    assert shown["edges_taken"] == {"intake.ACCEPT": 1}
+    assert all(row["modified_at"].endswith("Z") for row in shown["files"])
+    status, body, headers = get(f"{base}/projects/{name}/pipelines/hotfix.yaml")
+    assert status == 200 and headers["Content-Type"].startswith("text/yaml") and "description: Small fixes" in body
+    assert get(f"{base}/projects/{name}/pipelines/nope.yaml")[0] == 404
+
+
 # ---- Reading Jira boards ----------------------------------------------------------
 
 

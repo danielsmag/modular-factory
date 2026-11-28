@@ -10,7 +10,7 @@ factory's queue, and you start every agent for every job. The queue is the
 GitHub issues that carry the factory's label, or, in a project whose
 `factory.toml` has `[tracker] kind = "jira"`, the cards in the queue column of
 its Jira board. With `kind = ["github", "jira"]` it is both, taken in turn. The
-pipeline itself lives in `factory.toml` and is run by one script,
+pipelines live in `pipelines/*.yaml` and are run by one script,
 `.factory/bin/mfactory`. You never decide where a job goes next: you ask the
 script, do what it prints, and report back.
 
@@ -22,6 +22,7 @@ work around it.
 ```text
 /mfactory run                  work through the queue; also resumes unfinished jobs
 /mfactory run <n>              run one issue now
+/mfactory run <n> --pipeline P run one issue on pipeline P (pipelines/*.yaml)
 /mfactory approve <n>          answer a job that is waiting for a person (also: changes, feedback, answer, reject)
 /mfactory setup                fill in factory.toml for this project, once after installing
 /mfactory <anything else>      ask about jobs, or describe a feature to file as an issue
@@ -98,7 +99,8 @@ refuses a second time, stop that job and tell the user what the script said.
 
 1. Run `.factory/bin/mfactory queue`. Each line is `action  issue  job  step  note`:
    - `new`: an issue with no job. Run `.factory/bin/mfactory create <issue>`,
-     which prints the job id, then start the loop for it.
+     which prints the job id, then start the loop for it. See "Which pipeline"
+     below when the project has more than one.
    - `resume`: a job to pick up. Start the loop for it.
    - `hold`: no free slot yet. `wait`: needs a person. `skip`: nothing to do.
 2. Start every `new` and `resume` line and nothing else. The script enforces
@@ -119,7 +121,25 @@ lists unfinished jobs as `resume`, and `next` says what each needs.
 The same for one issue. If `queue` shows a job for it, resume that job;
 otherwise `create <n>`, even if `[run].pick`, `authors` or `assignees` keeps
 the issue off `queue`. Finish by naming the job's step, from `queue` or from
-`.factory/jobs/<job>/job.json`.
+`.factory/jobs/<job>/job.json`. With `--pipeline P`, pass it on:
+`create <n> --pipeline P`.
+
+## Which pipeline
+
+The pipelines are YAML files in the project's `pipelines/` folder. A job keeps
+the pipeline it was created with. Before creating jobs, run
+`.factory/bin/mfactory pipelines list --json`:
+
+- `"ask": false`: run `create <issue>` as it is; `default` names the pipeline.
+- `"ask": true`: there are several pipelines and `[run].pipeline` in
+  factory.toml chooses none. Ask the user which pipeline the new jobs run,
+  once per `/mfactory run`, listing each pipeline's `name` and `description`
+  and offering "the same for every new job in this run". Then run
+  `create <issue> --pipeline <name>`. Offer to save the answer as
+  `[run].pipeline` in factory.toml, so later runs don't ask.
+
+If `create` refuses with `choose a pipeline with --pipeline NAME`, ask the
+same question. Never pick a pipeline for the user.
 
 ## Answering a job that waits for a person
 
@@ -184,8 +204,8 @@ user asks, then continue the loop with `next`:
 ## /mfactory setup
 
 Run once after installing, and again when the project's commands change.
-`factory.toml` is the only file you edit; never touch `.factory/` or the
-generated agent files.
+`factory.toml` and the YAML files in `pipelines/` are the only files you edit;
+never touch `.factory/` or the generated agent files.
 
 1. Run `.factory/bin/mfactory config show` to see every setting and where its
    value comes from, and `.factory/bin/mfactory skills` to list the project's
@@ -207,8 +227,9 @@ generated agent files.
      check. A revert branch is the prefix plus `revert-` and the job id.
    - `[checks] commands`: the commands from step 2, in the order CI runs them.
      Each must exit non-zero on failure and must not rewrite files.
-   - `[skills]` and `skills = [...]` under a step or reviewer, when a project
-     skill clearly belongs to that work.
+   - `[skills]`, `skills = [...]` under a reviewer, and `skills: [...]` under a
+     step in `pipelines/default.yaml`, when a project skill clearly belongs to
+     that work.
    - `[paths] protected`: files no job may change, such as CI workflows,
      deploy configuration.
 4. Ask the user before turning on anything optional (`spec-approval`, `debug`,
@@ -216,24 +237,28 @@ generated agent files.
    at `ready-to-merge` and the merge step is off. Ask whether the factory
    should merge the pull request. Write the opt-in below only when they say
    yes and a merge to the base branch does not publish a release. Otherwise
-   leave the default. Show them `.factory/bin/mfactory graph`.
+   leave the default. Show them `.factory/bin/mfactory graph`. The pipeline
+   is `pipelines/default.yaml`; change these keys there, in place:
 
-   ```toml
-   [steps.approve]
-   on = { APPROVE = "merge" }
-
-   [steps.ready-to-merge]
-   enabled = false
-   skip = "REJECT"
-
-   [steps.merge]
-   enabled = true
+   ```yaml
+   pipelines:
+     default:
+       steps:
+         approve:
+           on: { APPROVE: merge }
+         ready-to-merge:
+           enabled: false
+           skip: REJECT
+         merge:
+           enabled: true
    ```
+   If `factory.toml` still has `[steps.*]` tables, run
+   `.factory/bin/mfactory migrate pipelines` first, so the pipeline is in one place.
 5. Run `.factory/bin/mfactory sync`, then `.factory/bin/mfactory doctor`. Fix
-   what it reports in `factory.toml` and repeat until it passes.
+   what it reports in `factory.toml` or `pipelines/` and repeat until it passes.
 6. Tell the user what you set and that they need to commit `factory.toml`,
-   `.factory/` and the generated files to the base branch before the first
-   run: jobs build from `origin/<base>`.
+   `pipelines/`, `.factory/` and the generated files to the base branch before
+   the first run: jobs build from `origin/<base>`.
 
 ## /mfactory <anything else>
 
@@ -284,7 +309,7 @@ feedback or asking for something new, ask.
   merges. The script merges only when the merge step is on. The factory never
   deploys.
 - One pull request per issue. How often a step may repeat is set by `max` on
-  its edge in `factory.toml`; when one is used up the script sends the job to a
+  its edge in the pipeline's YAML; when one is used up the script sends the job to a
   maintainer instead of going round again.
 - If `next`, `done` or `queue` says the generated files are out of date, run
   `.factory/bin/mfactory sync` and tell the user to commit the result.
