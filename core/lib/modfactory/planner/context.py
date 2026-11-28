@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from .. import graph
 from ..service.tracker import Key
 from ..util import Refused
-from .holds import _job_of
+from .holds import job_of
 
 if TYPE_CHECKING:
     from ..engine import Factory
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 def add_context(factory: Factory, key: Key, text: str, source: str) -> str:
     """Write `context-<k>.md` for the job of `key`, list it in `context_files`, and return the file name."""
-    job: dict[str, Any] | None = _job_of(factory, key)
+    job: dict[str, Any] | None = job_of(factory, key)
     if job is None:
         raise Refused(f"{factory.tracker.ref(key)} has no job to add context to")
     if job["step"] in graph.END_STATES:

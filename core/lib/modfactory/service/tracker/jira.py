@@ -13,7 +13,7 @@ from ... import board
 from ...config import all_steps
 from ...util import Refused
 from . import adf
-from .base import JIRA_KEY, Key, OneTracker, Who
+from .base import JIRA_KEY, RELATION_TEXT, Key, OneTracker, Who
 from .jira_api import Client
 
 KEY = JIRA_KEY
@@ -110,8 +110,14 @@ def _status_name(value: object) -> str:
     return value if isinstance(value, str) else ""
 
 
+# Jira's link type for each relation, and whether the issue it is made for is the outward one.
+LINK_TYPES = {"duplicate": ("Duplicate", True), "blocks": ("Blocks", True), "blocked-by": ("Blocks", False),
+              "relates": ("Relates", True)}
+
+
 class JiraTracker(OneTracker):
     kind = "jira"
+    links_both_ways = True
     label = "Jira"
     has_board = True
     # How Jira is reached: its REST API here, the Atlassian CLI in `jira_acli.py`.
@@ -333,6 +339,16 @@ class JiraTracker(OneTracker):
 
     def comment(self, key: Key, body: str, factory: bool = True) -> None:
         self.api.post(f"/rest/api/3/issue/{key}/comment", {"body": self._document(body, factory)})
+
+    def link(self, key: Key, other: str, relation: str) -> None:
+        """An issue link when `other` is a key on this site (it then shows on both issues), else a comment."""
+        if not JIRA_KEY.fullmatch(other):
+            self.comment(key, f"{RELATION_TEXT[relation]} {other}")
+            return
+        name, outward = LINK_TYPES[relation]
+        mine, theirs = {"key": str(key)}, {"key": other}
+        self.api.post("/rest/api/3/issueLink", {"type": {"name": name}, "outwardIssue": mine if outward else theirs,
+                                                "inwardIssue": theirs if outward else mine})
 
     # -- people
 

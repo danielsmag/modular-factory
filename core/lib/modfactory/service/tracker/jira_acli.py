@@ -17,7 +17,7 @@ from typing import Any
 from ... import board, config
 from ...util import Refused, run
 from . import adf
-from .base import Key
+from .base import RELATION_TEXT, Key
 from .jira import KEY, KEYS_PER_CALL, JiraTracker, _same, _status_name
 from .jira_api import rest_ready
 
@@ -70,6 +70,7 @@ def from_config(cfg, gh=None) -> JiraTracker:
 
 class AcliJiraTracker(JiraTracker):
     via = "acli"
+    links_both_ways = False
     # acli shows no issue history, so who moved a card is unknown.
     drag_answers = False
 
@@ -173,6 +174,10 @@ class AcliJiraTracker(JiraTracker):
     def comment(self, key: Key, body: str, factory: bool = True) -> None:
         self._with_file(self._document(body, factory), "jira", "workitem", "comment", "create",
                         "--key", str(key), flag="--body-file")
+
+    def link(self, key: Key, other: str, relation: str) -> None:
+        """acli's link command is not one the factory relies on, so the relation is said in a comment."""
+        self.comment(key, f"{RELATION_TEXT[relation]} {other}")
 
     def create_issue(self, title: str, body: str, queue: bool = False) -> str:
         res = self._with_file(adf.from_markdown(body), "jira", "workitem", "create", "--summary", title,

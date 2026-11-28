@@ -13,6 +13,9 @@ Who = str | list[str]
 JIRA_KEY = re.compile(r"[A-Za-z][A-Za-z0-9_]*-[1-9][0-9]*")
 # Each tracker as people say it.
 LABELS = {"github": "GitHub", "jira": "Jira"}
+# A relation between two issues, as the sentence that says it on the first issue. `blocked-by` is `blocks` read
+# from the other side.
+RELATION_TEXT = {"duplicate": "Duplicate of", "blocks": "Blocks", "blocked-by": "Blocked by", "relates": "Related to"}
 
 
 def key_kind(ref: object) -> str | None:
@@ -123,6 +126,13 @@ class Tracker(Protocol):
         """Post a comment. `factory=False` posts a person's own words, which count as a reply."""
         ...
 
+    def link(self, key: Key, other: str, relation: str) -> None:
+        """Relate the issue to `other` (a key on this tracker, or text such as a URL): a key of RELATION_TEXT.
+
+        `relation` reads from `key`: `blocks` means `key` blocks `other`, `blocked-by` the reverse.
+        """
+        ...
+
     # -- people
 
     def operator(self) -> str:
@@ -212,6 +222,9 @@ class OneTracker:
 
     kind: str
     has_board: bool = False
+
+    # True when one `link` call shows on both issues, so the other side needs no call of its own.
+    links_both_ways: bool = False
 
     def of(self, key: Key) -> Any:
         """The tracker that holds `key`: this one, unless the key's shape says it is another tracker's."""

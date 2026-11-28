@@ -22,6 +22,7 @@ plan the queue across jobs
   plan collect [--json]
   plan scan [--force] | plan due | plan ingest [--reply]
   plan release <ref>
+  plan approve <F-n> | plan dismiss <F-n> [reason]
 other
   checks | dashboard | start dashboard | stop | version
 several projects
@@ -159,7 +160,7 @@ def parser() -> argparse.ArgumentParser:
     plan: argparse.ArgumentParser = sub.add_parser(
         "plan", help="the planner: duplicates, dependencies and priority across the queue")
     plan_sub: argparse._SubParsersAction[argparse.ArgumentParser] = plan.add_subparsers(
-        dest="plan_what", required=True, metavar="<snapshot|collect|scan|due|ingest|release>")
+        dest="plan_what", required=True, metavar="<snapshot|collect|scan|due|ingest|release|approve|dismiss|apply>")
     plan_snapshot: argparse.ArgumentParser = plan_sub.add_parser(
         "snapshot", help="every queued issue and job of this project, as tickets")
     plan_snapshot.add_argument("--json", action="store_true", help="the snapshot as one JSON object")
@@ -177,6 +178,18 @@ def parser() -> argparse.ArgumentParser:
     plan_release: argparse.ArgumentParser = plan_sub.add_parser(
         "release", help="run a held job or issue now, without waiting for the job it waits on")
     plan_release.add_argument("ref", help="a job id, or an issue key such as 12, #12 or PROJ-7")
+    plan_approve: argparse.ArgumentParser = plan_sub.add_parser(
+        "approve", help="carry out the action of an open finding, in the project that owns its first ticket")
+    plan_approve.add_argument("finding", help="a finding's id, such as F-3")
+    plan_dismiss: argparse.ArgumentParser = plan_sub.add_parser(
+        "dismiss", help="drop a finding until one of its tickets changes")
+    plan_dismiss.add_argument("finding", help="a finding's id, such as F-3")
+    plan_dismiss.add_argument("reason", nargs="*", help="why, for the record")
+    plan_apply: argparse.ArgumentParser = plan_sub.add_parser(
+        "apply", help="carry out one planner action in this project (`plan approve` runs this)")
+    plan_apply.add_argument("--action", required=True, help="the action, as a JSON object")
+    plan_apply.add_argument(
+        "--refs", required=True, help='{"<ref>": {"project": <path>, "key": <key>, "url": <url>}} per ref it names')
 
     sub.add_parser("checks", help="run [checks].commands in the current directory")
     sub.add_parser("hook")  # no help text: argparse then leaves it out of the list

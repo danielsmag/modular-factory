@@ -74,6 +74,7 @@ class FakeJira:
         self.workflow = None          # None: any status to any other. Else {from: [to, ...]}
         self.issues = {}
         self.calls = []               # (method, path) of every request
+        self.links = []               # the body of every issue link made
         self.page_size = 50
         self.fail = None              # (path prefix, status): answer that status once the path starts so
         self.next_issue = 0
@@ -314,6 +315,11 @@ class FakeJira:
             jql = query.get("jql", [""])[0]
             ordered = sorted(self.issues.values(), key=lambda issue: int(issue["id"]))
             return 200, self._page([self._issue(i) for i in ordered if self._matches(i, jql)], query, "issues")
+        if method == "POST" and path == "/rest/api/3/issueLink":
+            for side in ("inwardIssue", "outwardIssue"):
+                self._find(body[side]["key"])
+            self.links.append(body)
+            return 201, None
         if method == "POST" and path == "/rest/api/3/issue":
             fields = body["fields"]
             if fields["project"]["key"] != self.project:

@@ -7,7 +7,7 @@ from typing import Any
 
 from ...util import MARKER, Refused
 from ..gh import GitHub, marked
-from .base import Key, OneTracker, Who
+from .base import RELATION_TEXT, Key, OneTracker, Who
 
 WRITERS = {"admin", "maintain", "write"}
 # The labels `install` creates: colour and description for each `[labels]` key.
@@ -131,6 +131,10 @@ class GitHubTracker(OneTracker):
 
     def comment(self, key: Key, body: str, factory: bool = True) -> None:
         self.gh.call("issue", "comment", key, "--body-file", "-", input=f"{MARKER}\n{body}" if factory else body)
+
+    def link(self, key: Key, other: str, relation: str) -> None:
+        """GitHub has no issue links in the API the factory uses, so the relation is said in a comment."""
+        self.comment(key, f"{RELATION_TEXT[relation]} {other}")
 
     # -- people
 

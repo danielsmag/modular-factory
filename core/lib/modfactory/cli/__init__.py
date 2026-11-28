@@ -17,6 +17,7 @@ from .. import board, checks, config, graph, install, pipelines, plan_usage
 from .. import sync as syncer
 from .. import workspace as workspace_mod
 from ..engine import Factory
+from ..planner import apply as apply_mod
 from ..planner import holds as holds_mod
 from ..planner import ingest as ingest_mod
 from ..planner import schedule as schedule_mod
@@ -173,16 +174,18 @@ def _listed(repo: Path) -> tuple[workspace_mod.Workspace, str] | None:
     return None
 
 
+def _plan_group(repo: Path) -> workspace_mod.Workspace:
+    """The workspace this checkout is listed in, or one that holds only this checkout."""
+    listed: tuple[workspace_mod.Workspace, str] | None = _listed(repo)
+    if listed is None:
+        return workspace_mod.Workspace(Path(), [workspace_mod.Project(repo.resolve())])
+    return listed[0]
+
+
 def _plan_collected(repo: Path, cfg: config.Config) -> tuple[dict[str, Any], PlannerState]:
     """Snapshot every project of the workspace. A checkout the workspace does not list is collected on its own."""
-    listed: tuple[workspace_mod.Workspace, str] | None = _listed(repo)
-    group: workspace_mod.Workspace
-    if listed is None:
-        group = workspace_mod.Workspace(Path(), [workspace_mod.Project(repo.resolve())])
-    else:
-        group = listed[0]
     state: PlannerState = PlannerState(user_dir() / "planner")
-    return workspace_planner.collect(group, cfg["planner"], state), state
+    return workspace_planner.collect(_plan_group(repo), cfg["planner"], state), state
 
 
 def _planner_on(cfg: config.Config) -> None:
@@ -263,6 +266,82 @@ def plan_release(factory: Factory, ref: str) -> int:
         return 0
     print(f"not held: {ref}")
     return 1
+
+
+def _open_finding(state: PlannerState, name: str) -> dict[str, Any]:
+    """The finding called `name`, which must still be open."""
+    for finding in state.read_findings()["findings"]:
+        if finding.get("id") == name:
+            if finding.get("status") != "open":
+                raise Refused(f"{name} is already {finding.get('status')}")
+            return finding
+    raise Refused(f"no finding {name}")
+
+
+def _decide(state: PlannerState, name: str, status: str, result: str) -> None:
+    """Record the decision on `name`, from a fresh read of the findings file."""
+    findings: dict[str, Any] = state.read_findings()
+    for finding in findings["findings"]:
+        if finding.get("id") == name:
+            finding.update(status=status, decided_at=now(), result=result)
+    state.write_findings(findings)
+
+
+def plan_approve(repo: Path, cfg: config.Config, name: str) -> int:
+    """Run an open finding's action in the project that owns its first ticket, then mark the finding approved."""
+    _planner_on(cfg)
+    state: PlannerState = PlannerState(user_dir() / "planner")
+    finding: dict[str, Any] = _open_finding(state, name)
+    snapshot: dict[str, Any] = state.read_snapshot() or {}
+    by_ref: dict[str, dict[str, Any]] = {t["ref"]: t for t in snapshot.get("tickets", []) if isinstance(t, dict)}
+    tickets: list[str] = [str(ref) for ref in finding.get("tickets", [])]
+    action: dict[str, Any] = apply_mod.check(finding.get("action"), set(tickets))
+    group: workspace_mod.Workspace = _plan_group(repo)
+    refs: dict[str, dict[str, Any]] = {}
+    for ref in tickets:
+        if ref not in by_ref:
+            raise Refused(f"{ref} is not in the snapshot any more: run `mfactory plan collect`")
+        project: workspace_mod.Project | None = group.project(str(by_ref[ref].get("project")))
+        if project is None:
+            raise Refused(f"{ref}: the workspace has no project {by_ref[ref].get('project')}")
+        refs[ref] = {"project": str(project.path), "key": by_ref[ref]["key"], "url": by_ref[ref].get("url") or ""}
+    print(f"will: {apply_mod.describe(action)}")
+    owner: workspace_mod.Project | None = group.project(str(by_ref[apply_mod.first_target(action)]["project"]))
+    assert owner is not None  # every ticket of the finding resolved above
+    worked, said = workspace_planner.apply_in(owner, action, refs)
+    if not worked:
+        print(f"mfactory: {said}", file=sys.stderr)
+        return 1
+    _decide(state, name, "approved", said)
+    print(said)
+    return 0
+
+
+def plan_dismiss(cfg: config.Config, name: str, reason: list[str]) -> int:
+    """Mark an open finding dismissed: the scan keeps it dismissed until one of its tickets changes."""
+    _planner_on(cfg)
+    state: PlannerState = PlannerState(user_dir() / "planner")
+    _open_finding(state, name)
+    _decide(state, name, "dismissed", " ".join(reason) or "dismissed")
+    print(f"dismissed {name}")
+    return 0
+
+
+def plan_apply(factory: Factory, action_json: str, refs_json: str) -> int:
+    """Carry out one action. `refs_json` maps each ref the action may name to {project, key, url}."""
+    try:
+        action: object = json.loads(action_json)
+        given: object = json.loads(refs_json)
+    except ValueError:
+        raise Refused("--action and --refs must be JSON") from None
+    if not isinstance(given, dict) or not all(
+            isinstance(v, dict) and isinstance(v.get("project"), str) and isinstance(v.get("key"), int | str)
+            for v in given.values()):
+        raise Refused('--refs must be an object of {"<ref>": {"project": <path>, "key": <key>, "url": <url>}}')
+    known: dict[str, tuple[Path, Any]] = {str(ref): (Path(v["project"]), v["key"]) for ref, v in given.items()}
+    urls: dict[str, str] = {str(ref): str(v.get("url") or "") for ref, v in given.items()}
+    print(apply_mod.apply_action(factory, action, known, urls))
+    return 0
 
 
 def plan_collect(repo: Path, cfg: config.Config, as_json: bool) -> int:
@@ -552,6 +631,10 @@ def run(args: argparse.Namespace) -> int:
         return plan_scan(repo, cfg, args.plan_what == "scan" and args.force, args.plan_what == "due")
     elif command == "plan" and args.plan_what == "ingest":
         return plan_ingest(cfg, args.reply)
+    elif command == "plan" and args.plan_what == "approve":
+        return plan_approve(repo, cfg, args.finding)
+    elif command == "plan" and args.plan_what == "dismiss":
+        return plan_dismiss(cfg, args.finding, args.reason)
     elif command == "dashboard":
         listed: tuple[workspace_mod.Workspace, str] | None = _listed(repo)
         if listed is None:
@@ -584,6 +667,8 @@ def run(args: argparse.Namespace) -> int:
             print(json.dumps({"label": name, "tickets": found, "errors": problems}, indent=None if args.json else 2))
         elif command == "plan" and args.plan_what == "release":
             return plan_release(factory, args.ref)
+        elif command == "plan" and args.plan_what == "apply":
+            return plan_apply(factory, args.action, args.refs)
         elif command == "create":
             job = factory.create(args.issue, args.pipe)
             chose: str = f" (pipe {job['pipeline']})" if len(cfg.pipelines) > 1 else ""

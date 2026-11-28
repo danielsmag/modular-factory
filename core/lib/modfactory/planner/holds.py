@@ -43,7 +43,7 @@ def _norm(key: object) -> str:
     return str(key).lstrip("#")
 
 
-def _job_of(factory: Factory, key: Key) -> dict[str, Any] | None:
+def job_of(factory: Factory, key: Key) -> dict[str, Any] | None:
     for job in factory.store.all():
         if _norm(job["issue"]).lower() == _norm(key).lower():
             return job
@@ -72,7 +72,7 @@ def hold(factory: Factory, key: Key, until_ref: str, until_project: Path, until_
     entry: dict[str, Any] = {"until": until_ref, "project": str(until_project), "key": until_key,
                              "reason": reason, "since": now()}
     ref: str = factory.tracker.ref(key)
-    job: dict[str, Any] | None = _job_of(factory, key)
+    job: dict[str, Any] | None = job_of(factory, key)
     if job is None:
         found: dict[str, dict[str, Any]] = fresh_holds(factory)
         found[_norm(key)] = entry
@@ -93,7 +93,7 @@ def release(factory: Factory, key: Key, wait: bool = True) -> bool:
     With `wait` False a job another process is working on is left held (and False is returned): the next call retries.
     """
     freed: bool = False
-    job: dict[str, Any] | None = _job_of(factory, key)
+    job: dict[str, Any] | None = job_of(factory, key)
     if job is not None and job.get("held_by"):
         opened: dict[str, Any] | None = factory.store.open(job["id"]) if wait else factory.store.try_open(job["id"])
         if opened is None:
@@ -118,7 +118,7 @@ def blocker_done(factory: Factory, entry: dict[str, Any], queued: set[str] | Non
     if entry.get("project") != str(factory.cfg.repo):
         return None
     key: Key = entry["key"]
-    job: dict[str, Any] | None = _job_of(factory, key)
+    job: dict[str, Any] | None = job_of(factory, key)
     if job is not None:
         return job["step"] in graph.END_STATES
     if queued is None:

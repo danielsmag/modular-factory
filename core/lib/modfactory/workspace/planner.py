@@ -17,6 +17,7 @@ from .registry import Workspace
 
 SNAPSHOT_TIMEOUT = 120
 RELEASE_TIMEOUT = 60
+APPLY_TIMEOUT = 300
 TOO_OLD = "its factory is too old for the planner; run mfactory upgrade"
 
 
@@ -77,6 +78,25 @@ def _release(group: Workspace, tickets: list[dict[str, Any]]) -> tuple[list[str]
             errors.append(f"{ticket['project']}: could not release {ticket['ref']}: "
                           f"{_last_line(result, 'mfactory plan release failed')}")
     return released, errors
+
+
+def apply_in(project: Project, action: dict[str, Any], refs: dict[str, dict[str, Any]]) -> tuple[bool, str]:
+    """Run `plan apply` in `project`. Returns whether it worked, and what it said last (or why it failed)."""
+    if not project.binary.is_file():
+        return False, f"{project.path.name}: .factory/bin/mfactory is missing"
+    try:
+        result: CompletedProcess[str] = run(
+            [str(project.binary), "plan", "apply", "--action", json.dumps(action), "--refs", json.dumps(refs)],
+            cwd=project.path, check=False, timeout=APPLY_TIMEOUT)
+    except TimeoutExpired:
+        return False, f"{project.path.name}: timed out"
+    except OSError:
+        return False, f"{project.path.name}: .factory/bin/mfactory could not be run"
+    if result.returncode != 0:
+        line: str = _last_line(result, "mfactory plan apply failed")
+        return False, TOO_OLD if "invalid choice" in line else line.removeprefix("mfactory: ")
+    lines: list[str] = result.stdout.strip().splitlines()
+    return True, lines[-1] if lines else "done"
 
 
 def collect(group: Workspace, settings: dict[str, Any], state: PlannerState) -> dict[str, Any]:

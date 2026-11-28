@@ -161,6 +161,9 @@ class Trackers:
     def comment(self, key: Key, body: str, factory: bool = True) -> None:
         self.of(key).comment(key, body, factory=factory)
 
+    def link(self, key: Key, other: str, relation: str) -> None:
+        self.of(key).link(key, other, relation)
+
     # -- people
 
     def can_write(self, login: str, key: Key) -> bool:
