@@ -112,6 +112,9 @@ class Queue:
             "created_at": now(), "finished_at": None,
         }
         self.store.path(job_id).mkdir(parents=True)
+        job["held_by"] = holds.take_fresh(self, key)  # a hold noted before the job existed moves onto it
+        if job["held_by"] is None:
+            del job["held_by"]
         self.store.save(job)
         job = self.store.open(job_id)
         self._write_issue_md(job, issue)

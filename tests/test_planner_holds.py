@@ -4,7 +4,8 @@ import json
 from datetime import UTC, datetime
 
 from conftest import AUTO_MERGE
-from modfactory import graph, runstate
+from modfactory import config, graph, runstate
+from modfactory.engine import Factory
 from modfactory.planner import holds
 
 
@@ -52,7 +53,7 @@ def test_fresh_issue_hold(world):
     five = world.issue("Waiting")
     blocker = world.issue("Blocker")
     message = hold_on(world, five, blocker, f"repo:#{blocker}")
-    assert "5" in message or str(five) in message
+    assert message == f"held #{five}: until repo:#{blocker} is done"
     table = world.queue()
     assert (("wait", five, "-", "-", f"held until repo:#{blocker} is done")) in table
     assert not [r for r in table if r[0] == "new" and r[1] == five]
@@ -100,10 +101,72 @@ def test_release_by_job_or_issue_key_and_cli(world):
     hold_on(world, key, blocker, f"repo:#{blocker}")
     res = cli(world, "plan", "release", job)
     assert res.stdout == f"released {job}\n", res.stderr
-    assert cli(world, "plan", "release", job).stdout == f"not held: {job}\n"
+    missed = cli(world, "plan", "release", job)
+    assert missed.stdout == f"not held: {job}\n" and missed.returncode == 1
     hold_on(world, key, blocker)
     assert cli(world, "plan", "release", f"#{key}").stdout == f"released #{key}\n"
     waiting = world.issue("Fresh")
     hold_on(world, waiting, blocker)
     assert cli(world, "plan", "release", str(waiting)).stdout == f"released {waiting}\n"
+    assert holds.fresh_holds(world.factory()) == {}
+
+
+def test_a_released_job_queues_behind_the_job_that_took_its_slot(world):
+    world.configure("[run]\nconcurrency = 1\n")
+    blocker = world.issue("Blocker", author="bob")
+    held = world.create(world.issue("Held"))
+    world.play(held, "build")
+    hold_on(world, world.job(held)["issue"], blocker)
+    taker = world.create(world.issue("Taker"))
+    world.play(taker, "build")
+    assert holds.release(world.factory(), world.job(held)["issue"])
+    table = {r[2]: r for r in world.queue()}
+    assert table[taker][0] == "resume"
+    assert table[held][0] == "hold" and table[held][4] == "concurrency 1 reached"
+    assert world.next(taker)[0].startswith("start-agent")
+
+
+def test_queue_skips_a_hold_whose_job_another_process_is_working_on(world):
+    held = world.create(world.issue("Held"))
+    blocker = world.issue("Blocker")
+    key = world.job(held)["issue"]
+    holds.hold(world.factory(), key, f"repo:#{blocker}", world.repo, blocker, "")
+    world.factory().store.release()
+    world.set_gh(lambda s: s["issues"][str(blocker)].update(labels=[]))    # the blocker is gone: due for release
+    other = Factory(config.load(world.repo), say=lambda line: None)
+    other.store.open(held)                                                  # another process holds the lock
+    rows = world.queue()
+    assert {r[2]: r[0] for r in rows}[held] == "wait"
+    assert "held_by" in world.job(held)
+    other.store.release()
+    assert {r[2]: r[0] for r in world.queue()}[held] == "resume"
+
+
+def test_create_adopts_a_fresh_hold(world):
+    blocker = world.issue("Blocker", author="bob")
+    five = world.issue("Five")
+    hold_on(world, five, blocker)
+    job = world.create(five)
+    assert world.job(job)["held_by"]["key"] == blocker
+    said = world.next(job)
+    assert len(said) == 1 and said[0].startswith("held ")
+    assert str(five) not in holds.fresh_holds(world.factory())
+
+
+def test_queue_adopts_a_fresh_hold_once_the_issue_has_a_job(world):
+    blocker = world.issue("Blocker", author="bob")
+    five = world.issue("Five")
+    hold_on(world, five, blocker)
+    factory = world.factory()
+    factory.store.release()
+    job = factory.create(five)["id"]               # made without noticing the hold
+    data = world.job(job)
+    data.pop("held_by", None)
+    (world.dir(job) / "job.json").write_text(json.dumps(data))
+    holds._write(factory, {str(five): {"until": f"repo:#{blocker}", "project": str(world.repo), "key": blocker,
+                                       "reason": "", "since": "x"}})
+    factory.store.release()
+    rows = world.queue()
+    assert {r[2]: r[0] for r in rows}[job] == "wait"
+    assert world.job(job)["held_by"]["key"] == blocker
     assert holds.fresh_holds(world.factory()) == {}

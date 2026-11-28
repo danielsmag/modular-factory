@@ -262,7 +262,7 @@ def plan_release(factory: Factory, ref: str) -> int:
         print(f"released {ref}")
         return 0
     print(f"not held: {ref}")
-    return 0
+    return 1
 
 
 def plan_collect(repo: Path, cfg: config.Config, as_json: bool) -> int:
