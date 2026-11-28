@@ -6,6 +6,8 @@ import argparse
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, TextIO
@@ -134,7 +136,7 @@ def _project_repo() -> Path | None:
         repo: Path = find_repo()
     except Refused:
         return None
-    if not (repo / config.FILE).is_file():
+    if not config.config_path(repo).is_file():
         return None
     return repo
 
@@ -174,33 +176,33 @@ def _hand_off(argv: list[str]) -> None:
 
 
 def pipelines_command(cfg: config.Config, args: argparse.Namespace) -> int:
-    """`mfactory pipelines list|show|validate|schema`."""
-    what: str = args.pipelines_what
+    """`mfactory pipes list|show|validate|schema`."""
+    what: str = args.pipes_what
     if what == "schema":
         print(pipelines.SCHEMA_FILE.read_text(), end="")
         return 0
     if what == "show":
         shown: config.Config = cfg.view(args.name)
         pipe: pipelines.Pipeline = shown.pipeline
-        print(pipelines.dump({"pipelines": {pipe.name: {
+        print(pipelines.dump({pipelines.KEY: {pipe.name: {
             "description": pipe.description, "start": pipe.start, "escalate_to": pipe.escalate_to,
             "steps": {name: _flat_edges(step) for name, step in pipe.steps.items()}}}}), end="")
         return 0
     if what == "validate":
         # config.load already refused any problem; reaching here means every file is valid.
         for report in cfg.pipeline_files:
-            print(f"ok    {report.path}: {', '.join(report.names) or 'no pipelines'}")
+            print(f"ok    {report.path}: {', '.join(report.names) or 'no pipes'}")
         if not cfg.pipeline_files:
-            print("ok    no pipeline files: jobs run the built-in default pipeline")
-        print(f"{len(cfg.pipelines)} pipeline(s) valid: {', '.join(cfg.pipelines)}")
+            print("ok    no pipe files: jobs run the built-in default pipe")
+        print(f"{len(cfg.pipelines)} pipe(s) valid: {', '.join(cfg.pipelines)}")
         return 0
-    chosen: str = str(cfg["run"].get("pipeline") or "")
+    chosen: str = str(cfg["run"].get("pipe") or "")
     ask: bool = not chosen and len(cfg.pipelines) > 1
     if args.json:
         print(json.dumps({
             "default": chosen or (next(iter(cfg.pipelines)) if len(cfg.pipelines) == 1 else None),
             "ask": ask,
-            "pipelines": [{"name": name, "description": pipe.description, "file": pipe.file,
+            "pipes": [{"name": name, "description": pipe.description, "file": pipe.file,
                            "extends": pipe.extends, "start": pipe.start,
                            "steps": [n for n, s in pipe.steps.items() if graph.enabled(s)]}
                           for name, pipe in cfg.pipelines.items()],
@@ -212,8 +214,8 @@ def pipelines_command(cfg: config.Config, args: argparse.Namespace) -> int:
         on: int = sum(1 for s in pipe.steps.values() if graph.enabled(s))
         print(f"{mark} {name.ljust(width)}  {pipe.file:<28} {on:>2} steps  {pipe.description}")
     print("")
-    print(f"[run].pipeline = {json.dumps(chosen)}" + (
-        ": `/mfactory run` asks which pipeline each new job runs" if ask else ""))
+    print(f"[run].pipe = {json.dumps(chosen)}" + (
+        ": `/mfactory run` asks which pipe each new job runs" if ask else ""))
     return 0
 
 
@@ -226,11 +228,55 @@ def _flat_edges(step: dict[str, Any]) -> dict[str, Any]:
     return dict(step, on=edges)
 
 
+def _move(repo: Path, source: Path, target: Path) -> None:
+    """git mv when git tracks `source`, so its history follows; a plain move otherwise."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tracked: bool = subprocess.run(["git", "ls-files", "--error-unmatch", str(source)], cwd=repo,
+                                   capture_output=True).returncode == 0
+    if tracked and subprocess.run(["git", "mv", str(source), str(target)], cwd=repo,
+                                  capture_output=True).returncode == 0:
+        return
+    shutil.move(str(source), str(target))
+
+
+def migrate_layout(repo: Path) -> int:
+    """`mfactory migrate layout`: factory.toml at the root moves to factory/factory.toml, with the pipes beside it."""
+    old: Path = repo / config.FILE
+    new: Path = repo / config.DIR / config.FILE
+    moved: list[str] = []
+    if old.is_file():
+        if new.exists():
+            raise Refused(f"both {config.FILE} and {config.DIR}/{config.FILE} exist. Keep one, then run this again.")
+        _move(repo, old, new)
+        moved.append(f"{config.FILE} -> {config.DIR}/{config.FILE}")
+    # Pipes from before they moved into factory/: a pipelines/ folder at the root, its files under `pipelines:`.
+    early: Path = repo / "pipelines"
+    pipes_dir: Path = repo / pipelines.FOLDER
+    if early.is_dir() and not pipelines.project_files(repo, pipelines.FOLDER):
+        for path in sorted(p for p in early.iterdir() if p.suffix in pipelines.SUFFIXES):
+            target: Path = pipes_dir / path.name
+            _move(repo, path, target)
+            text: str = re.sub(r"(?m)^pipelines:", f"{pipelines.KEY}:", target.read_text())
+            target.write_text(text.replace("../.factory/schema/pipeline.schema.json",
+                                           "../../.factory/schema/pipe.schema.json"))
+            moved.append(f"pipelines/{path.name} -> {pipelines.FOLDER}/{path.name}")
+        if early.is_dir() and not any(early.iterdir()):
+            early.rmdir()
+    if not moved:
+        print(f"nothing to move: {config.config_rel(repo)} is in place")
+        return 0
+    config.load(repo)  # the moved files must still load where they now are
+    for line in moved:
+        print(f"moved {line}")
+    print(f"Commit {config.DIR}/ and the removed files.")
+    return 0
+
+
 def migrate_pipelines(repo: Path) -> int:
-    """`mfactory migrate pipelines`: [steps.*] and [run].start/escalate_to in factory.toml move to YAML."""
-    path: Path = repo / config.FILE
+    """`mfactory migrate pipes`: [steps.*] and [run].start/escalate_to in factory.toml move to YAML."""
+    path: Path = config.config_path(repo)
     text: str = path.read_text()
-    data: dict[str, Any] = config.read_toml(path, config.FILE)
+    data: dict[str, Any] = config.read_toml(path, config.config_rel(repo))
     run_table: dict[str, Any] = data.get("run") or {}
     legacy: dict[str, Any] = {k: run_table[k] for k in ("start", "escalate_to") if k in run_table}
     steps: dict[str, Any] = data.get("steps") or {}
@@ -239,15 +285,15 @@ def migrate_pipelines(repo: Path) -> int:
         return 0
     cfg: config.Config = config.load(repo)
     pipe: pipelines.Pipeline = cfg.pipelines[pipelines.DEFAULT]
-    folder: Path = pipelines.folder(repo, cfg["paths"].get("pipelines"))
+    folder: Path = pipelines.folder(repo, cfg["paths"].get("pipes"))
     target: Path = folder / "default.yaml"
     if pipe.file not in ("built-in", target.relative_to(repo).as_posix()):
         raise Refused(f"the default pipeline is declared in {pipe.file}. Move [steps.*] there by hand.")
     folder.mkdir(parents=True, exist_ok=True)
-    body: str = pipelines.dump({"pipelines": {pipelines.DEFAULT: {
+    body: str = pipelines.dump({pipelines.KEY: {pipelines.DEFAULT: {
         "description": pipe.description, "start": pipe.start, "escalate_to": pipe.escalate_to,
         "steps": {name: _flat_edges(step) for name, step in pipe.steps.items()}}}})
-    head: str = pipelines.starter_text().split("\npipelines:\n", 1)[0]
+    head: str = pipelines.starter_text().split(f"\n{pipelines.KEY}:\n", 1)[0]
     target.write_text(head + "\n" + body)
     kept: list[str] = []
     skipping: bool = False
@@ -263,7 +309,7 @@ def migrate_pipelines(repo: Path) -> int:
     path.write_text("\n".join(kept).rstrip("\n") + "\n")
     config.load(repo)  # the moved settings must still be valid where they now live
     print(f"wrote {target.relative_to(repo).as_posix()} and removed [steps.*] "
-          f"and [run].start/escalate_to from {config.FILE}")
+          f"and [run].start/escalate_to from {config.config_rel(repo)}")
     return 0
 
 
@@ -322,16 +368,16 @@ def run(args: argparse.Namespace) -> int:
         return 1 if install.doctor(repo, run_checks=not args.skip_checks) else 0
 
     if command == "migrate":
-        return migrate_pipelines(repo)
+        return migrate_layout(repo) if args.what == "layout" else migrate_pipelines(repo)
     cfg = config.load(repo)
     if command == "config":
         print(json.dumps(config.as_json(cfg), indent=1) if args.json else config.show(cfg),
               end="\n" if args.json else "")
     elif command == "graph":
-        shown: config.Config = cfg.view(args.pipeline)
+        shown: config.Config = cfg.view(args.pipe)
         print(json.dumps(graph.as_json(shown), indent=1) if args.json else graph.describe(shown),
               end="\n" if args.json else "")
-    elif command == "pipelines":
+    elif command in ("pipes", "pipelines"):
         return pipelines_command(cfg, args)
     elif command == "models":
         print(syncer.describe_models(cfg), end="")
@@ -375,8 +421,8 @@ def run(args: argparse.Namespace) -> int:
                 print(f"nothing to do: {factory.tracker.empty_note()} and no job is unfinished")
             _problem_lines(factory)
         elif command == "create":
-            job = factory.create(args.issue, args.pipeline)
-            chose: str = f" (pipeline {job['pipeline']})" if len(cfg.pipelines) > 1 else ""
+            job = factory.create(args.issue, args.pipe)
+            chose: str = f" (pipe {job['pipeline']})" if len(cfg.pipelines) > 1 else ""
             print(f"created {job['id']} for {factory.tracker.ref(job['issue'])} at {job['step']}{chose}")
         elif command == "file":
             text: str = _stdin_text()

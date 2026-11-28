@@ -62,7 +62,7 @@ def graph_from_config(project: Project) -> tuple[dict[str, object] | None, str |
 
     An empty job list still has a pipeline. A missing factory.toml is not an error.
     """
-    path: Path = project.path / config.FILE
+    path: Path = config.config_path(project.path)
     if not path.is_file():
         return None, None
     try:
@@ -77,7 +77,7 @@ def graph_from_config(project: Project) -> tuple[dict[str, object] | None, str |
 
 
 def read_pipelines(project: Project) -> tuple[dict[str, object] | None, str | None]:
-    """The project's pipelines, from pipelines.json, else read from its pipelines/ folder. (None, error) on failure."""
+    """The project's pipes, from pipelines.json, else read from factory/pipes/. (None, error) on failure."""
     path: Path = project.jobs_dir / "pipelines.json"
     if path.is_file():
         try:
@@ -87,7 +87,7 @@ def read_pipelines(project: Project) -> tuple[dict[str, object] | None, str | No
         if isinstance(loaded, dict) and isinstance(loaded.get("pipelines"), list):
             return loaded, None
         return None, "pipelines.json is not a list of pipelines"
-    if not (project.path / config.FILE).is_file():
+    if not config.config_path(project.path).is_file():
         return None, None
     try:
         cfg: config.Config = config.load(project.path, validate=False)

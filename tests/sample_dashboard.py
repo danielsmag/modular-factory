@@ -47,7 +47,7 @@ enabled = ["claude", "cursor"]
 commands = ["npm ci --prefer-offline", "npm run lint", "npm test -- --run"]
 
 [run]
-pipeline = "default"
+pipe = "default"
 
 [tracker]
 kind = ["github", "jira"]
@@ -74,11 +74,11 @@ done = "Done"
 rejected = "Rejected"
 failed = "Failed"
 """
-# The project's pipelines: the built-in one with three steps switched on, and a short one for small fixes.
+# The project's pipes: the built-in one with three steps switched on, and a short one for small fixes.
 PIPELINES = {
     "default.yaml": """\
-# yaml-language-server: $schema=../.factory/schema/pipeline.schema.json
-pipelines:
+# yaml-language-server: $schema=../../.factory/schema/pipe.schema.json
+pipes:
   default:
     description: Every change, with a spec a maintainer approves and a smoke test after the merge
     extends: factory:default
@@ -97,7 +97,7 @@ pipelines:
     "hotfix.yaml": """\
 # yaml-language-server: $schema=../.factory/schema/pipeline.schema.json
 # Small fixes: no spec, no approval agent. Still checked and reviewed.
-pipelines:
+pipes:
   hotfix:
     description: Small fixes, straight from intake to build
     extends: default
@@ -418,10 +418,10 @@ def main():
         subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
         jira, building = sample_jira(datetime.now(UTC))
         os.environ["JIRA_EMAIL"], os.environ["JIRA_API_TOKEN"] = stub_jira.EMAIL, stub_jira.TOKEN
-        (repo / "factory.toml").write_text(CONFIG.replace("{site}", jira.url))
-        (repo / "pipelines").mkdir()
+        (repo / "factory" / "pipes").mkdir(parents=True)
+        (repo / "factory" / "factory.toml").write_text(CONFIG.replace("{site}", jira.url))
         for name, text in PIPELINES.items():
-            (repo / "pipelines" / name).write_text(text)
+            (repo / "factory" / "pipes" / name).write_text(text)
         jobs_dir = repo / ".factory" / "jobs"
         jobs_dir.mkdir(parents=True)
         if not args.empty:

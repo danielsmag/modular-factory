@@ -15,7 +15,7 @@ TAIL = 80
 
 # Paths the factory owns. A job branch may not add, change or delete anything
 # here, or it could rewrite the pipeline, the checks or the agents that judge it.
-OWNED = ["factory.toml", ".factory/*",
+OWNED = ["factory/*", "factory.toml", ".factory/*",
          ".claude/agents/mfactory-*", ".cursor/agents/mfactory-*", ".codex/agents/mfactory-*",
          ".claude/skills/mfactory/*", ".cursor/skills/mfactory/*", ".agents/skills/mfactory/*",
          ".claude/agents/factory-*", ".cursor/agents/factory-*", ".codex/agents/factory-*",
@@ -23,8 +23,8 @@ OWNED = ["factory.toml", ".factory/*",
 
 
 def owned_patterns(cfg) -> list[str]:
-    """OWNED, and the project's pipelines folder: a job may not rewrite the pipeline it runs on."""
-    folder: str = str(cfg["paths"].get("pipelines") or "pipelines").strip("/")
+    """OWNED, and the project's pipes folder when it is outside factory/: a job may not rewrite its pipe."""
+    folder: str = str(cfg["paths"].get("pipes") or "factory/pipes").strip("/")
     return OWNED + [f"{folder}/*"]
 
 

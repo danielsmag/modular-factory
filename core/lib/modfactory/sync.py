@@ -592,7 +592,7 @@ def agents(cfg: Config) -> list[Agent]:
             view: Config = cfg.view(pipe_name)
             settings = view.steps[step_name]
             where = f"[steps.{step_name}]" if pipe_name == pipelines.DEFAULT else \
-                f'{view.pipeline.file} (pipeline "{pipe_name}"): steps.{step_name}'
+                f'{view.pipeline.file} (pipe "{pipe_name}"): steps.{step_name}'
             kind = view.role(step_name) if settings["type"] == "agent" else "verify"
             roles = ["common.md", "step.md" if kind == "custom" else f"{kind}.md"]
             description = f"Factory step {key}. {DESCRIPTIONS[kind]}"

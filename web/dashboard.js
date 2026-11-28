@@ -2210,7 +2210,7 @@ function stepTable(graph, count) {
 function pipelineBlock(project, jobList) {
   const list = project ? pipelinesOf(project) : staticPipelines();
   const holder = "pipeView";
-  if (!list.length) return [el("div", { class: "notice", text: "No pipeline for this project yet." })];
+  if (!list.length) return [el("div", { class: "notice", text: "No pipe for this project yet." })];
   const name = pickedPipeline(holder, list);
   const chosen = list.find((p) => p.name === name) || list[0];
   const graph = chosen.graph;
@@ -2218,20 +2218,20 @@ function pipelineBlock(project, jobList) {
   const count = (step) => mine.filter((j) => j.step === step).length;
   const nodes = [];
   if (list.length > 1) {
-    nodes.push(el("div", { class: "ptabs", role: "tablist", "aria-label": "Pipelines" },
+    nodes.push(el("div", { class: "ptabs", role: "tablist", "aria-label": "Pipes" },
       list.map((p) => pipeTab(holder, p.name, p.name, String(jobList.filter((j) => (j.pipeline || "default") === p.name).length) + " jobs"))));
   }
-  if (!graph || !Array.isArray(graph.steps)) return nodes.concat([el("div", { class: "notice", text: "This pipeline could not be drawn. See Config for its problems." })]);
+  if (!graph || !Array.isArray(graph.steps)) return nodes.concat([el("div", { class: "notice", text: "This pipe could not be drawn. See Config for its problems." })]);
   nodes.push(el("p", { class: "sub" },
     chosen.description ? chosen.description + " · " : "",
     `Starts at ${graph.start}. When an edge's max is used up, the job goes to ${graph.escalate_to}.`,
     chosen.file ? el("span", { class: "dim", text: "  " + chosen.file }) : null));
-  nodes.push(el("div", { class: "panel pipe-graph" }, dagView(graph, { counts: count, zoomKey: "pipe:" + (project ? project.id : "") + ":" + chosen.name, label: "Pipeline " + chosen.name }), dagLegend(false)));
-  nodes.push(el("div", { class: "panel" }, el("h2", { text: "Steps" }), el("p", { class: "sub", text: chosen.file && chosen.file !== "built-in" ? "As declared in " + chosen.file : "The built-in pipeline" }), stepTable(graph, count)));
+  nodes.push(el("div", { class: "panel pipe-graph" }, dagView(graph, { counts: count, zoomKey: "pipe:" + (project ? project.id : "") + ":" + chosen.name, label: "Pipe " + chosen.name }), dagLegend(false)));
+  nodes.push(el("div", { class: "panel" }, el("h2", { text: "Steps" }), el("p", { class: "sub", text: chosen.file && chosen.file !== "built-in" ? "As declared in " + chosen.file : "The built-in pipe" }), stepTable(graph, count)));
   return nodes;
 }
 function pipeline() {
-  const nodes = [el("h1", { text: "Pipeline" })];
+  const nodes = [el("h1", { text: "Pipes" })];
   if (!state.workspace) return nodes.concat(pipelineBlock(null, jobs()));
   const projects = visibleProjects();
   if (!projects.length) return nodes.concat([el("p", { class: "kempty", text: "no projects yet" })]);
@@ -2418,7 +2418,7 @@ function statusChips(all) {
 function pipelineSelect(all) {
   const names = [...new Set(all.map((job) => job.pipeline || "default"))].sort();
   if (names.length < 2) return null;
-  return el("label", { class: "pselect" }, el("span", { class: "dim", text: "Pipeline" }),
+  return el("label", { class: "pselect" }, el("span", { class: "dim", text: "Pipe" }),
     el("select", { "data-focus": "jobpipe", onchange: (ev) => { state.jobPipe = ev.target.value; render(); } },
       el("option", { value: "all", text: "all", selected: state.jobPipe === "all" || !state.jobPipe }),
       names.map((n) => el("option", { value: n, text: n, selected: state.jobPipe === n }))));
@@ -2451,7 +2451,7 @@ function jobsTable(all) {
     el("div", { class: "panel flush" }, shown.length
       ? el("div", { class: "scroll" }, el("table", { class: "jobs" },
         el("thead", {}, el("tr", {},
-          sortHeader("status", "Status"), sortHeader("job", "Job", "opt-s"), sortHeader("title", "Title"), sortHeader("pipeline", "Pipeline", "opt"),
+          sortHeader("status", "Status"), sortHeader("job", "Job", "opt-s"), sortHeader("title", "Title"), sortHeader("pipeline", "Pipe", "opt"),
           sortHeader("step", "Step · run"), sortHeader("round", "Round", "opt"), sortHeader("started", "Started", "opt"),
           sortHeader("duration", "Duration", "opt-s"), sortHeader("updated", "Updated", "opt"), sortHeader("cost", "Cost", "opt"),
           el("th", { scope: "col", class: "opt", text: "PR" }))),
@@ -2542,11 +2542,11 @@ function nodePanel(job, name) {
 }
 function jobGraphTab(job) {
   const graph = graphOf(job);
-  if (!graph || !Array.isArray(graph.steps)) return el("div", { class: "notice", text: "This job's pipeline is not available." });
+  if (!graph || !Array.isArray(graph.steps)) return el("div", { class: "notice", text: "This job's pipe is not available." });
   const selected = state.jobNode && (stepOf(state.jobNode, job) || isEnd(state.jobNode, job)) ? state.jobNode : null;
   const drawn = dagView(graph, {
     states: job.step_states || {}, taken: job.edges_taken || {}, selected, onSelect: pickNode,
-    zoomKey: "job:" + (job.project || "") + ":" + job.id, label: "Pipeline " + (job.pipeline || "default") + " for job " + job.id,
+    zoomKey: "job:" + (job.project || "") + ":" + job.id, label: "Pipe " + (job.pipeline || "default") + " for job " + job.id,
   });
   return el("div", { class: "jobgraph" + (selected ? " with-panel" : "") },
     el("div", { class: "panel pipe-graph" }, drawn, dagLegend(true),
@@ -2612,7 +2612,7 @@ function jobDetailsTab(job) {
   const mono = (text) => el("span", { class: "mono", text: String(text) });
   return el("div", { class: "details" },
     el("div", { class: "panel" }, el("h2", { text: "Job" }), el("dl", { class: "kv" },
-      kv("Id", mono(job.id)), kv("Pipeline", el("span", { class: "chip pipechip", text: job.pipeline || "default" })),
+      kv("Id", mono(job.id)), kv("Pipe", el("span", { class: "chip pipechip", text: job.pipeline || "default" })),
       kv("Status", statusPill(job)), kv("Step", mono(job.step || "-")),
       kv("Issue", link(job.issue_url, issueRef(job.issue))), kv("Tracker", job.tracker ? mono(job.tracker) : null),
       kv("Author", job.author ? el("span", { text: person(job.author, job.author_name, job.project, job.issue, job.tracker) }) : null),
@@ -2712,7 +2712,7 @@ function jobPage(job) {
     el("div", { class: "jobhead" },
       el("div", { class: "jh-main" },
         el("h1", { class: "job-title", text: job.title || job.id }),
-        el("div", { class: "jh-meta" }, statusPill(job), el("span", { class: "chip pipechip", title: "pipeline", text: job.pipeline || "default" }),
+        el("div", { class: "jh-meta" }, statusPill(job), el("span", { class: "chip pipechip", title: "pipe", text: job.pipeline || "default" }),
           el("span", { class: "mono dim", text: job.id }),
           link(job.issue_url, "issue " + issueRef(job.issue)), prLinks(job, "PR #"),
           job.branch ? el("span", { class: "mono dim", title: "branch", text: "⎇ " + job.branch }) : null))),
@@ -2802,10 +2802,10 @@ function configPipelines(project) {
   const mine = jobs().filter((job) => !project || job.project === project.id);
   const tab = state.cfgTab || "dag";
   const head = el("div", { class: "head" },
-    el("div", {}, el("h2", { text: "Pipelines" }),
-      el("p", { class: "sub" }, list.length + " pipeline" + (list.length === 1 ? "" : "s") + " in ",
-        el("code", { text: ((info && info.folder) || "pipelines") + "/" }),
-        info && info.default ? el("span", {}, " · jobs run ", el("code", { text: info.default }), " unless told otherwise") : info && info.ask ? " · no [run].pipeline: /mfactory run asks which one" : null)),
+    el("div", {}, el("h2", { text: "Pipes" }),
+      el("p", { class: "sub" }, list.length + " pipe" + (list.length === 1 ? "" : "s") + " in ",
+        el("code", { text: ((info && info.folder) || "factory/pipes") + "/" }),
+        info && info.default ? el("span", {}, " · jobs run ", el("code", { text: info.default }), " unless told otherwise") : info && info.ask ? " · no [run].pipe: /mfactory run asks which one" : null)),
     problems.length ? el("span", { class: "pill st-failed" }, el("i", { class: "dot" }), problems.length + " problem" + (problems.length === 1 ? "" : "s")) : el("span", { class: "pill st-success" }, el("i", { class: "dot" }), "valid"));
   const rows = list.map((p) => {
     const errs = problems.filter((m) => p.file && m.startsWith(p.file));
@@ -2828,31 +2828,31 @@ function configPipelines(project) {
   const broken = files.filter((f) => f.errors && f.errors.length && !list.some((p) => p.file === f.path));
   broken.forEach((f) => rows.push(el("div", { class: "pcard bad" }, el("div", { class: "pc-top" }, el("span", { class: "mono name", text: f.path }),
     el("span", { class: "pill st-failed" }, el("i", { class: "dot" }), "not loaded")), el("div", { class: "dim", text: f.errors[0] }))));
-  let detail = el("div", { class: "notice", text: "Pick a pipeline." });
+  let detail = el("div", { class: "notice", text: "Pick a pipe." });
   if (chosen) {
     const fileErrors = problems.filter((m) => !chosen.file || m.startsWith(chosen.file) || m.includes('"' + chosen.name + '"'));
     const tabButton = (id, label) => el("button", {
       type: "button", role: "tab", "aria-selected": String(tab === id), "aria-pressed": tab === id ? "true" : "false", "data-focus": "cfgtab:" + id,
       onclick: () => { state.cfgTab = id; render(); },
     }, label);
-    const body = tab === "yaml" ? (chosen.yaml ? yamlView(chosen.yaml) : el("p", { class: "dim", text: "No YAML for this pipeline." }))
+    const body = tab === "yaml" ? (chosen.yaml ? yamlView(chosen.yaml) : el("p", { class: "dim", text: "No YAML for this pipe." }))
       : tab === "errors" ? (fileErrors.length ? el("ul", { class: "problems" }, fileErrors.map((m) => el("li", { class: "mono wrap", text: m }))) : el("p", { class: "good", text: "No problems. The file matches the schema and the graph is sound." }))
       : chosen.graph && Array.isArray(chosen.graph.steps)
-        ? el("div", {}, dagView(chosen.graph, { counts: (s) => mine.filter((j) => (j.pipeline || "default") === chosen.name && j.step === s).length, zoomKey: "cfg:" + (project ? project.id : "") + ":" + chosen.name, label: "Pipeline " + chosen.name }), dagLegend(false))
-        : el("div", { class: "notice", text: "This pipeline could not be drawn." });
+        ? el("div", {}, dagView(chosen.graph, { counts: (s) => mine.filter((j) => (j.pipeline || "default") === chosen.name && j.step === s).length, zoomKey: "cfg:" + (project ? project.id : "") + ":" + chosen.name, label: "Pipe " + chosen.name }), dagLegend(false))
+        : el("div", { class: "notice", text: "This pipe could not be drawn." });
     detail = el("div", { class: "pdetail" },
       el("div", { class: "head" }, el("div", {}, el("h3", { class: "mono", text: chosen.name }),
         el("div", { class: "dim mono", text: (chosen.file || "") + (chosen.graph ? " · start " + chosen.graph.start + " · escalate to " + chosen.graph.escalate_to : "") })),
-        el("div", { class: "tabs", role: "tablist", "aria-label": "Pipeline view" }, tabButton("dag", "DAG"), tabButton("yaml", "YAML"), tabButton("errors", "Problems" + (fileErrors.length ? " (" + fileErrors.length + ")" : "")))),
+        el("div", { class: "tabs", role: "tablist", "aria-label": "Pipe view" }, tabButton("dag", "DAG"), tabButton("yaml", "YAML"), tabButton("errors", "Problems" + (fileErrors.length ? " (" + fileErrors.length + ")" : "")))),
       body);
   }
-  return el("div", { class: "panel pipes" }, head, info && info.legacy ? el("p", { class: "notice", text: "factory.toml still has [steps.*]: they override the default pipeline. Run `mfactory migrate pipelines` to move them to YAML." }) : null,
+  return el("div", { class: "panel pipes" }, head, info && info.legacy ? el("p", { class: "notice", text: "factory.toml still has [steps.*]: they override the default pipe. Run `mfactory migrate pipes` to move them to YAML." }) : null,
     el("div", { class: "pipes-body" }, el("div", { class: "pcards" }, rows), detail));
 }
 function configView() {
   const intro = [
     el("h1", { text: "Config" }),
-    el("p", { class: "sub", text: "The pipelines, as YAML files with a JSON Schema, and factory.toml merged over the defaults" }),
+    el("p", { class: "sub", text: "The pipes, YAML files in factory/pipes/ with a JSON Schema, and factory/factory.toml merged over the defaults" }),
   ];
   if (!state.workspace) {
     if (!state.config) return [el("h1", { text: "Config" }), el("p", { class: "sub", text: "Loading..." })];

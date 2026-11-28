@@ -124,7 +124,7 @@ def test_progress_notes_stay_out_of_a_spec_prompt(world):
 
 
 def test_a_configured_prefix_names_the_job_branch(world: World) -> None:
-    path: Path = world.repo / "factory.toml"
+    path: Path = world.config_file
     text: str = path.read_text().replace(
         'base_branch = "main"\n', 'base_branch = "main"\nbranch_prefix = "feature/"\n')
     path.write_text(text)
@@ -140,7 +140,7 @@ def test_a_configured_prefix_names_the_job_branch(world: World) -> None:
 
 def _require_conventional_title(world: World) -> None:
     """Set the title pattern on the project's existing [project] table."""
-    path: Path = world.repo / "factory.toml"
+    path: Path = world.config_file
     pattern: str = "pr_title_pattern = '^(feat|fix): .+ \\[[A-Z]+-\\d+\\]$'\n"
     text: str = path.read_text().replace('base_branch = "main"\n', 'base_branch = "main"\n' + pattern)
     path.write_text(text)

@@ -29,7 +29,7 @@ intake_shell = false      # true lets intake run commands, if your Codex can't r
 
 [run]
 concurrency = 3           # jobs this project works on at once
-pipeline = ""             # the pipeline a job runs when `run`/`create` gets no --pipeline; empty: ask
+pipe = ""                 # the pipe a job runs when `run`/`create` gets no --pipe; empty: ask
 report_problems = false   # true opens a GitHub issue (without the queue label) when a job escalates
 pick = "all"              # "mine": only issues the operator opened or is assigned to
 authors = []              # also pick issues these logins opened; "@me" is the operator
@@ -70,7 +70,7 @@ needs_human = "factory:needs-human"
 [paths]
 worktrees = ".worktrees"
 protected = []            # extra fnmatch patterns no job may modify or delete
-pipelines = "pipelines"   # the folder of the project's pipeline YAML files, from the repository root
+pipes = "factory/pipes"   # the folder of the project's pipe YAML files, from the repository root
 
 [ports]
 base = 5100               # each job gets `step` ports for dev servers
@@ -83,8 +83,8 @@ all = []                  # skills every agent reads; "all" means every skill on
 all = ["all"]             # every AGENTS.md, CLAUDE.md, and rule file found in the repo and at home
 
 # ---- The pipeline ----------------------------------------------------------
-# Pipelines are YAML files in the project's pipelines/ folder ([paths].pipelines).
-# The built-in one is .factory/pipelines/default.yaml. [steps.*] here is no longer read.
+# Pipelines are YAML files, "pipes", in the project's factory/pipes/ folder ([paths].pipes).
+# The built-in one is .factory/pipes/default.yaml. [steps.*] here is no longer read.
 
 # ---- Reviewers -------------------------------------------------------------
 # A reviewer listed under a surface runs on jobs with that surface. Every other

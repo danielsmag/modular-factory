@@ -13,16 +13,16 @@
   <p>Every key is in the <a href="configuration.html">configuration reference</a>. This page is how the graph behaves.</p>
 
   <h2 id="yaml-files">Pipelines are YAML files</h2>
-  <p>The pipelines live in <code>pipelines/</code> at the root of the repository. <code>mfactory install</code> writes <code>pipelines/default.yaml</code>: the default pipeline, spelled out. Each file declares one or more pipelines. One may <code>extends</code> another and change only what differs. The JSON Schema in <code>.factory/schema/pipeline.schema.json</code> says what a file may contain; an editor with a YAML language server completes and checks it, and the factory checks every file against it, then checks each graph, before anything runs.</p>
-  <pre data-lang="yaml"><code># pipelines/hotfix.yaml
-pipelines:
+  <p>The pipelines, the <em>pipes</em>, live in <code>factory/pipes/</code>, next to <code>factory/factory.toml</code>, at the root of the repository. <code>mfactory install</code> writes <code>factory/pipes/default.yaml</code>: the default pipeline, spelled out. Each file declares one or more pipelines. One may <code>extends</code> another and change only what differs. The JSON Schema in <code>.factory/schema/pipe.schema.json</code> says what a file may contain; an editor with a YAML language server completes and checks it, and the factory checks every file against it, then checks each graph, before anything runs.</p>
+  <pre data-lang="yaml"><code># factory/pipes/hotfix.yaml
+pipes:
   hotfix:
     description: Small fixes, straight from intake to build
     extends: default
     steps:
       spec: { enabled: false, skip: DONE }
       approve: { enabled: false, skip: APPROVE }</code></pre>
-  <p>A job keeps the pipeline it starts with: <code>/mfactory run 12 --pipeline hotfix</code>. Without the flag it runs <code>[run].pipeline</code> from <code>factory.toml</code>, or the only pipeline. With several and none named, <code>/mfactory run</code> asks which. <code>mfactory pipelines list</code>, <code>pipelines validate</code> and <code>graph --pipeline NAME</code> show them. <code>[steps.*]</code> left in <code>factory.toml</code> still override <code>default</code>; <code>mfactory migrate pipelines</code> moves them to YAML. The examples below show only the keys that change: edit them in place in <code>pipelines/default.yaml</code>.</p>
+  <p>A job keeps the pipeline it starts with: <code>/mfactory run 12 --pipe hotfix</code>. Without the flag it runs <code>[run].pipe</code> from <code>factory.toml</code>, or the only pipeline. With several and none named, <code>/mfactory run</code> asks which. <code>mfactory pipes list</code>, <code>pipelines validate</code> and <code>graph --pipe NAME</code> show them. <code>[steps.*]</code> left in <code>factory.toml</code> still override <code>default</code>; <code>mfactory migrate pipes</code> moves them to YAML. The examples below show only the keys that change: edit them in place in <code>factory/pipes/default.yaml</code>.</p>
 
   <h2 id="the-default-graph">The default graph</h2>
   <pre data-lang="text"><code>intake           agent   ACCEPT -&gt; spec | NEEDS-INFO -&gt; ask-author (max 2) | REJECT -&gt; rejected
@@ -42,7 +42,7 @@ escalated        human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pr
   <p>End states are <code>done</code>, <code>rejected</code>, and <code>failed</code>. A switched-off step is passed through as if it had returned its <code>skip</code> outcome. Several in a row are passed through at once.</p>
 
   <h2 id="steps-and-edges">Steps and edges</h2>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       gate:
@@ -90,7 +90,7 @@ escalated        human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pr
 
   <h2 id="loop-limits">Loop limits</h2>
   <p>A <code>max</code> on an edge is how many times in a row a step may send a job that way. The count starts again when the step returns a different outcome.</p>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       review:
@@ -99,7 +99,7 @@ escalated        human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pr
   <pre data-lang="text"><code>[steps.gate].on.FAIL max = 2 reached</code></pre>
   <p>A maintainer's reply on an escalated job clears every count.</p>
   <p>Writing an edge as a bare step name changes only its target and keeps the default <code>max</code>. Without that, renaming a target would silently remove a loop limit.</p>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       review:
@@ -114,7 +114,7 @@ escalated        human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pr
   </aside>
   <p>That wait does not sync the base branch or run the checks again. Branch protection is the gate before the person merges.</p>
   <p>To let the factory merge, all three keys are required. Enabling <code>merge</code> alone leaves it unreachable. Leaving <code>ready-to-merge</code> on after retargeting <code>approve</code> does the same.</p>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       approve:
@@ -128,7 +128,7 @@ escalated        human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pr
 
   <h2 id="optional-steps">Optional steps</h2>
   <p><code>spec-approval</code>, <code>debug</code>, <code>ready-to-verify</code>, and <code>verify</code> ship with <code>enabled = false</code>. The merge step does too. Turning that one on is the block above, not a single key.</p>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       spec-approval:   # a maintainer approves spec.md before anything is built
@@ -145,7 +145,7 @@ escalated        human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pr
 
   <h2 id="adding-a-step">Adding a step</h2>
   <p>Add a block and point one edge at it.</p>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       docs:
@@ -175,7 +175,7 @@ escalated        human   FEEDBACK -&gt; build | REJECT -&gt; rejected</code></pr
 
   <h2 id="validation-after-merge">Validation after merge</h2>
   <p>Turn <code>verify</code> on to check the change again after it is merged, or after a deploy your own script waits for. Turn <code>ready-to-verify</code> on when a person has to say the deploy is live first: <code>/mfactory verify</code> runs the check, and <code>VERIFY: BLOCKED</code> waits there again. The factory never deploys. A job being validated holds no slot.</p>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       verify:

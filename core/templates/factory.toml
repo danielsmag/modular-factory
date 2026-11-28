@@ -1,5 +1,5 @@
-# The software factory's configuration. With the pipelines in pipelines/*.yaml,
-# this is all you edit.
+# The software factory's configuration: factory/factory.toml. With the pipes in
+# factory/pipes/*.yaml, this folder is all you edit.
 #
 # It holds what this project changes. Everything else comes from
 # .factory/defaults.toml and each tool's adapter in .factory/adapters/.
@@ -7,7 +7,7 @@
 # Reference: https://danielsmag.github.io/modular-factory/docs/configuration.html
 #
 #   .factory/bin/mfactory config show   every setting and where its value comes from
-#   .factory/bin/mfactory graph         the pipeline in effect
+#   .factory/bin/mfactory graph         the default pipe; --pipe NAME for another
 #   .factory/bin/mfactory models        the model and effort of each agent
 # After a change, run `.factory/bin/mfactory sync` and commit the result.
 
@@ -54,9 +54,9 @@ concurrency = 3
 # pick = "mine"
 # authors = ["alice"]
 # assignees = ["@me"]
-# The pipeline a new job runs when `/mfactory run` gets no --pipeline. Unset, a
-# project with one pipeline runs it, and with several /mfactory run asks which.
-# pipeline = "default"
+# The pipe a new job runs when `/mfactory run` gets no --pipe. Unset, a
+# project with one pipe runs it, and with several /mfactory run asks which.
+# pipe = "default"
 
 [checks]
 # Commands run in order in the job's worktree with `bash -c`. The first non-zero exit fails the step.
@@ -65,17 +65,17 @@ concurrency = 3
 # https://danielsmag.github.io/modular-factory/docs/configuration.html#checks
 commands = []
 
-# ---- The pipeline ----------------------------------------------------------
+# ---- The pipes -------------------------------------------------------------
 #
 # The steps a job goes through are not in this file. They are YAML files in
-# pipelines/, starting with pipelines/default.yaml, which `mfactory install`
+# factory/pipes/, starting with factory/pipes/default.yaml, which `mfactory install`
 # wrote: who merges, the optional steps (spec approval, debug, verify after the
 # merge), loop limits (`max` on an edge), and steps you add all go there.
-# .factory/schema/pipeline.schema.json says what a pipeline file may contain.
-# https://danielsmag.github.io/modular-factory/docs/configuration.html#pipelines-yaml-files
+# .factory/schema/pipe.schema.json says what a pipe file may contain.
+# https://danielsmag.github.io/modular-factory/docs/configuration.html#pipes-yaml-files
 #
-#   .factory/bin/mfactory pipelines list       every pipeline
-#   .factory/bin/mfactory pipelines validate   check them
+#   .factory/bin/mfactory pipes list       every pipe
+#   .factory/bin/mfactory pipes validate   check them
 
 # ---- Models: per tool, per step --------------------------------------------
 #
@@ -99,14 +99,14 @@ commands = []
 # [skills]
 # all = ["code-style"]
 #
-# A step's own skills go on the step, in pipelines/default.yaml:
+# A step's own skills go on the step, in factory/pipes/default.yaml:
 #   build:
 #     skills: [testing, "user:python-best-practices", "superpowers:test-driven-development"]
 
 # Claude Code agents may use every tool, plugin and MCP tools included. Narrow one with a list;
 # "default" is its built-in list.
 # https://danielsmag.github.io/modular-factory/docs/configuration.html#tools
-# A step's tools go on the step, in pipelines/default.yaml:
+# A step's tools go on the step, in factory/pipes/default.yaml:
 #   build:
 #     tools: [default, WebFetch, "mcp__github__*"]
 
@@ -122,7 +122,7 @@ commands = []
 [rules]
 all = ["all"]
 
-# A step's own rules go on the step, in pipelines/default.yaml:
+# A step's own rules go on the step, in factory/pipes/default.yaml:
 #   build:
 #     rules: [AGENTS.md, "user:CLAUDE.md"]
 
@@ -153,7 +153,7 @@ all = ["all"]
 # [surfaces.ui]
 # enabled = true
 #
-# A custom step goes in pipelines/default.yaml, and an edge points at it:
+# A custom step goes in factory/pipes/default.yaml, and an edge points at it:
 #   docs:
 #     type: agent
 #     instructions_file: docs/docs-step.md

@@ -9,11 +9,11 @@
 <body data-page="configuration">
 <article class="doc" id="doc">
   <h1>Configuration</h1>
-  <p class="lede">You edit two things at the root of the repository: the pipelines, YAML files in <code>pipelines/</code> checked against <code>.factory/schema/pipeline.schema.json</code> (see <a href="pipeline.html#yaml-files">Pipeline</a>), and <code>factory.toml</code>, which holds the rest of what your project changes. Everything else comes from <code>.factory/defaults.toml</code> and from each tool's adapter in <code>.factory/adapters/</code>. Pipeline examples show only the keys that change: edit them in place in <code>pipelines/default.yaml</code>.</p>
+  <p class="lede">You edit one folder at the root of the repository, <code>factory/</code>: the pipes, YAML files in <code>factory/pipes/</code> checked against <code>.factory/schema/pipe.schema.json</code> (see <a href="pipeline.html#yaml-files">Pipeline</a>), and <code>factory/factory.toml</code>, which holds the rest of what your project changes. Everything else comes from <code>.factory/defaults.toml</code> and from each tool's adapter in <code>.factory/adapters/</code>. Pipeline examples show only the keys that change: edit them in place in <code>factory/pipes/default.yaml</code>.</p>
 
   <h2 id="how-values-merge">How values merge</h2>
   <p>The files merge key by key. To change one value you write only that value:</p>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       review:
@@ -24,8 +24,8 @@
 .factory/bin/mfactory models        # model and effort of every agent, per tool
 .factory/bin/mfactory skills        # the project's skills and who reads them</code></pre>
   <p>A mistake is reported with the key to fix, and nothing runs until it is fixed:</p>
-  <pre data-lang="text"><code>mfactory: factory.toml has 2 problem(s):
-  - pipelines/default.yaml (pipeline "default"): steps.review.on.CHANGES points at unknown step "biuld". Steps: intake, ask-author, spec, ...; end states: done, failed, rejected
+  <pre data-lang="text"><code>mfactory: the configuration has 2 problem(s):
+  - factory/pipes/default.yaml (pipe "default"): steps.review.on.CHANGES points at unknown step "biuld". Steps: intake, ask-author, spec, ...; end states: done, failed, rejected
   - [models.claude].build.effort = "extreme" is not an effort level claude documents. Known: low, medium, high, xhigh, max</code></pre>
   <p><code>schema</code> is the version of this file's format. <code>mfactory upgrade</code> refuses a release that needs another. It is <code>1</code> today. Behavior of who merges changed in 0.2.0 without a schema change. See <a href="pipeline.html#who-merges">who merges</a>.</p>
 
@@ -101,7 +101,7 @@ timeout_minutes = 30</code></pre>
 
   <h2 id="loop-limits">Loop limits</h2>
   <p>A <code>max</code> on an edge is how many times in a row a step may send a job that way. The count starts again on a different outcome. When it is used up, the job goes to <code>[run].escalate_to</code>. A bare step name keeps the default <code>max</code> and changes only the target. The rules are on <a href="pipeline.html#loop-limits">loop limits</a>.</p>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       review:
@@ -109,7 +109,7 @@ timeout_minutes = 30</code></pre>
 
   <h2 id="who-merges">Who merges</h2>
   <p>By default <code>merge</code> is off and <code>approve</code> leads to <code>ready-to-merge</code>. A hand merge continues from the merge step's <code>MERGED</code> edge and does not sync the base branch or run the checks again. To let the factory merge, set all three:</p>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       approve:
@@ -122,7 +122,7 @@ timeout_minutes = 30</code></pre>
   <p>Do that only when a merge to the base branch does not publish a release. Enabling <code>merge</code> alone leaves it unreachable.</p>
 
   <h2 id="optional-steps">Optional steps</h2>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       spec-approval:
@@ -138,7 +138,7 @@ timeout_minutes = 30</code></pre>
   <p><code>spec-approval</code>, <code>debug</code>, <code>ready-to-verify</code>, and <code>verify</code> ship off. The debugger writes a diagnosis and changes no code. With it off, failing checks go straight back to the builder. <code>ready-to-verify</code> waits until a person says the deploy is live.</p>
 
   <h2 id="adding-a-step">Adding a step</h2>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       docs:
@@ -162,7 +162,7 @@ timeout_minutes = 30</code></pre>
   </div>
 
   <h2 id="human-steps">Human steps</h2>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       release-approval:
@@ -187,7 +187,7 @@ timeout_minutes = 30</code></pre>
 
   <h2 id="validation">Validation</h2>
   <p><code>ready-to-verify</code> sits between merge and verify. It ships off, so a merge still lands on verify. Turn it on when a person has to say the deploy is live. <code>/mfactory verify</code> then runs verify. <code>/mfactory reject</code> ends the job. <code>who</code> is the same key as any human step.</p>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       ready-to-verify:
@@ -222,7 +222,7 @@ timeout_minutes = 30</code></pre>
   <p>The built-in <code>debug</code> step sends a job back to <code>build</code> on its branch, which is gone after the merge. A <code>post-debug</code> step handles problems found after the merge, such as a failed smoke test or slower CI, and keeps the fix in the same job. This recipe asks a maintainer after each merge, who answers <code>/mfactory close</code>, <code>/mfactory test</code> or <code>/mfactory debug &lt;what you saw&gt;</code>:</p>
   <pre data-lang="toml"><code>[project]
 issue_link = "refs"</code></pre>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       merge:
@@ -315,7 +315,7 @@ all = ["code-style"]
 
 [reviewers.security]
 skills = ["auth-rules"]</code></pre>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       build:
@@ -346,7 +346,7 @@ escalated = "Escalated"
 done = "Done"
 rejected = "Rejected"
 failed = "Failed"</code></pre>
-  <p>The account email may be set in <code>factory.toml</code>. The API token never is. It comes from a file, the process environment, or <code>.env</code> next to <code>factory.toml</code>.</p>
+  <p>The account email may be set in <code>factory.toml</code>. The API token never is. It comes from a file, the process environment, or <code>.env</code> at the root of the repository.</p>
   <pre data-lang="toml"><code>[tracker.jira]
 email = "you@example.com"       # optional. Empty: read email_env
 token_file = ".secrets/jira"    # optional. One line, the token only</code></pre>
@@ -471,7 +471,7 @@ queue = "Ready for factory"
   </ul>
   <pre data-lang="toml"><code>[run]
 authors = { github = ["alice"], jira = ["712020:8a7d2c6e-1f6b-4c8e-9d1a-2b3c4d5e6f70"] }</code></pre>
-  <pre data-lang="yaml"><code>pipelines:
+  <pre data-lang="yaml"><code>pipes:
   default:
     steps:
       spec-approval:
@@ -512,7 +512,7 @@ step = 10</code></pre>
       </tbody>
     </table>
   </div>
-  <p>No job may add, change, or delete <code>factory.toml</code>, anything under <code>.factory/</code>, or a generated <code>mfactory-*</code> agent or skill file, whatever <code>protected</code> says.</p>
+  <p>No job may add, change, or delete anything in <code>factory/</code> (<code>factory.toml</code> and the pipes, or a <code>factory.toml</code> at the root), anything under <code>.factory/</code>, or a generated <code>mfactory-*</code> agent or skill file, whatever <code>protected</code> says.</p>
 </article>
 <script src="docs.js"></script>
 </body>

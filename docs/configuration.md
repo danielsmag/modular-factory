@@ -1,23 +1,27 @@
 # Configuration reference
 
-A project edits two things, both at the root of the repository:
+A project edits one folder at the root of the repository, `factory/`:
 
-- **`pipelines/`**: the pipelines, as YAML files. Each declares the steps a job
-  goes through and where each outcome leads. `mfactory install` writes the
-  default pipeline to `pipelines/default.yaml`. A JSON Schema,
-  `.factory/schema/pipeline.schema.json`, says what a file may contain.
-- **`factory.toml`**: everything else: the project, the checks, the tools, the
-  models, the tracker. It holds what your project changes; the rest comes from
-  the factory's defaults in `.factory/defaults.toml` and from each tool's
-  adapter in `.factory/adapters/`.
+- **`factory/pipes/`**: the pipes, the project's pipelines, as YAML files. Each
+  declares the steps a job goes through and where each outcome leads.
+  `mfactory install` writes the default pipe to `factory/pipes/default.yaml`. A
+  JSON Schema, `.factory/schema/pipe.schema.json`, says what a file may contain.
+- **`factory/factory.toml`**: everything else: the project, the checks, the
+  tools, the models, the tracker. It holds what your project changes; the rest
+  comes from the factory's defaults in `.factory/defaults.toml` and from each
+  tool's adapter in `.factory/adapters/`.
 
-`factory.toml` merges over the defaults key by key, and a pipeline that
+A project set up before `factory/` has `factory.toml` at its root. That still
+works; `.factory/bin/mfactory migrate layout` moves it into `factory/` (with git
+history), and `doctor` warns until then.
+
+`factory.toml` merges over the defaults key by key, and a pipe that
 `extends` another merges over it the same way. To change one value you write
 only that value. The pipeline examples on this page show only the keys that
-change: edit them in place in `pipelines/default.yaml`.
+change: edit them in place in `factory/pipes/default.yaml`.
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       review:
@@ -35,8 +39,8 @@ To see what is in effect:
 
 ```bash
 .factory/bin/mfactory config show   # every setting and which file set it
-.factory/bin/mfactory graph         # the default pipeline; --pipeline NAME for another
-.factory/bin/mfactory pipelines list   # every pipeline, its file and its steps
+.factory/bin/mfactory graph         # the default pipeline; --pipe NAME for another
+.factory/bin/mfactory pipes list   # every pipeline, its file and its steps
 .factory/bin/mfactory models        # the model and effort of every agent, per tool
 .factory/bin/mfactory skills        # project, user and plugin skills, and who reads them
 ```
@@ -45,8 +49,8 @@ A mistake is reported with the file and the key to fix, and nothing runs until i
 
 ```text
 mfactory: the configuration has 3 problem(s):
-  - pipelines/hotfix.yaml: pipelines.hotfix.steps.gate.on.FAIL.max must be at least 0 (got -1)
-  - pipelines/default.yaml (pipeline "default"): steps.review.on.CHANGES points at unknown step "biuld". Steps: intake, ask-author, spec, ...; end states: done, failed, rejected
+  - factory/pipes/hotfix.yaml: pipes.hotfix.steps.gate.on.FAIL.max must be at least 0 (got -1)
+  - factory/pipes/default.yaml (pipe "default"): steps.review.on.CHANGES points at unknown step "biuld". Steps: intake, ask-author, spec, ...; end states: done, failed, rejected
   - [models.claude].build.effort = "extreme" is not an effort level claude documents. Known: low, medium, high, xhigh, max
 ```
 
@@ -54,7 +58,7 @@ mfactory: the configuration has 3 problem(s):
 
 - [Project, tools and run](#project-tools-and-run)
 - [Checks](#checks)
-- [Pipelines: YAML files](#pipelines-yaml-files)
+- [Pipes: YAML files](#pipes-yaml-files)
 - [The pipeline: steps](#the-pipeline-steps)
 - [Loop limits](#loop-limits)
 - [Who merges](#who-merges)
@@ -106,7 +110,7 @@ concurrency = 3
 | `[tools.codex] intake_shell` | `false` | Let the Codex intake agent run commands. See [Design notes](design.md#limiting-intake). |
 | `[run] concurrency` | `3` | Jobs this project works on at once. A job waiting for a person, or being validated after merge, does not count. |
 | `[workspace] concurrency` | `3` | `new` and `resume` rows kept across every project when this factory runs `workspace queue`. `workspace.toml` or `--concurrency` overrides it. A project's `factory.toml` cannot. |
-| `[run] pipeline` | `""` | The pipeline a job runs when it is started without `--pipeline`. Empty: the only pipeline, or `/mfactory run` asks. See [Pipelines: YAML files](#pipelines-yaml-files). |
+| `[run] pipe` | `""` | The pipeline a job runs when it is started without `--pipe`. Empty: the only pipeline, or `/mfactory run` asks. See [Pipes: YAML files](#pipes-yaml-files). |
 | `[run] pick` | `"all"` | Which labeled issues `queue` offers as new jobs. `"mine"` means the issues the operator (the `gh` user) opened or is assigned to. Issues it filters out are not listed. Jobs that already exist keep running, and `/mfactory run <n>` still runs any labeled issue. |
 | `[run] report_problems` | `false` | Open a GitHub issue when a job escalates (a step's `max` is reached, or build, approve or verify hands it to a person). One issue per job, without the queue label so the factory does not pick it up. |
 | `[run] authors` | `[]` | Also offer issues these logins opened. `"@me"` is the operator. Once `authors`, `assignees` or `pick = "mine"` names anyone, an issue is offered only if its author or one of its assignees is named. |
@@ -183,17 +187,17 @@ commands say. See [Labels, paths and ports](#labels-paths-and-ports).
 
 Run them yourself in any checkout with `.factory/bin/mfactory checks`.
 
-## Pipelines: YAML files
+## Pipes: YAML files
 
-Each `.yaml` or `.yml` file in `pipelines/` (`[paths].pipelines` names another
-folder) declares one or more pipelines under `pipelines:`, by name:
+Each `.yaml` or `.yml` file in `factory/pipes/` (`[paths].pipes` names another
+folder) declares one or more pipes under `pipes:`, by name:
 
 ```yaml
-# yaml-language-server: $schema=../.factory/schema/pipeline.schema.json
-pipelines:
+# yaml-language-server: $schema=../../.factory/schema/pipe.schema.json
+pipes:
   hotfix:
     description: Small fixes, straight from intake to build
-    extends: default          # start from another pipeline; factory:default is the built-in one
+    extends: default          # start from another pipe; factory:default is the built-in one
     start: intake             # the step a new job starts in
     escalate_to: escalated    # the enabled human step a job goes to when an edge's max is reached
     steps:
@@ -203,57 +207,60 @@ pipelines:
 
 | Key | Meaning |
 | --- | --- |
-| `description` | What the pipeline is for. `/mfactory run` shows it when it asks which pipeline to use. |
-| `extends` | Another pipeline of the project, or `factory:default`. Its steps, `start` and `escalate_to` come first; this pipeline's keys merge over them, step by step and key by key. Without `extends` a pipeline is complete as written. |
-| `start` | The step a new job starts in. Required unless the pipeline extends one that has it. |
+| `description` | What the pipe is for. `/mfactory run` shows it when it asks which pipe to use. |
+| `extends` | Another pipe of the project, or `factory:default`. Its steps, `start` and `escalate_to` come first; this pipe's keys merge over them, step by step and key by key. Without `extends` a pipe is complete as written. |
+| `start` | The step a new job starts in. Required unless the pipe extends one that has it. |
 | `escalate_to` | The enabled human step a job goes to when a loop limit is reached. Required unless inherited. |
-| `steps` | The steps, by name. See [The pipeline: steps](#the-pipeline-steps). |
+| `steps` | The steps, by name. See [The pipe: steps](#the-pipe-steps). |
 
-**The schema.** `.factory/schema/pipeline.schema.json` (also
-`mfactory pipelines schema`) is a JSON Schema (draft 2020-12) of a pipeline
+**The schema.** `.factory/schema/pipe.schema.json` (also
+`mfactory pipes schema`) is a JSON Schema (draft 2020-12) of a pipe
 file: every key, which keys each step type takes, and the shape of an edge. The
-first line of `pipelines/default.yaml` points an editor's YAML language server
+first line of `factory/pipes/default.yaml` points an editor's YAML language server
 at it, so keys complete and typos are underlined as you type. The factory checks
-every file against it before anything runs, then checks each pipeline's graph:
+every file against it before anything runs, then checks each pipe's graph:
 every edge leads to a step, every step can be reached, and every loop has a
 `max` or a person in it. A YAML key given twice in one mapping is an error.
 Only `true` and `false` are booleans, so `on:` and `no` stay words.
 
-**Which pipeline a job runs.** A job keeps the pipeline it was created with
-(`pipeline` in its `job.json`; jobs from before pipelines run `default`):
+**Which pipe a job runs.** A job keeps the pipe it was created with
+(`pipeline` in its `job.json`; jobs from before pipes run `default`):
 
-1. `/mfactory run <n> --pipeline NAME`, or `mfactory create <n> --pipeline NAME`.
-2. Otherwise `[run].pipeline` in `factory.toml`.
-3. Otherwise the only pipeline, when there is one.
-4. Otherwise `create` refuses and lists the pipelines, and `/mfactory run` asks
-   you which one the new jobs run. `mfactory pipelines list --json` says
+1. `/mfactory run <n> --pipe NAME`, or `mfactory create <n> --pipe NAME`.
+2. Otherwise `[run].pipe` in `factory/factory.toml`.
+3. Otherwise the only pipe, when there is one.
+4. Otherwise `create` refuses and lists the pipes, and `/mfactory run` asks
+   you which one the new jobs run. `mfactory pipes list --json` says
    whether it has to ask (`"ask": true`).
 
 ```toml
 [run]
-pipeline = "default"   # the pipeline a job runs when it is started without --pipeline
+pipe = "default"   # the pipe a job runs when it is started without --pipe
 ```
 
-**Agents.** A step of another pipeline shares the default pipeline's agent when
+**Agents.** A step of another pipe shares the default pipe's agent when
 the two steps differ only in their edges. A step with its own instructions,
-role, skills, rules or tools gets its own agent, `mfactory-<pipeline>-<step>`.
-Its model table key is `<pipeline>-<step>`, which starts from the entry of the
+role, skills, rules or tools gets its own agent, `mfactory-<pipe>-<step>`.
+Its model table key is `<pipe>-<step>`, which starts from the entry of the
 plain step name.
 
-**From `[steps.*]` in `factory.toml`.** Older projects changed the pipeline in
+**From `[steps.*]` in `factory.toml`.** Older projects changed the pipe in
 `factory.toml`. Those `[steps.*]` tables, and `[run].start` and
-`[run].escalate_to`, still override the default pipeline, and `doctor` says so.
-`.factory/bin/mfactory migrate pipelines` writes the result to
-`pipelines/default.yaml` and removes them from `factory.toml`.
+`[run].escalate_to`, still override the default pipe, and `doctor` says so.
+`.factory/bin/mfactory migrate pipes` writes the result to
+`factory/pipes/default.yaml` and removes them from `factory.toml`.
 
 ```text
-mfactory pipelines list             every pipeline, its file and its steps
-mfactory pipelines show NAME        one pipeline after extends, as YAML
-mfactory pipelines validate         check every file against the schema and the graph rules
-mfactory pipelines schema           print the JSON Schema
-mfactory graph --pipeline NAME      one pipeline, a line per step
-mfactory migrate pipelines          [steps.*] in factory.toml to pipelines/default.yaml
+mfactory pipes list             every pipe, its file and its steps
+mfactory pipes show NAME        one pipe after extends, as YAML
+mfactory pipes validate         check every file against the schema and the graph rules
+mfactory pipes schema           print the JSON Schema
+mfactory graph --pipe NAME      one pipe, a line per step
+mfactory migrate pipes          [steps.*] in factory.toml to factory/pipes/default.yaml
+mfactory migrate layout         factory.toml at the root into factory/
 ```
+
+`pipelines` and `--pipeline`, the names before `pipes`, still work as aliases.
 
 ## The pipeline: steps
 
@@ -261,7 +268,7 @@ Each step is a mapping under `steps:` with a `type` and an `on` mapping that say
 where each outcome leads:
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       gate:
@@ -311,7 +318,7 @@ A `max` on an edge is how many times in a row a step may send a job that way.
 The count starts again when the step returns a different outcome.
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       intake:
@@ -338,7 +345,7 @@ Writing an edge as a bare step name changes only its target and keeps the
 default `max`:
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       review:
@@ -354,7 +361,7 @@ without holding a slot. The merge step stays off. Its `MERGED` edge still says
 what happens after a person merges, including when that step is off:
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       ready-to-merge:
@@ -378,7 +385,7 @@ To let the factory merge, turn the step on, point `approve` at it, and switch
 leaving `ready-to-merge` on after retargeting `approve` does the same:
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       approve:
@@ -400,7 +407,7 @@ script then syncs the base branch, runs the checks again, and merges.
 above, not a single key.
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       spec-approval:   # a maintainer approves spec.md before anything is built
@@ -424,7 +431,7 @@ failing checks send the job straight back to the builder.
 Add a block and point one edge at it.
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       docs:
@@ -446,7 +453,7 @@ A long task can live in a file instead of, or as well as, `instructions`.
 sync`. Only a custom step can set it. This does not change `schema`.
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       docs:
@@ -456,7 +463,7 @@ pipelines:
 ```
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       license-check:
@@ -496,7 +503,7 @@ Adding a person's approval, then letting the factory merge. The merge step
 has to be on, or the job skips it:
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       release-approval:
@@ -562,7 +569,7 @@ nothing the factory runs can tell. `who` and `replies` are the same keys as any
 human step. `/mfactory verify` then runs verify. `/mfactory reject` ends the job.
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       ready-to-verify:
@@ -579,7 +586,7 @@ pipelines:
 A script that can see the deploy leaves `ready-to-verify` off and uses `wait`:
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       verify:
@@ -675,7 +682,7 @@ issue_link = "refs"   # the default: the issue stays open, so the follow-up PR l
 ```
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       merge:
@@ -884,7 +891,7 @@ skills = ["auth-rules"]
 ```
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       build:
@@ -932,7 +939,7 @@ tools = ["default", "mcp__plugin_semgrep_semgrep__*"]
 ```
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       intake:
@@ -965,7 +972,7 @@ all = ["all"]
 ```
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       # build:
@@ -1028,7 +1035,7 @@ rejected = "Rejected"
 failed = "Failed"
 ```
 
-The account email may be set in `factory.toml`. The API token never is. It comes from a file, the process environment, or `.env` next to `factory.toml`.
+The account email may be set in `factory.toml`. The API token never is. It comes from a file, the process environment, or `.env` at the root of the repository.
 
 ```toml
 [tracker.jira]
@@ -1232,7 +1239,7 @@ queue = "Ready for factory"
 ```
 
 ```yaml
-pipelines:
+pipes:
   default:
     steps:
       spec-approval:
@@ -1275,12 +1282,13 @@ step = 10
 | `[labels] needs_info` | Put on an issue while its author is being asked. |
 | `[labels] needs_human` | Put on an issue while a maintainer, the operator, or a named login is being asked. |
 | `[paths] worktrees` | Where each job's worktree goes, relative to the repository. Keep it ignored by git. |
-| `[paths] pipelines` | The folder of the pipeline YAML files, relative to the repository. Default `pipelines`. |
+| `[paths] pipes` | The folder of the pipe YAML files, relative to the repository. Default `factory/pipes`. |
 | `[paths] protected` | Patterns of files no job may change or delete. `*` also matches `/`. A job may add new files that match. |
 | `[ports] base`, `step` | Job number `n` gets ports from `base + step * (n % 100)`, so dev servers of parallel jobs do not collide. |
 
-No job may add, change or delete `factory.toml`, anything in `pipelines/` (or
-the folder `[paths].pipelines` names), anything under `.factory/`, or a
+No job may add, change or delete anything in `factory/` (`factory.toml` and the
+pipes; also a `factory.toml` at the root, and the folder `[paths].pipes` names
+when it is elsewhere), anything under `.factory/`, or a
 generated `mfactory-*` agent or skill file, whatever `protected` says. This
 stops a job from rewriting the pipeline, the checks, or the agents that judge
 it.

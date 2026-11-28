@@ -32,7 +32,7 @@ def problems(world, text, project=""):
 def configure(world, text, project=""):
     """`text` after the base config, and `project` lines inside its existing [project] table."""
     world.configure(text)
-    path = world.repo / "factory.toml"
+    path = world.config_file
     path.write_text(path.read_text().replace("[project]\n", "[project]\n" + project, 1))
 
 
@@ -266,7 +266,7 @@ def test_pull_request_rules_follow_the_job(world):
 
 def test_a_jira_pull_request_still_starts_with_refs_when_github_closes(world):
     world.use_both()
-    path = world.repo / "factory.toml"
+    path = world.config_file
     path.write_text(path.read_text().replace("[project]\n", '[project]\nissue_link = "closes"\n', 1))
     key = world.jira.ticket()
     job = world.create(key)
